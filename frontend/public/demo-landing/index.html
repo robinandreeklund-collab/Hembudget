@@ -1745,32 +1745,180 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   font-family: var(--serif); font-style: italic; color: var(--fg);
 }
 /* === ECONOMY-SIM ANIMATION · levande spelmotor-visualisering === */
-/* === BESLUTSTRÄD-EMBED · iframe-wrapper för interaktiv simulering === */
-.decision-tree-embed {
-  margin: clamp(20px, 3vh, 40px) auto clamp(56px, 7vh, 80px);
-  max-width: 1100px;
-  /* 16:10 aspect ratio matchar iframens design (1200x800 i SVG-thumbnail) */
-  aspect-ratio: 1200 / 800;
+/* === BESLUTSTRÄD-ANIMATION (native) ============================
+   Liv-som-graf: 18 noder från 18 år (Sara A.) till 67 år (pension).
+   Stadie 0..5, 18 beats. Animation auto-loop över 32s, scrub:bar.
+   Wellbeing-panel uppdateras live mot 5 parametrar (Ekonomi, Karriär,
+   Hälsa, Relation, Fritid). === */
+
+.dt-wrap {
+  margin: clamp(20px, 3vh, 40px) auto clamp(20px, 3vh, 40px);
+  max-width: 1200px;
+  --dt-fg: #0f172a;
+  --dt-muted: #64748b;
+  --dt-muted-2: #94a3b8;
+  --dt-accent: #dc4c2b;
+  --dt-accent-soft: rgba(220,76,43,.10);
+  --dt-good: #047857;
+  --dt-bad: #b91c1c;
+  --dt-mixed: #c08418;
+  --dt-rule: #e5e7eb;
+  --dt-serif: 'Source Serif 4', Georgia, serif;
+  --dt-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Readout-strip · "live"-pulse + scrolling active-text + stadium + pct */
+.dt-wrap .dt-readout {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 32px; align-items: center;
+  padding: 18px 4px 22px;
+  border-bottom: 1px solid var(--dt-rule);
+  margin-bottom: 36px;
+  font-family: var(--dt-mono); font-size: 11px; letter-spacing: .6px;
+  text-transform: uppercase; color: var(--dt-muted);
+}
+.dt-wrap .dt-ro-pulse {
+  display: inline-flex; align-items: center; gap: 10px;
+  color: var(--dt-fg); font-weight: 600;
+}
+.dt-wrap .dt-ro-pulse::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dt-accent);
+  box-shadow: 0 0 0 5px var(--dt-accent-soft);
+  animation: dt-live 1.4s ease-in-out infinite;
+}
+@keyframes dt-live {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50%     { transform: scale(1.5); opacity: .55; }
+}
+.dt-wrap .dt-ro-active {
+  color: var(--dt-fg);
+  font-family: var(--dt-serif); font-style: italic; text-transform: none;
+  font-size: 16px; letter-spacing: -.2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+.dt-wrap .dt-ro-active b { color: var(--dt-accent); font-weight: 600; }
+.dt-wrap .dt-ro-stage b {
+  color: var(--dt-fg); font-weight: 700; margin-left: 6px; font-size: 12px;
+}
+.dt-wrap .dt-ro-pct { color: var(--dt-muted); font-weight: 500; }
+
+/* Stage + sidopanel */
+.dt-wrap .dt-stage-wrap {
+  display: flex; flex-direction: row; align-items: stretch; gap: 32px;
+}
+.dt-wrap .dt-stage {
+  flex: 1 1 0; min-width: 0;
   position: relative;
-  background: linear-gradient(180deg, rgba(15,21,37,0.85), rgba(10,14,26,0.95));
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 24px 60px -20px rgba(0,0,0,0.5);
+  background:
+    radial-gradient(1100px 600px at 90% 10%, rgba(251,191,36,.10), transparent 60%),
+    radial-gradient(800px 600px at 5% 95%, rgba(220,76,43,.07), transparent 60%);
+  aspect-ratio: 14 / 10; min-height: 520px;
+  overflow: visible;
 }
-.decision-tree-embed iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
+.dt-wrap .dt-stage svg { display: block; overflow: visible; }
+.dt-wrap .dt-wb {
+  flex: 0 0 240px;
+  border-left: 1px solid var(--dt-rule);
+  padding: 8px 0 8px 24px;
+  display: flex; flex-direction: column;
 }
-@media (max-width: 700px) {
-  .decision-tree-embed {
-    /* På mobil ge mer höjd så animationen faktiskt får plats */
-    aspect-ratio: 4 / 5;
-  }
+.dt-wrap .dt-wb-head {
+  display: flex; flex-direction: column; gap: 4px;
+  padding-bottom: 22px; margin-bottom: 22px;
+  border-bottom: 1px solid var(--dt-rule);
+}
+.dt-wrap .dt-wb-title {
+  font-family: var(--dt-mono); font-size: 11px; letter-spacing: 1px;
+  text-transform: uppercase; font-weight: 700; color: var(--dt-accent);
+}
+.dt-wrap .dt-wb-sub {
+  font-family: var(--dt-serif); font-style: italic;
+  font-size: 13px; color: var(--dt-muted-2); letter-spacing: -.1px;
+}
+.dt-wrap .dt-wb-grid { display: flex; flex-direction: column; gap: 22px; }
+.dt-wrap .dt-wb-row { display: flex; flex-direction: column; gap: 8px; }
+.dt-wrap .dt-wb-row-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+}
+.dt-wrap .dt-wb-label {
+  font-family: var(--dt-sans, 'Inter', sans-serif); font-size: 13px;
+  font-weight: 500; color: var(--dt-fg); letter-spacing: -.1px;
+}
+.dt-wrap .dt-wb-value {
+  font-family: var(--dt-serif); font-style: italic;
+  font-size: 22px; font-weight: 400; color: var(--dt-fg);
+  letter-spacing: -.8px; line-height: 1; transition: color .3s ease;
+}
+.dt-wrap .dt-wb-row.tone-good .dt-wb-value { color: var(--dt-good); }
+.dt-wrap .dt-wb-row.tone-bad  .dt-wb-value { color: var(--dt-bad);  }
+.dt-wrap .dt-wb-row.tone-low  .dt-wb-value { color: var(--dt-mixed); }
+.dt-wrap .dt-wb-row.tone-mid  .dt-wb-value { color: var(--dt-fg); }
+.dt-wrap .dt-wb-bar {
+  position: relative; height: 3px; background: rgba(15,23,42,.06);
+  border-radius: 2px;
+}
+.dt-wrap .dt-wb-bar-fill {
+  position: absolute; left:0; top:0; bottom:0;
+  background: var(--dt-fg); transition: width .35s ease;
+}
+.dt-wrap .dt-wb-row.tone-good .dt-wb-bar-fill { background: var(--dt-good); }
+.dt-wrap .dt-wb-row.tone-bad  .dt-wb-bar-fill { background: var(--dt-bad); }
+.dt-wrap .dt-wb-row.tone-low  .dt-wb-bar-fill { background: var(--dt-mixed); }
+.dt-wrap .dt-wb-bar-mark {
+  position: absolute; top: -3px; bottom: -3px; width: 1px;
+  background: rgba(15,23,42,.18); left: 50%;
+}
+@media (max-width: 760px) {
+  .dt-wrap .dt-stage-wrap { flex-direction: column; }
+  .dt-wrap .dt-wb { border-left: none; border-top: 1px solid var(--dt-rule); padding: 28px 0 0; }
+}
+
+/* Caption + ribbon (legend + scrubber + play-knapp) */
+.dt-wrap .dt-caption {
+  margin-top: 22px; padding-left: 4px;
+  font-family: var(--dt-serif); font-style: italic;
+  font-size: clamp(15px, 1.4vw, 18px); color: var(--dt-muted);
+  letter-spacing: -.2px; line-height: 1.5; max-width: 76ch;
+}
+.dt-wrap .dt-ribbon {
+  margin-top: 36px; display: flex; align-items: center;
+  gap: 28px; flex-wrap: wrap;
+  font-family: var(--dt-mono); font-size: 11px; color: var(--dt-muted);
+  letter-spacing: .6px; text-transform: uppercase;
+  padding-top: 22px; border-top: 1px solid var(--dt-rule);
+}
+.dt-wrap .dt-legend { display: flex; align-items: center; gap: 9px; }
+.dt-wrap .dt-sw { width: 9px; height: 9px; border-radius: 50%; }
+.dt-wrap .dt-sw.good { background: var(--dt-good); }
+.dt-wrap .dt-sw.bad  { background: var(--dt-bad); }
+.dt-wrap .dt-sw.mixed{ background: var(--dt-mixed); }
+.dt-wrap .dt-scrubber { flex: 1; min-width: 220px; display: flex; align-items: center; gap: 14px; }
+.dt-wrap .dt-track {
+  flex: 1; height: 2px; background: var(--dt-rule);
+  position: relative; cursor: pointer;
+}
+.dt-wrap .dt-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--dt-accent);
+}
+.dt-wrap .dt-knob {
+  position: absolute; top: 50%; transform: translate(-50%,-50%);
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--dt-accent); box-shadow: 0 0 0 5px var(--dt-accent-soft);
+  pointer-events: none;
+}
+.dt-wrap .dt-ctrl-btn {
+  appearance: none; border: 1px solid var(--dt-rule); background: #fff;
+  width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+  color: var(--dt-fg); display: inline-flex;
+  align-items: center; justify-content: center;
+  transition: all .2s ease;
+}
+.dt-wrap .dt-ctrl-btn:hover {
+  border-color: var(--dt-accent); color: var(--dt-accent);
 }
 
 .econsim {
@@ -2663,14 +2811,48 @@ html.lenis, html.lenis body { height: auto; }
         <h2>En levande simulering av <em>hela ekonomilivet</em>.</h2>
       </header>
 
-      <!-- BESLUTSTRÄD-ANIMATION · interaktiv simulering (embed) -->
-      <div class="decision-tree-embed" data-fx="fade-up">
-        <iframe
-          src="/decision-tree.html"
-          title="Ekonomilabbet — Beslutsträd"
-          loading="lazy"
-          sandbox="allow-scripts allow-same-origin"
-        ></iframe>
+      <!-- BESLUTSTRÄD-ANIMATION · pengar+välmående över livet (native) -->
+      <div class="dt-wrap" data-fx="fade-up">
+        <div class="dt-readout">
+          <span class="dt-ro-pulse">Konsekvensmotor aktiv</span>
+          <span class="dt-ro-active" id="dt-ro-active">Sara A. börjar sin resa — 18 år.</span>
+          <span class="dt-ro-stage" id="dt-ro-stage">Stadium<b>1 / 6</b></span>
+          <span id="dt-ro-pct" class="dt-ro-pct">0%</span>
+        </div>
+
+        <div class="dt-stage-wrap">
+          <div class="dt-stage" id="dt-stage" aria-hidden="true"></div>
+          <aside class="dt-wb" id="dt-wb">
+            <div class="dt-wb-head">
+              <span class="dt-wb-title">Livsindex</span>
+              <span class="dt-wb-sub">5 parametrar · uppdateras vid varje val</span>
+            </div>
+            <div class="dt-wb-grid" id="dt-wb-grid"></div>
+          </aside>
+        </div>
+
+        <p class="dt-caption">
+          Samma startpunkt, arton vägar framåt. Inga fel — bara drömmar som nås, eller liv som blir något annat. För när livet växer, växer också utgifterna.
+        </p>
+
+        <div class="dt-ribbon">
+          <span class="dt-legend"><span class="dt-sw good"></span>Trygghet</span>
+          <span class="dt-legend"><span class="dt-sw bad"></span>Risk</span>
+          <span class="dt-legend"><span class="dt-sw mixed"></span>Återhämtning</span>
+
+          <div class="dt-scrubber">
+            <button class="dt-ctrl-btn" id="dt-play-btn" aria-label="Pausa">
+              <svg id="dt-play-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <rect x="2" y="1" width="2" height="8" fill="currentColor"></rect>
+                <rect x="6" y="1" width="2" height="8" fill="currentColor"></rect>
+              </svg>
+            </button>
+            <div class="dt-track" id="dt-track">
+              <div class="dt-fill" id="dt-track-fill"></div>
+              <div class="dt-knob" id="dt-track-knob"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <p class="about-lead">
@@ -3679,6 +3861,406 @@ window.addEventListener('load', () => {
   } else {
     startLoop();
   }
+})();
+</script>
+
+<!-- ============================================================
+     BESLUTSTRÄD-ANIMATION · vanilla JS (ingen React-dep)
+     SVG-render av 18 noder + 17 grenar, RAF-driven 32s-loop,
+     scrubbar + 5-axels wellbeing-panel.
+     Originaldesign: dev/Ekonomilabbet - Beslutstr_d.html
+============================================================ -->
+<script>
+(function(){
+  const stage = document.getElementById('dt-stage');
+  if (!stage) return;
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const W = 1200, H = 760;
+  const DURATION_MS = 32000;
+
+  const PARAMS = [
+    { key:'ekonomi',  label:'Ekonomi'  },
+    { key:'karriar',  label:'Karriär'  },
+    { key:'halsa',    label:'Hälsa'    },
+    { key:'relation', label:'Relation' },
+    { key:'fritid',   label:'Fritid'   },
+  ];
+
+  const TREE = [
+    { id:'start', label:'Första sparpengen',     age:18, kind:'start',  sub:'500 kr',           x: 110, y: 470, fx:{ekonomi:-2,karriar:0,halsa:0,relation:0,fritid:-1} },
+    { id:'spar',  label:'Sparar 10 %',           age:21, kind:'good',   sub:'+5 000 kr',        x: 245, y: 360, parent:'start', fx:{ekonomi:8,karriar:2,halsa:1,relation:0,fritid:-3} },
+    { id:'shop',  label:'Spenderar allt',        age:21, kind:'bad',    sub:'± 0 kr',           x: 230, y: 540, parent:'start', fx:{ekonomi:-6,karriar:-1,halsa:-2,relation:2,fritid:8} },
+    { id:'jobb',  label:'Karriärbyte',           age:26, kind:'good',   sub:'+3 200 kr/mån',    x: 410, y: 250, parent:'spar', fx:{ekonomi:10,karriar:14,halsa:-3,relation:-4,fritid:-5} },
+    { id:'isk',   label:'Index-ISK',             age:26, kind:'good',   sub:'risk: låg',        x: 425, y: 410, parent:'spar', fx:{ekonomi:6,karriar:1,halsa:1,relation:0,fritid:-1} },
+    { id:'kort',  label:'Kreditkort',            age:26, kind:'bad',    sub:'13 % ränta',       x: 395, y: 545, parent:'shop', fx:{ekonomi:-7,karriar:-1,halsa:-3,relation:-2,fritid:5} },
+    { id:'sms',   label:'SMS-lån',               age:27, kind:'bad',    sub:'34 % ränta',       x: 415, y: 660, parent:'shop', fx:{ekonomi:-12,karriar:-2,halsa:-7,relation:-4,fritid:2} },
+    { id:'bo',    label:'Köper bostad',          age:32, kind:'good',   sub:'belåning 2,1 Mkr', x: 615, y: 180, parent:'jobb', fx:{ekonomi:-4,karriar:3,halsa:4,relation:8,fritid:2} },
+    { id:'fond',  label:'Globalfond',            age:34, kind:'good',   sub:'+7 % per år',      x: 640, y: 380, parent:'isk', fx:{ekonomi:9,karriar:1,halsa:2,relation:1,fritid:0} },
+    { id:'pam',   label:'Påminnelser',           age:30, kind:'bad',    sub:'4 obetalda',       x: 595, y: 555, parent:'kort', fx:{ekonomi:-8,karriar:-3,halsa:-9,relation:-6,fritid:-3} },
+    { id:'krono', label:'Kronofogden',           age:32, kind:'bad',    sub:'utmätning',        x: 620, y: 690, parent:'sms', fx:{ekonomi:-15,karriar:-6,halsa:-12,relation:-10,fritid:-8} },
+    { id:'fri',   label:'Skuldfri',              age:42, kind:'good',   sub:'amorterad',        x: 800, y: 200, parent:'bo', fx:{ekonomi:12,karriar:2,halsa:8,relation:4,fritid:5} },
+    { id:'ranta', label:'Ränta-på-ränta',        age:48, kind:'good',   sub:'kapital ×2,4',     x: 850, y: 360, parent:'fond', fx:{ekonomi:18,karriar:2,halsa:5,relation:3,fritid:6} },
+    { id:'san',   label:'Skuldsanering',         age:42, kind:'mixed',  sub:'5 år · ny start',  x: 820, y: 535, parent:'pam', fx:{ekonomi:4,karriar:-2,halsa:5,relation:3,fritid:-4} },
+    { id:'om',    label:'Omstart',               age:45, kind:'mixed',  sub:'lärdomen tas med', x: 820, y: 685, parent:'krono', fx:{ekonomi:6,karriar:3,halsa:6,relation:5,fritid:1} },
+    { id:'pen+',  label:'Trygg pension',         age:67, kind:'good',   sub:'2,8 Mkr',          x: 1060, y: 280, parent:'ranta', fx:{ekonomi:14,karriar:0,halsa:6,relation:5,fritid:10} },
+    { id:'pen=',  label:'Stabil pension',        age:67, kind:'good',   sub:'1,1 Mkr',          x: 1070, y: 460, parent:'fri', fx:{ekonomi:8,karriar:0,halsa:4,relation:4,fritid:6} },
+    { id:'pen-',  label:'Knapp pension',         age:67, kind:'mixed',  sub:'garantipension',   x: 1060, y: 620, parent:'san', fx:{ekonomi:-2,karriar:0,halsa:0,relation:2,fritid:1} },
+  ];
+  const STORY = ['start','spar','shop','jobb','isk','kort','sms','bo','fond','pam','krono','fri','ranta','san','om','pen+','pen=','pen-'];
+  const TOTAL = STORY.length;
+  const BY_ID = Object.fromEntries(TREE.map(n => [n.id, n]));
+
+  const ACTIVE_LINES = {
+    start: 'Sara A. börjar sin resa — 18 år.',
+    spar:  'Sparar 10 % varje månad. Tryggheten växer.',
+    shop:  'Spenderar allt. Inga marginaler kvar.',
+    jobb:  'Byter karriär. Lönen ökar med 3 200 kr.',
+    isk:   'Öppnar Index-ISK. Låg risk, brett innehav.',
+    kort:  'Tar kreditkort med 13 % ränta.',
+    sms:   'Tar ett SMS-lån. 34 % ränta tickar.',
+    bo:    'Köper bostad. 2,1 Mkr i belåning.',
+    fond:  'Sparar i globalfond. 7 % avkastning per år.',
+    pam:   '4 obetalda räkningar. Påminnelser kommer.',
+    krono: 'Kronofogden inleder utmätning.',
+    fri:   'Skuldfri. Amorteringen är klar.',
+    ranta: 'Ränta-på-ränta. Kapitalet har vuxit ×2,4.',
+    san:   'Skuldsanering inleds — 5 år, ny start.',
+    om:    'Omstart. Lärdomen tas med.',
+    'pen+':'Pension · trygg. 2,8 Mkr i kapital.',
+    'pen=':'Pension · stabil. 1,1 Mkr i kapital.',
+    'pen-':'Pension · knapp. Garantipension som grund.',
+  };
+
+  const colorFor = (k) => k==='good' ? '#047857' : k==='bad' ? '#b91c1c' : k==='mixed' ? '#c08418' : '#0f172a';
+  const stageOf = (id) => id==='start'?0 : ['spar','shop'].includes(id)?1 : ['jobb','isk','kort','sms'].includes(id)?2 : ['bo','fond','pam','krono'].includes(id)?3 : ['fri','ranta','san','om'].includes(id)?4 : 5;
+  const clamp = (v,lo,hi) => Math.min(hi, Math.max(lo, v));
+  const lerp = (a,b,t) => a + (b-a) * t;
+  const easeOut = (t) => 1 - Math.pow(1-t, 3);
+  const easeInOut = (t) => t < .5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2;
+  const bez = (p0,p1,p2,p3,u) => { const it=1-u; return it*it*it*p0 + 3*it*it*u*p1 + 3*it*u*u*p2 + u*u*u*p3; };
+
+  function paramStateAt(t) {
+    const beat = 1 / TOTAL;
+    const out = { ekonomi:50, karriar:51, halsa:50, relation:50, fritid:50 };
+    for (let i=0; i<TOTAL; i++) {
+      const local = clamp((t - i*beat) / (beat * 0.9), 0, 1);
+      if (local <= 0) break;
+      const node = BY_ID[STORY[i]];
+      const eased = easeInOut(local);
+      for (const p of PARAMS) {
+        const dv = (node.fx?.[p.key] ?? 0) * eased;
+        out[p.key] = clamp(out[p.key] + dv, 0, 100);
+      }
+    }
+    return out;
+  }
+
+  function ancestorChain(n) {
+    const out = [n]; let cur = n;
+    while (cur.parent) { cur = BY_ID[cur.parent]; out.unshift(cur); }
+    return out;
+  }
+  function chainPath(path) {
+    let d = `M ${path[0].x} ${path[0].y}`;
+    for (let i=1; i<path.length; i++) {
+      const a = path[i-1], b = path[i];
+      const dx = b.x-a.x, dy = b.y-a.y;
+      const c1x = a.x + dx*0.2, c1y = a.y + dy*0.85;
+      const c2x = a.x + dx*0.7, c2y = a.y + dy*0.15;
+      d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${b.x} ${b.y}`;
+    }
+    return d;
+  }
+
+  // === Bygg SVG-skelettet (defs + statiska element) en gång ===
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.innerHTML = `
+    <defs>
+      <filter id="dt-softGlow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="4" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="dt-bigGlow" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="14"/>
+      </filter>
+      <linearGradient id="dt-fil-good" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#047857" stop-opacity=".05"/>
+        <stop offset=".5" stop-color="#047857" stop-opacity=".5"/>
+        <stop offset="1" stop-color="#047857" stop-opacity=".95"/>
+      </linearGradient>
+      <linearGradient id="dt-fil-bad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#b91c1c" stop-opacity=".05"/>
+        <stop offset=".5" stop-color="#b91c1c" stop-opacity=".45"/>
+        <stop offset="1" stop-color="#b91c1c" stop-opacity=".9"/>
+      </linearGradient>
+      <linearGradient id="dt-fil-mixed" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#c08418" stop-opacity=".05"/>
+        <stop offset=".5" stop-color="#c08418" stop-opacity=".5"/>
+        <stop offset="1" stop-color="#c08418" stop-opacity=".95"/>
+      </linearGradient>
+    </defs>
+    <g class="dt-grid"></g>
+    <g class="dt-cursor"></g>
+    <g class="dt-edges"></g>
+    <g class="dt-trail"></g>
+    <g class="dt-nodes"></g>
+    <g class="dt-active-card"></g>
+  `;
+  stage.appendChild(svg);
+
+  // Statisk grid
+  const grid = svg.querySelector('.dt-grid');
+  [160, 320, 480, 640].forEach(y => {
+    const ln = document.createElementNS(SVG_NS, 'line');
+    ln.setAttribute('x1', 40); ln.setAttribute('y1', y);
+    ln.setAttribute('x2', W-40); ln.setAttribute('y2', y);
+    ln.setAttribute('stroke', 'rgba(15,23,42,.04)');
+    ln.setAttribute('stroke-width', '1');
+    grid.appendChild(ln);
+  });
+
+  const edgesG = svg.querySelector('.dt-edges');
+  const nodesG = svg.querySelector('.dt-nodes');
+  const trailG = svg.querySelector('.dt-trail');
+  const cursorG = svg.querySelector('.dt-cursor');
+  const activeG = svg.querySelector('.dt-active-card');
+
+  // Skapa edges + nodes en gång — vi uppdaterar attribut varje frame
+  const edgeData = TREE.filter(n => n.parent).map(n => {
+    const from = BY_ID[n.parent], to = n;
+    const i = STORY.indexOf(n.id);
+    const c = colorFor(to.kind);
+    const grad = to.kind==='bad' ? 'url(#dt-fil-bad)' : to.kind==='mixed' ? 'url(#dt-fil-mixed)' : 'url(#dt-fil-good)';
+    const dx = to.x-from.x, dy = to.y-from.y;
+    const c1x = from.x + dx*0.2, c1y = from.y + dy*0.85 + Math.sin(i*1.7)*14;
+    const c2x = from.x + dx*0.7, c2y = from.y + dy*0.15 + Math.cos(i*2.1)*14;
+    const path = `M ${from.x} ${from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${to.x} ${to.y}`;
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.innerHTML = `
+      <path class="dt-edge-bg" d="${path}" fill="none" stroke="${c}" stroke-opacity="0" stroke-width="10" stroke-linecap="round" stroke-dasharray="1400" pathLength="1400"/>
+      <path class="dt-edge-fg" d="${path}" fill="none" stroke="${grad}" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="1400" pathLength="1400"/>
+      <circle class="dt-particle" r="3.4" fill="${c}" filter="url(#dt-softGlow)" opacity="0"/>
+      <circle class="dt-particle-core" r="1.4" fill="#fff" opacity="0"/>
+    `;
+    edgesG.appendChild(g);
+    return { node: to, idx: i, ctrl: { x1: from.x, y1: from.y, c1x, c1y, c2x, c2y, x2: to.x, y2: to.y }, el: g };
+  });
+
+  const nodeData = TREE.map(n => {
+    const idx = STORY.indexOf(n.id);
+    const c = colorFor(n.kind);
+    const r0 = n.kind==='start' ? 7 : 4.5;
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('transform', `translate(${n.x}, ${n.y})`);
+    g.innerHTML = `
+      <circle class="dt-active-halo" r="38" fill="${c}" fill-opacity=".06" opacity="0"/>
+      <circle class="dt-active-pulse" r="22" fill="none" stroke="${c}" stroke-opacity=".25" stroke-width="1" opacity="0">
+        <animate attributeName="r" from="14" to="34" dur="1.8s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" from=".55" to="0" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
+      <circle class="dt-dot" r="${r0}" fill="${c}"/>
+      <circle class="dt-past-ring" r="${r0+3}" fill="none" stroke="${c}" stroke-opacity="0"/>
+      <text class="dt-label" x="0" y="${n.y < 380 ? -14 : 18}" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="500" fill="#94a3b8" letter-spacing=".2">${n.label}</text>
+    `;
+    nodesG.appendChild(g);
+    return { node: n, idx, el: g };
+  });
+
+  // Wellbeing-panel — bygg en gång
+  const wbGrid = document.getElementById('dt-wb-grid');
+  const wbRows = {};
+  PARAMS.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'dt-wb-row tone-mid';
+    div.innerHTML = `
+      <div class="dt-wb-row-head">
+        <span class="dt-wb-label">${p.label}</span>
+        <span class="dt-wb-value">50</span>
+      </div>
+      <div class="dt-wb-bar">
+        <div class="dt-wb-bar-fill" style="width:50%"></div>
+        <div class="dt-wb-bar-mark"></div>
+      </div>
+    `;
+    wbGrid.appendChild(div);
+    wbRows[p.key] = {
+      row: div,
+      val: div.querySelector('.dt-wb-value'),
+      fill: div.querySelector('.dt-wb-bar-fill'),
+    };
+  });
+
+  // === Render-funktion ===
+  let lastActiveId = null;
+
+  function render(t) {
+    const beatLen = 1 / TOTAL;
+    const beatRevealed = (idx) => clamp(easeInOut(clamp((t - idx*beatLen) / (beatLen*0.9), 0, 1)), 0, 1);
+    const currentBeat = clamp(Math.floor(t * TOTAL), 0, TOTAL-1);
+    const activeId = STORY[currentBeat];
+    const activeNode = BY_ID[activeId];
+
+    // Cursor (year-line)
+    const cx = lerp(60, W-60, easeOut(t));
+    cursorG.innerHTML = `
+      <line x1="${cx}" y1="40" x2="${cx}" y2="${H-40}" stroke="#dc4c2b" stroke-opacity=".22" stroke-width="1" stroke-dasharray="2 4"/>
+      <text x="${cx}" y="28" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="1" font-weight="600" fill="#dc4c2b">${activeNode.age} ÅR</text>
+    `;
+
+    // Edges
+    edgeData.forEach(e => {
+      const reveal = beatRevealed(e.idx);
+      const offset = 1400 * (1 - reveal);
+      const bg = e.el.querySelector('.dt-edge-bg');
+      const fg = e.el.querySelector('.dt-edge-fg');
+      const pa = e.el.querySelector('.dt-particle');
+      const pc = e.el.querySelector('.dt-particle-core');
+      bg.setAttribute('stroke-dashoffset', offset);
+      fg.setAttribute('stroke-dashoffset', offset);
+      bg.setAttribute('stroke-opacity', reveal > 0.05 && reveal < 0.95 ? '0.18' : '0');
+      if (reveal >= 0.95) {
+        const u = (t * 4 + e.idx*0.13) % 1;
+        const px = bez(e.ctrl.x1, e.ctrl.c1x, e.ctrl.c2x, e.ctrl.x2, u);
+        const py = bez(e.ctrl.y1, e.ctrl.c1y, e.ctrl.c2y, e.ctrl.y2, u);
+        pa.setAttribute('cx', px); pa.setAttribute('cy', py); pa.setAttribute('opacity', '1');
+        pc.setAttribute('cx', px); pc.setAttribute('cy', py); pc.setAttribute('opacity', '1');
+      } else {
+        pa.setAttribute('opacity', '0');
+        pc.setAttribute('opacity', '0');
+      }
+    });
+
+    // Nodes
+    nodeData.forEach(({ node, idx, el }) => {
+      const reveal = beatRevealed(idx);
+      const isActive = node.id === activeId;
+      const isPast = idx < currentBeat;
+      el.setAttribute('opacity', clamp(reveal*1.4, 0, 1));
+      el.querySelector('.dt-active-halo').setAttribute('opacity', isActive ? '1' : '0');
+      el.querySelector('.dt-active-pulse').setAttribute('opacity', isActive ? '1' : '0');
+      el.querySelector('.dt-past-ring').setAttribute('stroke-opacity', isPast ? '0.25' : '0');
+      el.querySelector('.dt-label').setAttribute('opacity', isActive ? '0' : '1');
+    });
+
+    // Trail · accent path från start till active
+    if (activeNode && activeNode.id !== 'start') {
+      const path = ancestorChain(activeNode);
+      const d = chainPath(path);
+      trailG.innerHTML = `
+        <path d="${d}" fill="none" stroke="#dc4c2b" stroke-opacity=".10" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" filter="url(#dt-bigGlow)"/>
+        <path d="${d}" fill="none" stroke="#dc4c2b" stroke-opacity=".35" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      `;
+    } else {
+      trailG.innerHTML = '';
+    }
+
+    // Active editorial card · stort label + delta-chips
+    if (activeNode) {
+      const above = activeNode.y > 420;
+      const dy = above ? -100 : 100;
+      const ax = activeNode.x, ay = activeNode.y;
+      const tx = ax + (activeNode.x > 850 ? -180 : (activeNode.x < 250 ? 180 : 0));
+      const ty = ay + dy;
+      const c = colorFor(activeNode.kind);
+      const anchor = tx > 950 ? 'end' : tx < 250 ? 'start' : 'middle';
+      const fx = activeNode.fx || {};
+      const items = PARAMS.filter(p => (fx[p.key] || 0) !== 0).map(p => ({ ...p, dv: fx[p.key] }));
+      const itemW = 70;
+      const totalW = items.length * itemW;
+      const startX = anchor==='end' ? -totalW + itemW/2
+                  : anchor==='start' ? itemW/2
+                  : -totalW/2 + itemW/2;
+      const chips = items.map((d, i) => {
+        const dColor = d.dv > 0 ? '#047857' : '#b91c1c';
+        const sign = d.dv > 0 ? '+' : '';
+        return `
+          <g transform="translate(${startX + i*itemW}, 0)">
+            <text x="0" y="0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" letter-spacing=".6" font-weight="500" fill="#94a3b8" style="text-transform:uppercase">${d.label}</text>
+            <text x="0" y="14" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="${dColor}">${sign}${d.dv}</text>
+          </g>
+        `;
+      }).join('');
+      activeG.innerHTML = `
+        <line x1="${ax}" y1="${ay}" x2="${tx}" y2="${ty}" stroke="${c}" stroke-opacity=".4" stroke-width=".75"/>
+        <circle cx="${tx}" cy="${ty}" r="2" fill="${c}"/>
+        <text x="${tx}" y="${ty + (above ? -54 : 22)}" text-anchor="${anchor}" font-family="JetBrains Mono, monospace" font-size="10" letter-spacing="1.2" font-weight="600" fill="${c}">${activeNode.age} ÅR</text>
+        <text x="${tx}" y="${ty + (above ? -28 : 50)}" text-anchor="${anchor}" font-family="Source Serif 4, Georgia, serif" font-style="italic" font-size="32" font-weight="400" fill="#0f172a" letter-spacing="-1">${activeNode.label}</text>
+        <g transform="translate(${tx}, ${ty + (above ? -8 : 70)})">${chips}</g>
+      `;
+    }
+
+    // Wellbeing-uppdatering
+    const params = paramStateAt(t);
+    PARAMS.forEach(p => {
+      const v = Math.round(params[p.key]);
+      const r = wbRows[p.key];
+      r.val.textContent = v;
+      r.fill.style.width = v + '%';
+      const tone = v >= 65 ? 'good' : v >= 45 ? 'mid' : v >= 25 ? 'low' : 'bad';
+      r.row.className = 'dt-wb-row tone-' + tone;
+    });
+
+    // Readout-strip
+    if (activeId !== lastActiveId) {
+      lastActiveId = activeId;
+      const stEl = document.getElementById('dt-ro-stage');
+      if (stEl) stEl.querySelector('b').textContent = `${stageOf(activeId)+1} / 6`;
+      const aEl = document.getElementById('dt-ro-active');
+      if (aEl) {
+        const line = ACTIVE_LINES[activeId] || `${activeNode.label} — ${activeNode.sub}`;
+        aEl.innerHTML = line.replace(activeNode.label, `<b>${activeNode.label}</b>`);
+      }
+    }
+    document.getElementById('dt-track-fill').style.width = (t*100) + '%';
+    document.getElementById('dt-track-knob').style.left = (t*100) + '%';
+    document.getElementById('dt-ro-pct').textContent = Math.round(t*100) + '%';
+  }
+
+  // === Animations-loop ===
+  let t = 0;
+  let playing = true;
+  let lastTime = performance.now();
+
+  function tick(now) {
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+    if (playing) {
+      const next = t + (dt * 1000) / DURATION_MS;
+      t = next >= 1 ? (next % 1) : next;
+    }
+    render(t);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // === Scrubber + play/paus ===
+  const track = document.getElementById('dt-track');
+  const playBtn = document.getElementById('dt-play-btn');
+  const playIcon = document.getElementById('dt-play-icon');
+
+  const scrubFromEvent = (e) => {
+    const r = track.getBoundingClientRect();
+    t = clamp((e.clientX - r.left) / r.width, 0, 1);
+    render(t);
+  };
+  track.addEventListener('click', scrubFromEvent);
+  let dragging = false;
+  track.addEventListener('mousedown', (e) => { dragging = true; scrubFromEvent(e); });
+  window.addEventListener('mouseup', () => { dragging = false; });
+  window.addEventListener('mousemove', (e) => { if (dragging) scrubFromEvent(e); });
+
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    playIcon.innerHTML = playing
+      ? '<rect x="2" y="1" width="2" height="8" fill="currentColor"/><rect x="6" y="1" width="2" height="8" fill="currentColor"/>'
+      : '<path d="M2 1 L9 5 L2 9 Z" fill="currentColor"/>';
+    playBtn.setAttribute('aria-label', playing ? 'Pausa' : 'Spela');
+  });
 })();
 </script>
 
