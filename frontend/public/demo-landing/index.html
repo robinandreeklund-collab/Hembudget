@@ -240,6 +240,22 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
   color: #fff;
   text-shadow: 0 2px 18px rgba(0,0,0,0.4);
 }
+.hero-beta-pill {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 14px;
+  padding: 3px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--accent, #fbbf24);
+  border: 1.5px solid var(--accent, #fbbf24);
+  border-radius: 99px;
+  text-shadow: none;
+  background: rgba(0,0,0,0.25);
+}
 .brand-tagline {
   margin-top: 4px;
   font-family: var(--mono); font-size: 11.5px;
@@ -2134,7 +2150,10 @@ html.lenis, html.lenis body { height: auto; }
     <div class="hero-bg-scrim" aria-hidden="true"></div>
 
     <header class="hero-brand">
-      <div class="brand-name">Ekonomilabbet</div>
+      <div class="brand-name">
+        Ekonomilabbet
+        <span class="hero-beta-pill" title="Plattformen är i beta">Beta</span>
+      </div>
       <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
     </header>
 

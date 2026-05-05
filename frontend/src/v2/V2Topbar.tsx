@@ -242,6 +242,9 @@ export function V2Topbar({ status }: { status: Status }) {
       <Link to={isTeacher ? "/teacher/v2" : "/v2/hub"} className="tb-brand">
         Ekonomilabbet
         <span className="tb-brand-meta">Forskning · 2026</span>
+        <span className="beta-pill" title="Plattformen är i beta">
+          Beta
+        </span>
       </Link>
 
       {/* Privat / Företag badge — visas exklusivt baserat på data-mode */}

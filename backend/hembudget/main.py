@@ -886,6 +886,53 @@ def _school_bootstrap() -> None:
                 logging.getLogger(__name__).info(
                     "school: seeded %d event templates", ne,
                 )
+            # Seed initiala beta-koder från env-var (en gång per kod —
+            # idempotent via uq_beta_code_norm).
+            # Format: HEMBUDGET_BETA_INITIAL_CODES="CODE1:50,CODE2:5"
+            #         där siffran är max_uses (default 1 om utelämnad).
+            try:
+                from .school.models import BetaCode
+                raw = _os.environ.get(
+                    "HEMBUDGET_BETA_INITIAL_CODES", "",
+                ).strip()
+                added_codes = 0
+                for entry in raw.split(","):
+                    entry = entry.strip()
+                    if not entry:
+                        continue
+                    if ":" in entry:
+                        code_part, max_part = entry.split(":", 1)
+                        try:
+                            max_uses = max(1, int(max_part.strip()))
+                        except ValueError:
+                            max_uses = 1
+                    else:
+                        code_part, max_uses = entry, 1
+                    code_part = code_part.strip()
+                    if not code_part:
+                        continue
+                    norm = code_part.upper()
+                    existing = (
+                        s.query(BetaCode)
+                        .filter(BetaCode.code_norm == norm)
+                        .first()
+                    )
+                    if existing is None:
+                        s.add(BetaCode(
+                            code=code_part, code_norm=norm,
+                            max_uses=max_uses, uses_count=0, active=True,
+                            notes="seedad från HEMBUDGET_BETA_INITIAL_CODES",
+                        ))
+                        added_codes += 1
+                if added_codes > 0:
+                    s.flush()
+                    logging.getLogger(__name__).info(
+                        "school: seeded %d beta-codes", added_codes,
+                    )
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "school: beta-code seed failed — fortsätter",
+                )
             # Seed kollektivavtal + yrke→avtal-mappningar
             # (idé 1 i dev_v1.md). Idempotent.
             from .school.employer_seed import seed_all as seed_employer_all

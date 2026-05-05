@@ -160,6 +160,58 @@ class AuthToken(MasterBase):
     )
 
 
+class BetaCode(MasterBase):
+    """Beta-tillgångskod för stängd registrering.
+
+    Plattformen är i beta — vi vill inte öppna /signup/teacher och
+    /signup/parent helt fritt än. Användare måste maila
+    info@ekonomilabbet.org för att få en kod.
+
+    Lifecycle:
+      - Admin lägger till nya koder via INSERT (eller framtida UI).
+      - Vid signup matchas inputed code (case-insensitive) mot DB.
+      - Vid lyckad signup ökas `uses_count`. När `uses_count >= max_uses`
+        stängs koden (active=False).
+      - `expires_at` (optional) hård gräns även om uses_count < max.
+
+    Designval:
+      - Lagras i klartext (inte hashad) eftersom koderna delas via
+        e-post och lärare/föräldrar ska kunna jämföra ord-för-ord.
+      - `notes` är fri admin-text (vem fick koden, sammanhang etc.).
+    """
+    __tablename__ = "beta_codes"
+    __table_args__ = (
+        UniqueConstraint("code_norm", name="uq_beta_code_norm"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Original-kod (visas i admin-UI med rätt case)
+    code: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Normaliserad kod för uniqueness + lookup (UPPER + strip)
+    code_norm: Mapped[str] = mapped_column(
+        String(40), nullable=False, index=True,
+    )
+    max_uses: Mapped[int] = mapped_column(
+        Integer, default=1, nullable=False,
+    )
+    uses_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+
 class Family(MasterBase):
     """En "familj" = grupp av elever som delar hushållsekonomi (samma
     student-DB). Används pedagogiskt: två elever kan vara sambo/föräldrar
