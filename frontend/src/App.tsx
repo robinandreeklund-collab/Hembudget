@@ -565,7 +565,7 @@ export default function App() {
             element={<TeacherModuleEditV2 />}
           />
           {/* === V1 elev-routes · alla redirectas till V2 === */}
-          <Route path="/dashboard" element={<Navigate to="/v2/hub" replace />} />
+          <Route path="/dashboard" element={<RoleAwareHomeRedirect />} />
           <Route path="/transactions" element={<Navigate to="/v2/banken" replace />} />
           <Route path="/import" element={<Navigate to="/v2/banken" replace />} />
           <Route path="/budget" element={<Navigate to="/v2/budget" replace />} />

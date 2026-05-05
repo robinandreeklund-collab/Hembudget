@@ -60,6 +60,12 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   letter-spacing: -0.5px;
   animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
 }
+/* HTML5 hidden-attribut måste explicit overrideas eftersom .top-nav-link
+   sätter display:inline-block (som vinner över browser-default
+   [hidden]{display:none}). Utan denna regel visas både utloggad-länkarna
+   (Logga in/Skapa konto) och inloggad-länkarna (Dashboard/Logga ut)
+   samtidigt, oavsett auth-status. */
+.top-nav-link[hidden] { display: none !important; }
 .top-nav-link-primary { color: var(--accent); }
 .top-nav-link-primary:hover { color: var(--accent); }
 
