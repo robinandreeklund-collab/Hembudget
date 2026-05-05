@@ -15434,6 +15434,24 @@ def v2_delete_student(
 
         # Master-radering · CASCADE tar bort StudentProfile,
         # BankIDSession, WeekTickRun, etc. via FK ON DELETE.
+        #
+        # SÄKERHETSNÄT: V2OnboardingEvent skapades historiskt UTAN
+        # ondelete=CASCADE i Postgres. Migrationen i school/engines.py
+        # konverterar existerande FK till CASCADE, men om denna instans
+        # inte har kört den migrationen än (eller om den failade) skulle
+        # `s.delete(st)` ge IntegrityError → 500. Radera raderna
+        # explicit så vi är garanterat säkra.
+        try:
+            from ..school.models import V2OnboardingEvent
+            s.query(V2OnboardingEvent).filter(
+                V2OnboardingEvent.student_id == student_id,
+            ).delete(synchronize_session=False)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "v2_delete_student: pre-cleanup av "
+                "v2_onboarding_events failade — fortsätter ändå",
+            )
         s.delete(st)
         s.commit()
 

@@ -533,6 +533,53 @@ def _run_master_migrations(engine: Engine) -> None:
     if sn_cols and "opening_message" not in sn_cols:
         _add("salary_negotiations", "opening_message TEXT")
 
+    # === FK · v2_onboarding_events.student_id → students.id ON DELETE CASCADE.
+    # Tabellen skapades utan ondelete=CASCADE, så befintlig FK-constraint
+    # i Postgres blockerar DELETE på Student när det finns onboarding-events
+    # → IntegrityError → 500 i UI när läraren raderar en elev.
+    # `create_all()` ändrar ALDRIG constraints på existerande tabeller,
+    # så vi måste DROP + ADD constraint:en själva. Idempotent: vi kollar
+    # om CASCADE redan finns innan vi ändrar.
+    if is_postgres:
+        try:
+            with engine.begin() as conn:
+                row = conn.execute(_text(
+                    """
+                    SELECT con.conname, con.confdeltype
+                    FROM pg_constraint con
+                    JOIN pg_class rel ON rel.oid = con.conrelid
+                    WHERE rel.relname = 'v2_onboarding_events'
+                      AND con.contype = 'f'
+                      AND con.conkey @> ARRAY[(
+                        SELECT attnum FROM pg_attribute
+                        WHERE attrelid = rel.oid AND attname = 'student_id'
+                      )::smallint]
+                    LIMIT 1
+                    """
+                )).fetchone()
+                if row is not None:
+                    conname, deltype = row[0], row[1]
+                    if deltype != "c":  # 'c' = CASCADE
+                        conn.execute(_text(
+                            f'ALTER TABLE v2_onboarding_events '
+                            f'DROP CONSTRAINT "{conname}"'
+                        ))
+                        conn.execute(_text(
+                            "ALTER TABLE v2_onboarding_events "
+                            "ADD CONSTRAINT v2_onboarding_events_student_id_fkey "
+                            "FOREIGN KEY (student_id) REFERENCES students(id) "
+                            "ON DELETE CASCADE"
+                        ))
+                        _log.info(
+                            "migration: v2_onboarding_events FK "
+                            "uppdaterad till ON DELETE CASCADE",
+                        )
+        except Exception:
+            _log.exception(
+                "migration: kunde inte uppdatera "
+                "v2_onboarding_events FK till CASCADE",
+            )
+
 
 @contextmanager
 def master_session() -> Iterator[Session]:

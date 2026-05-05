@@ -7638,6 +7638,44 @@ def test_v2_teacher_delete_student(fx) -> None:
         assert s.get(_S, otto_id) is None
 
 
+def test_v2_teacher_delete_student_with_onboarding_events(fx) -> None:
+    """Regression: elev MED v2_onboarding_events ska kunna raderas.
+
+    Buggen: V2OnboardingEvent.student_id hade FK utan ondelete=CASCADE
+    → IntegrityError → 500 i UI. Reproducerar den genom att skapa elev,
+    seeda onboarding-event manuellt, sen radera.
+    """
+    from hembudget.school.models import (
+        Student as _S, V2OnboardingEvent as _OE,
+    )
+
+    client, tch, *_ = fx
+    create_r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"first_name": "Ulla", "last_initial": "E."},
+    )
+    assert create_r.status_code == 200, create_r.text
+    ulla_id = create_r.json()["student_id"]
+    with master_session() as s:
+        s.add(_OE(
+            student_id=ulla_id, step=1, event_type="viewed",
+        ))
+        s.add(_OE(
+            student_id=ulla_id, step=2, event_type="next",
+        ))
+        s.commit()
+        assert s.query(_OE).filter(_OE.student_id == ulla_id).count() == 2
+    del_r = client.delete(
+        f"/v2/teacher/students/{ulla_id}",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert del_r.status_code == 204, del_r.text
+    with master_session() as s:
+        assert s.get(_S, ulla_id) is None
+        assert s.query(_OE).filter(_OE.student_id == ulla_id).count() == 0
+
+
 def test_v2_teacher_delete_student_other_teachers_student_404(fx) -> None:
     """Lärare kan inte radera annan lärares elev."""
     client, _tch, _sa, _stu, _tid, _said, sid = fx

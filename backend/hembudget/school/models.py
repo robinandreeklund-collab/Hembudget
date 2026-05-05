@@ -392,7 +392,8 @@ class V2OnboardingEvent(MasterBase):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(
-        ForeignKey("students.id"), nullable=False, index=True,
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
     )
     step: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String(20), nullable=False)
