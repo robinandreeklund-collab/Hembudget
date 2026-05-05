@@ -641,37 +641,12 @@ export function LanV2() {
         {/* INLINE APPLY-FORMULÄR */}
         {applyKind && (
           <div
-            style={{
-              marginTop: 18,
-              padding: "16px 20px",
-              border: `1px solid ${
-                applyKind === "smslan" ? "#dc2626" : "var(--accent)"
-              }`,
-              borderRadius: 6,
-              background:
-                applyKind === "smslan"
-                  ? "rgba(220,38,38,0.04)"
-                  : "rgba(220,76,43,0.04)",
-            }}
+            className={`lan-apply-form${
+              applyKind === "smslan" ? " danger" : ""
+            }`}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 10,
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: "var(--mono)",
-                  fontSize: 9.5,
-                  letterSpacing: "1.2px",
-                  textTransform: "uppercase",
-                  color:
-                    applyKind === "smslan" ? "#dc2626" : "var(--accent)",
-                }}
-              >
+            <div className="lan-apply-form-head">
+              <div className="lan-apply-form-eye">
                 ● Ansökan ·{" "}
                 {LOAN_KIND_SPECS.find((s) => s.key === applyKind)?.label}
               </div>
@@ -679,24 +654,14 @@ export function LanV2() {
                 type="button"
                 className="cta-btn ghost"
                 onClick={closeApply}
-                style={{ padding: "4px 10px", fontSize: 9.5 }}
+                style={{ padding: "4px 12px", fontSize: 9.5 }}
               >
                 Stäng
               </button>
             </div>
 
             {LOAN_KIND_SPECS.find((s) => s.key === applyKind)?.warning && (
-              <div
-                style={{
-                  fontFamily: "var(--serif)",
-                  fontSize: 12.5,
-                  color: "#dc2626",
-                  marginBottom: 12,
-                  padding: "8px 12px",
-                  background: "rgba(220,38,38,0.08)",
-                  borderRadius: 4,
-                }}
-              >
+              <div className="lan-apply-form-warn">
                 ⚠{" "}
                 {
                   LOAN_KIND_SPECS.find((s) => s.key === applyKind)
@@ -705,68 +670,27 @@ export function LanV2() {
               </div>
             )}
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
-                gap: 10,
-                alignItems: "end",
-              }}
-            >
+            <div className="lan-apply-grid">
               <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontFamily: "var(--mono)",
-                    fontSize: 9,
-                    letterSpacing: "1.2px",
-                    textTransform: "uppercase",
-                    color: "var(--text-mid)",
-                    marginBottom: 4,
-                  }}
-                >
-                  Belopp (kr)
-                </label>
+                <label className="lan-form-label">Belopp (kr)</label>
                 <input
                   type="text"
                   value={applyAmount}
                   onChange={(e) => setApplyAmount(e.target.value)}
-                  className="kalp-input"
+                  className="lan-input"
                 />
               </div>
               <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontFamily: "var(--mono)",
-                    fontSize: 9,
-                    letterSpacing: "1.2px",
-                    textTransform: "uppercase",
-                    color: "var(--text-mid)",
-                    marginBottom: 4,
-                  }}
-                >
-                  Löptid (mån)
-                </label>
+                <label className="lan-form-label">Löptid (mån)</label>
                 <input
                   type="text"
                   value={applyTerm}
                   onChange={(e) => setApplyTerm(e.target.value)}
-                  className="kalp-input"
+                  className="lan-input"
                 />
               </div>
               <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontFamily: "var(--mono)",
-                    fontSize: 9,
-                    letterSpacing: "1.2px",
-                    textTransform: "uppercase",
-                    color: "var(--text-mid)",
-                    marginBottom: 4,
-                  }}
-                >
+                <label className="lan-form-label">
                   Konto för utbetalning
                 </label>
                 <select
@@ -774,7 +698,7 @@ export function LanV2() {
                   onChange={(e) =>
                     setApplyAccountId(parseInt(e.target.value, 10) || null)
                   }
-                  className="kalp-input"
+                  className="lan-input"
                 >
                   {bank?.accounts.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -785,44 +709,24 @@ export function LanV2() {
               </div>
             </div>
 
-            <div style={{ marginTop: 10 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontFamily: "var(--mono)",
-                  fontSize: 9,
-                  letterSpacing: "1.2px",
-                  textTransform: "uppercase",
-                  color: "var(--text-mid)",
-                  marginBottom: 4,
-                }}
-              >
-                Syfte (frivilligt)
-              </label>
+            <div>
+              <label className="lan-form-label">Syfte (frivilligt)</label>
               <input
                 type="text"
                 value={applyPurpose}
                 onChange={(e) => setApplyPurpose(e.target.value)}
                 placeholder="t.ex. ny bil, renovering, semester"
-                className="kalp-input"
-                style={{ width: "100%" }}
+                className="lan-input"
               />
             </div>
 
-            <div
-              style={{
-                marginTop: 14,
-                display: "flex",
-                gap: 10,
-              }}
-            >
+            <div className="lan-apply-actions">
               {!applyOffer && (
                 <button
                   type="button"
                   className="cta-btn"
                   onClick={runApplyCheck}
                   disabled={applyBusy}
-                  style={{ padding: "10px 16px" }}
                 >
                   {applyBusy ? "Prövar..." : "Pröva utan att binda mig"}
                 </button>
@@ -833,7 +737,6 @@ export function LanV2() {
                   className="cta-btn"
                   onClick={acceptApplyOffer}
                   disabled={applyBusy}
-                  style={{ padding: "10px 16px" }}
                 >
                   {applyBusy
                     ? "Genomför..."
@@ -847,7 +750,6 @@ export function LanV2() {
                   onClick={() => {
                     setApplyOffer(null);
                   }}
-                  style={{ padding: "10px 16px" }}
                 >
                   Räkna om
                 </button>
@@ -855,64 +757,37 @@ export function LanV2() {
             </div>
 
             {applyError && (
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: "8px 12px",
-                  background: "rgba(220,38,38,0.08)",
-                  borderRadius: 4,
-                  color: "#fca5a5",
-                  fontFamily: "var(--mono)",
-                  fontSize: 11,
-                }}
-              >
-                {applyError}
-              </div>
+              <div className="lan-apply-error">{applyError}</div>
             )}
 
             {applyOffer && (
               <div
-                style={{
-                  marginTop: 14,
-                  padding: "12px 14px",
-                  background: applyOffer.loan_id
-                    ? "rgba(34,197,94,0.08)"
+                className={`lan-apply-result ${
+                  applyOffer.loan_id
+                    ? "taken"
                     : applyOffer.approved
-                      ? "rgba(34,197,94,0.05)"
-                      : "rgba(220,38,38,0.05)",
-                  borderRadius: 4,
-                  fontFamily: "var(--serif)",
-                  fontSize: 13,
-                }}
+                      ? "ok"
+                      : "fail"
+                }`}
               >
                 {applyOffer.loan_id ? (
                   <>
-                    <div
-                      style={{
-                        color: "#6ee7b7",
-                        fontWeight: 600,
-                        marginBottom: 6,
-                      }}
-                    >
+                    <div className="lan-apply-result-head ok">
                       ✓ Lånet är genomfört · saldo finns på ditt konto
                     </div>
-                    <div style={{ color: "var(--text-mid)" }}>
-                      {applyOffer.lender} · {SEK(applyOffer.offered_monthly_payment || 0)} kr/mån
-                      {" "}· ränta {((applyOffer.offered_rate || 0) * 100).toFixed(2)} %
+                    <div className="lan-apply-result-meta">
+                      {applyOffer.lender} ·{" "}
+                      {SEK(applyOffer.offered_monthly_payment || 0)} kr/mån
+                      {" "}· ränta{" "}
+                      {((applyOffer.offered_rate || 0) * 100).toFixed(2)} %
                     </div>
                   </>
                 ) : applyOffer.approved ? (
                   <>
-                    <div
-                      style={{
-                        color: "#6ee7b7",
-                        fontWeight: 600,
-                        marginBottom: 6,
-                      }}
-                    >
+                    <div className="lan-apply-result-head ok">
                       ✓ Godkänd av {applyOffer.lender}
                     </div>
-                    <div style={{ color: "var(--text-mid)" }}>
+                    <div className="lan-apply-result-meta">
                       <strong>Score:</strong> {applyOffer.score} (grad{" "}
                       {applyOffer.grade}) ·{" "}
                       <strong>Ränta:</strong>{" "}
@@ -922,13 +797,7 @@ export function LanV2() {
                       {" "}· <strong>Totalt återbetalas:</strong>{" "}
                       {SEK(applyOffer.offered_total_repay || 0)} kr
                     </div>
-                    <div
-                      style={{
-                        color: "var(--text-dim)",
-                        fontSize: 12,
-                        marginTop: 6,
-                      }}
-                    >
+                    <div className="lan-apply-result-foot">
                       KALP{" "}
                       {applyOffer.kalp_passed
                         ? `passerad (+${SEK(applyOffer.kalp_left_after_all)} kr/mån kvar efter allt)`
@@ -937,26 +806,14 @@ export function LanV2() {
                   </>
                 ) : (
                   <>
-                    <div
-                      style={{
-                        color: "#fca5a5",
-                        fontWeight: 600,
-                        marginBottom: 6,
-                      }}
-                    >
+                    <div className="lan-apply-result-head fail">
                       ✗ Avslag
                     </div>
-                    <div style={{ color: "var(--text-mid)" }}>
+                    <div className="lan-apply-result-meta">
                       {applyOffer.decline_reason}
                     </div>
                     {applyOffer.score > 0 && (
-                      <div
-                        style={{
-                          color: "var(--text-dim)",
-                          fontSize: 12,
-                          marginTop: 6,
-                        }}
-                      >
+                      <div className="lan-apply-result-foot">
                         Score: {applyOffer.score} (grad {applyOffer.grade})
                       </div>
                     )}
@@ -965,27 +822,14 @@ export function LanV2() {
                 {applyOffer.warnings.length > 0 && (
                   <div style={{ marginTop: 10 }}>
                     {applyOffer.warnings.map((w, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          color: "#fca5a5",
-                          fontSize: 12,
-                          marginTop: 4,
-                        }}
-                      >
+                      <div key={i} className="lan-apply-warning-row">
                         ⚠ {w}
                       </div>
                     ))}
                   </div>
                 )}
                 {applyOffer.wellbeing_impact.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: 10,
-                      fontSize: 12,
-                      color: "var(--text-dim)",
-                    }}
-                  >
+                  <div className="lan-apply-result-foot">
                     Wellbeing-påverkan:{" "}
                     {applyOffer.wellbeing_impact
                       .map(
