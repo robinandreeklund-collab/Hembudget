@@ -62,6 +62,7 @@ export type HubMonthSummary = {
   saved: number;
   save_rate_pct: number | null;
   transactions_count: number;
+  start_of_month_balance: number;
 };
 
 export type HubData = {

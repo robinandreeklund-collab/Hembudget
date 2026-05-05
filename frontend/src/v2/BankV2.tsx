@@ -945,7 +945,10 @@ export function BankV2() {
               </div>
               <div className="side-card-meta">
                 in · ut {SEK(summary.expenses_this_month)} ·{" "}
-                {summary.transactions_count} transaktioner
+                {summary.transactions_count}{" "}
+                {summary.transactions_count === 1
+                  ? "transaktion"
+                  : "transaktioner"}
               </div>
             </div>
           </aside>

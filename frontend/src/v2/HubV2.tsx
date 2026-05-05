@@ -305,10 +305,24 @@ export function HubV2() {
               <em className="up">+ {SEK(month_summary.income)}</em> kr
             </div>
             <div className="hub-recap-sub">
-              {month_summary.transactions_count}{" "}
-              {month_summary.transactions_count === 1
-                ? "transaktion totalt"
-                : "transaktioner totalt"}
+              {month_summary.income === 0
+                && character.net_salary_monthly
+                ? `lönen kommer ${(() => {
+                    const today = new Date();
+                    const day = today.getDate();
+                    const target = day <= 25 ? today : new Date(today.getFullYear(), today.getMonth() + 1, 25);
+                    if (day <= 25) target.setDate(25);
+                    const months = [
+                      "jan", "feb", "mar", "apr", "maj", "jun",
+                      "jul", "aug", "sep", "okt", "nov", "dec",
+                    ];
+                    return `25 ${months[target.getMonth()]}`;
+                  })()}`
+                : `${month_summary.transactions_count} ${
+                    month_summary.transactions_count === 1
+                      ? "transaktion"
+                      : "transaktioner"
+                  }`}
             </div>
           </div>
           <div className="hub-recap-cell">
@@ -329,7 +343,9 @@ export function HubV2() {
               </em>{" "}
               kr
             </div>
-            <div className="hub-recap-sub">in − ut</div>
+            <div className="hub-recap-sub">
+              från {SEK(month_summary.start_of_month_balance)} kr 1:a
+            </div>
           </div>
           <div className="hub-recap-cell">
             <div className="hub-recap-eye">Sparkvot</div>

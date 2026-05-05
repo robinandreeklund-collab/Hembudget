@@ -220,6 +220,11 @@ class HubMonthSummary(BaseModel):
     # för att inte påstå "0 % sparkvot" när vi faktiskt inte vet.
     save_rate_pct: Optional[float] = None
     transactions_count: int
+    # Saldo i början av månaden = totalt saldo nu MINUS denna månads
+    # netto-flöde (income - expenses). Pedagogiskt viktigt: eleven
+    # ser kontinuiteten "förra månadsslut → flöde i mån → saldo nu".
+    # Annars verkar det som magi att saldo är 15k när "denna mån = -748".
+    start_of_month_balance: float = 0.0
 
 
 class HubResponse(BaseModel):
@@ -508,6 +513,12 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 if not bool(getattr(acc, "incognito", False)):
                     tot += (cur + fund_total) if fund_total > 0 else cur
             total_balance = float(tot)
+            # Saldo i början av månaden = saldo nu MINUS netto-flöde
+            # i denna månad. Visas i hub-kortet "Underskott/Sparat denna
+            # mån" så eleven förstår kontinuiteten över månadsskiftet.
+            month_summary.start_of_month_balance = round(
+                total_balance - month_summary.saved, 2,
+            )
     except Exception:
         # Scope-DB saknas eller wellbeing failar — returnera minimal
         # data så hubben inte blir vit. Eleven kan fortfarande se
