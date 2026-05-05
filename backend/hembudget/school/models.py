@@ -212,6 +212,53 @@ class BetaCode(MasterBase):
     )
 
 
+class WaitlistEntry(MasterBase):
+    """Intresseanmälan till beta-väntelistan.
+
+    Lagrar e-post + roll (teacher/parent) + tidpunkt så vi kan kontakta
+    dem när vi öppnar upp fler beta-platser. Idempotent på e-posten —
+    om någon registrerar sig flera gånger uppdateras `last_signup_at`
+    istället för att skapa duplicat.
+    """
+    __tablename__ = "waitlist_entries"
+    __table_args__ = (
+        UniqueConstraint("email_norm", name="uq_waitlist_email_norm"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(160), nullable=False)
+    # Lower-cased för uniqueness + lookup
+    email_norm: Mapped[str] = mapped_column(
+        String(160), nullable=False, index=True,
+    )
+    # "teacher" | "parent" | "other" — vilken roll de signade upp för
+    role: Mapped[str] = mapped_column(
+        String(20), default="other", nullable=False,
+    )
+    # Anti-spam: spara IP som hashad värde + user-agent (truncerad).
+    ip_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True,
+    )
+    user_agent: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True,
+    )
+    # När admin kontaktade dem (för att invitera in)
+    contacted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Anti-doublesignup: när hen senast hörde av sig
+    last_signup_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    signup_count: Mapped[int] = mapped_column(
+        Integer, default=1, nullable=False,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class Family(MasterBase):
     """En "familj" = grupp av elever som delar hushållsekonomi (samma
     student-DB). Används pedagogiskt: två elever kan vara sambo/föräldrar

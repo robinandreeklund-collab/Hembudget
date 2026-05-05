@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
+import { WaitlistBlock } from "@/components/editorial/WaitlistBlock";
 import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
 import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
 import { LiveTime, LiveCountdown } from "@/components/editorial/LiveClock";
@@ -25,10 +26,8 @@ export default function TeacherSignup() {
     setErr(null);
     if (password.length < 8) return setErr("Lösenord måste vara minst 8 tecken.");
     if (password !== confirm) return setErr("Lösenorden matchar inte.");
-    if (!betaCode.trim())
-      return setErr(
-        "Beta-kod krävs. Maila info@ekonomilabbet.org för att få en kod.",
-      );
+    // Beta-kod-pre-validation borttagen — backend svarar 403 med
+    // "ange beta-kod eller använd väntelistan" så texten är konsekvent.
     if (siteKey && !turnstileToken)
       return setErr("Säkerhetskontroll pågår — vänta en sekund.");
     setBusy(true);
@@ -144,24 +143,21 @@ export default function TeacherSignup() {
           <div className="ed-beta-block">
             <div className="ed-beta-eye">● Beta · stängd registrering</div>
             <p className="ed-beta-help">
-              Plattformen är i beta. Maila{" "}
-              <a href="mailto:info@ekonomilabbet.org">
-                info@ekonomilabbet.org
-              </a>{" "}
-              för en beta-kod om du vill testa som lärare.
+              Plattformen är just nu i beta och vi öppnar upp stegvis.
+              Har du fått en beta-kod? Ange den här.
             </p>
             <input
               className="ed-input"
               type="text"
               value={betaCode}
               onChange={(e) => setBetaCode(e.target.value.toUpperCase())}
-              placeholder="Beta-kod (krävs)"
+              placeholder="Beta-kod"
               autoCapitalize="characters"
               autoCorrect="off"
               spellCheck={false}
-              required
             />
           </div>
+          <WaitlistBlock role="teacher" siteKey={siteKey} />
           <Turnstile
             siteKey={siteKey}
             onToken={setTurnstileToken}

@@ -265,8 +265,8 @@ def _validate_and_consume_beta_code(
             detail={
                 "error": "beta_code_required",
                 "message": (
-                    "Beta-kod krävs för registrering. Maila "
-                    "info@ekonomilabbet.org för att få en kod."
+                    "Ange en beta-kod, eller anmäl dig till "
+                    "väntelistan nedan så hör vi av oss."
                 ),
             },
         )
@@ -373,6 +373,66 @@ def parent_signup(payload: SignupIn, request: Request) -> SimpleOkOut:
     framtida policyändringar (t.ex. annan e-post-mall, annat välkomst-
     paket) kan ändras här utan att röra lärar-flödet."""
     return _create_open_signup(payload, request, is_family=True)
+
+
+# === Beta-väntelistan ===
+
+class WaitlistIn(BaseModel):
+    email: EmailStr
+    role: str = Field(default="other", max_length=20)
+
+
+@router.post("/waitlist/signup", response_model=SimpleOkOut)
+def waitlist_signup(payload: WaitlistIn, request: Request) -> SimpleOkOut:
+    """Anmäl intresse till beta-väntelistan. Idempotent på e-posten —
+    samma adress flera gånger uppdaterar bara `last_signup_at` +
+    `signup_count`. Svarar alltid OK för att inte läcka info om
+    e-posten redan finns.
+
+    Spam-skydd: rate-limit (samma som signup) + Turnstile.
+    """
+    _require_school_mode()
+    check_rate_limit(request, "teacher-signup", RULES_SIGNUP)
+    verify_turnstile(request, required=True)
+
+    role = payload.role.lower().strip() or "other"
+    if role not in ("teacher", "parent", "other"):
+        role = "other"
+
+    email_norm = payload.email.lower().strip()
+    # Hash IP för anti-spam-tracking utan att lagra plain
+    import hashlib as _hl_wl
+    client_ip = request.client.host if request.client else ""
+    ip_hash = _hl_wl.sha256(
+        (client_ip + "|hembudget-waitlist").encode()
+    ).hexdigest()[:32] if client_ip else None
+    ua = (request.headers.get("user-agent") or "")[:200]
+
+    from ..school.models import WaitlistEntry
+    with master_session() as s:
+        existing = (
+            s.query(WaitlistEntry)
+            .filter(WaitlistEntry.email_norm == email_norm)
+            .first()
+        )
+        if existing is not None:
+            existing.last_signup_at = datetime.utcnow()
+            existing.signup_count = (existing.signup_count or 1) + 1
+            # Uppdatera roll om den ändrats (t.ex. "other" → "teacher")
+            if role != "other":
+                existing.role = role
+            s.flush()
+        else:
+            s.add(WaitlistEntry(
+                email=payload.email,
+                email_norm=email_norm,
+                role=role,
+                ip_hash=ip_hash,
+                user_agent=ua,
+                signup_count=1,
+            ))
+            s.flush()
+    return SimpleOkOut(ok=True)
 
 
 @router.post("/teacher/request-verify-resend", response_model=SimpleOkOut)
