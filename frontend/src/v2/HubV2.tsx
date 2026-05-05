@@ -304,7 +304,10 @@ export function HubV2() {
               <em className="up">+ {SEK(month_summary.income)}</em> kr
             </div>
             <div className="hub-recap-sub">
-              {month_summary.transactions_count} transaktioner totalt
+              {month_summary.transactions_count}{" "}
+              {month_summary.transactions_count === 1
+                ? "transaktion totalt"
+                : "transaktioner totalt"}
             </div>
           </div>
           <div className="hub-recap-cell">

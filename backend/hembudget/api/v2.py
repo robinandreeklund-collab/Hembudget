@@ -15828,7 +15828,10 @@ def _auto_pay_historical_invoices(
             mails = (
                 s.query(MailItem)
                 .filter(
-                    MailItem.mail_type == "invoice",
+                    # Salary_slip OCH invoice tas båda — lönespec från
+                    # förra månaden är också "historik" och ska inte
+                    # ligga som ohanterad i postlådan när månaden är slut.
+                    MailItem.mail_type.in_(["invoice", "salary_slip"]),
                     MailItem.status.in_(["unhandled", "viewed"]),
                     MailItem.due_date >= period_start,
                     MailItem.due_date < period_end,
@@ -15846,7 +15849,11 @@ def _auto_pay_historical_invoices(
                     .filter(Transaction.hash == tx_hash)
                     .first()
                 )
-                if existing is None:
+                # För invoice: skapa autogiro-transaktion (utgift).
+                # För salary_slip: lönen är redan transakterad av
+                # salary_phase.py (en separat Transaction-rad), så vi
+                # markerar bara mailet som hanterat — ingen extra tx.
+                if existing is None and m_inv.mail_type == "invoice":
                     tx = Transaction(
                         account_id=lonekonto.id,
                         date=m_inv.due_date or period_start,

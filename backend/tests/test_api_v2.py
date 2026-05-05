@@ -7762,6 +7762,24 @@ def test_v2_seed_initial_marks_april_as_paid(fx) -> None:
             f"April-fakturor som inte är paid: "
             f"{[(m.id, m.status, m.subject) for m in unhandled]}"
         )
+        # Lönespec från förra månaden ska också vara hanterad
+        # — annars ligger den som "ohanterad · förfaller 25 apr"
+        # i postlådan på 5:e maj, vilket är pedagogiskt fel.
+        prev_payslips = (
+            s.query(MailItem)
+            .filter(MailItem.mail_type == "salary_slip")
+            .filter(MailItem.due_date >= period_start)
+            .filter(MailItem.due_date < period_end)
+            .all()
+        )
+        assert len(prev_payslips) > 0, (
+            "salary_phase ska ha seedat en lönespec för förra månaden"
+        )
+        unhandled_pay = [m for m in prev_payslips if m.status != "paid"]
+        assert not unhandled_pay, (
+            f"April-lönespecar som inte är paid: "
+            f"{[(m.id, m.status, m.subject) for m in unhandled_pay]}"
+        )
 
     _seed_scope(sid_g, check)
 
