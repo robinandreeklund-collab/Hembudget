@@ -540,7 +540,7 @@ export default function App() {
             element={<TeacherModuleLibraryV2 />}
           />
           <Route
-            path="/teacher/v2/moduler/:moduleId"
+            path="/teacher/v2/modul/:moduleId"
             element={<TeacherModuleEditV2 />}
           />
           {/* /dashboard har en V2-guard: super-admin och elever med

@@ -3651,6 +3651,29 @@ export const v2Api = {
       `/teacher/modules/${moduleId}/steps/${stepId}`,
       { method: "DELETE" },
     ),
+  /** AI-skiss · genererar modul-utkast (titel + summary + steg) från en
+   *  beskrivning. Kräver att lärarens ai_enabled=true. Lärar-vyn visar
+   *  utkastet i en modal innan modul + steg sparas via separata POSTs. */
+  teacherAIGenerateModuleDraft: (prompt: string) =>
+    api<{
+      raw: string;
+      parsed: {
+        title: string;
+        summary: string;
+        steps: {
+          kind: "read" | "watch" | "reflect" | "task" | "quiz";
+          title: string;
+          body?: string;
+          sort_order?: number;
+        }[];
+      };
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+    }>("/ai/modules/generate", {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
+    }),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

@@ -1,7 +1,7 @@
 /**
  * Lärar-vy · modul-redigering (Fas 2AO).
  *
- * Routas via /teacher/v2/moduler/:moduleId.
+ * Routas via /teacher/v2/modul/:moduleId.
  *
  * Funktionalitet:
  * - Visa modul-info (titel, summary, system-flagga)
