@@ -1236,6 +1236,9 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   perspective: 1400px;
   /* Lägre min-höjd, men låter grid-stack expandera till största barnet */
   min-height: 380px;
+  /* Display flex så .teacher-feature-inner kan flex:1 och fylla hela
+     cardets höjd när grid-raden stretchar cardet till radens högsta. */
+  display: flex;
   transition: transform .25s var(--ease), background .25s var(--ease), border-color .25s var(--ease);
 }
 .teacher-feature:hover {
@@ -1282,6 +1285,10 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 .teacher-feature-inner {
   position: relative;
   width: 100%;
+  /* flex:1 så inner sträcks till cardens fulla höjd även när grid-raden
+     gör cardet högre än min-height (fixar gap-buggen där bg-ytan slutade
+     efter content och resten av cardet såg "tomt" ut vid flip). */
+  flex: 1;
   min-height: inherit;
   display: grid;
   grid-template-areas: "stack";
