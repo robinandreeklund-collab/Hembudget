@@ -1527,3 +1527,191 @@ def class_invite_motivation(
         use_thinking=False,
         teacher_id=teacher_id,
     )
+
+
+# ============================================================
+#  Feature: Arbetsförmedlingen · personligt brev + intervjusvar
+# ============================================================
+
+COVER_LETTER_SYSTEM_PROMPT = """Du är en svensk karriärcoach som bedömer
+elevens personliga brev till en jobbansökan. Eleven är en gymnasieelev
+som lär sig hantera ekonomi och arbetsliv.
+
+Din uppgift är att ge KONSTRUKTIV feedback på brevet. Bedöm fyra saker:
+
+1. **Personligt vs generiskt** — Pratar eleven om SIG SJÄLV och VARFÖR
+   just detta jobb, eller är det ett generiskt cookie-cutter-brev som
+   skulle kunna skickas till vilket företag som helst?
+
+2. **Konkreta exempel** — Ger eleven specifika, verifierbara exempel
+   ("jag drev en webbshop som elevföretag" >> "jag är driven")?
+
+3. **Företagsspecifik koppling** — Visar brevet att eleven LÄST om
+   företaget och rollen, eller är det total ovetskap?
+
+4. **Språk + längd** — Är språket vårdat utan att vara stelt?
+   Lagom längd (200–400 ord)?
+
+Score 0–25 där 25 = perfekt.
+Riktlinjer:
+- 22-25: Personligt, konkret, företagsspecifikt, vårdat språk.
+- 16-21: Bra men saknar något — ofta företagsspecifik koppling.
+- 10-15: Generiskt eller för kort — eleven har inte läst om jobbet.
+- 0-9: Dåligt — kanske bara en mening eller helt fel ton.
+
+Var ärlig men vänlig. Eleven SKA få veta vad som behöver bättre.
+Inga emojis. Skriv på svenska."""
+
+
+COVER_LETTER_TOOL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {
+            "type": "integer", "minimum": 0, "maximum": 25,
+            "description": "Total poäng 0-25 för brevet.",
+        },
+        "score_personlig": {
+            "type": "integer", "minimum": 0, "maximum": 7,
+            "description": "Personligt vs generiskt (0-7p)",
+        },
+        "score_konkret": {
+            "type": "integer", "minimum": 0, "maximum": 6,
+            "description": "Konkreta exempel (0-6p)",
+        },
+        "score_foretag": {
+            "type": "integer", "minimum": 0, "maximum": 7,
+            "description": "Företagsspecifik koppling (0-7p)",
+        },
+        "score_sprak": {
+            "type": "integer", "minimum": 0, "maximum": 5,
+            "description": "Språk + längd (0-5p)",
+        },
+        "feedback_md": {
+            "type": "string",
+            "description": (
+                "Pedagogisk feedback i markdown · börja med en kort "
+                "summering, sedan 2-4 punkter som eleven kan göra bättre. "
+                "Max 250 ord."
+            ),
+        },
+        "highlights": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "1-2 saker eleven gjorde BRA (positiv förstärkning)",
+        },
+    },
+    "required": ["score", "feedback_md", "highlights"],
+}
+
+
+def evaluate_cover_letter(
+    *,
+    cover_letter_text: str,
+    job_title: str,
+    employer: str,
+    job_description: str,
+    requirements: list[str],
+    teacher_id: int | None = None,
+) -> Optional[AIStructuredResult]:
+    """Bedöm personligt brev. Returnerar score 0-25 + feedback + highlights."""
+    user = (
+        f"## Jobbet eleven söker\n"
+        f"**Titel:** {job_title}\n"
+        f"**Arbetsgivare:** {employer}\n"
+        f"**Beskrivning:** {job_description}\n"
+        f"**Krav:** {', '.join(requirements) if requirements else '(ej specificerat)'}\n\n"
+        f"## Elevens personliga brev\n\n{cover_letter_text}\n\n"
+        f"---\nKör `submit_cover_letter_evaluation`."
+    )
+    return _call_claude_structured(
+        model=MODEL_SONNET,
+        system=COVER_LETTER_SYSTEM_PROMPT,
+        user_prompt=user,
+        max_tokens=900,
+        tool_name="submit_cover_letter_evaluation",
+        tool_description=(
+            "Bedöm elevens personliga brev mot jobbannonsen. "
+            "Ge score 0-25 + delpoäng + feedback + highlights."
+        ),
+        tool_schema=COVER_LETTER_TOOL_SCHEMA,
+        teacher_id=teacher_id,
+    )
+
+
+# === Intervjusvar-bedömning · rond 2 + rond 3 ============
+
+INTERVIEW_ANSWER_SYSTEM_PROMPT = """Du är en svensk rekryterare som bedömer
+elevens svar i en jobbintervju. Eleven är en gymnasielev som tränar på
+intervjuteknik.
+
+Din uppgift är att bedöma KVALITETEN på elevens svar. För varje svar:
+
+1. Är svaret konkret eller bara fluff?
+2. Visar det självkännedom (t.ex. styrkor/svagheter med exempel)?
+3. Är språket professionellt utan att vara stelt? (rätt ton för
+   intervju-kontext)
+4. Har eleven tänkt själv eller bara skrivit floskler?
+
+Score 0-15 totalt för uppsättning av svar (3-5 frågor):
+- 12-15: Konkret, självmedvetet, professionellt språk.
+- 8-11: OK svar men kan vara djupare.
+- 4-7: Mest floskler eller för kort.
+- 0-3: Dåligt — fluff eller felaktig ton.
+
+Var ärlig men vänlig. Inga emojis. Svenska."""
+
+
+INTERVIEW_ANSWER_TOOL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {
+            "type": "integer", "minimum": 0, "maximum": 15,
+            "description": "Total poäng 0-15 för svaren.",
+        },
+        "language_score": {
+            "type": "integer", "minimum": 0, "maximum": 5,
+            "description": "Språkkvalitet 0-5 (hur professionell tonen är)",
+        },
+        "feedback_md": {
+            "type": "string",
+            "description": (
+                "Kort feedback i markdown · 2-3 punkter, max 150 ord. "
+                "Säg vad eleven gjorde bra och vad som kan bli bättre."
+            ),
+        },
+    },
+    "required": ["score", "feedback_md", "language_score"],
+}
+
+
+def evaluate_interview_answers(
+    *,
+    job_title: str,
+    employer: str,
+    questions_and_answers: list[dict],
+    teacher_id: int | None = None,
+) -> Optional[AIStructuredResult]:
+    """Bedöm intervjusvar (rond 2). Returnerar score + språkbedömning."""
+    qa_block = "\n".join(
+        f"**F:** {qa.get('question', '')}\n**S:** {qa.get('answer', '')}\n"
+        for qa in questions_and_answers
+    )
+    user = (
+        f"## Intervju\n"
+        f"**Roll:** {job_title} hos {employer}\n\n"
+        f"## Frågor och svar\n\n{qa_block}\n\n"
+        f"---\nKör `submit_interview_evaluation`."
+    )
+    return _call_claude_structured(
+        model=MODEL_SONNET,
+        system=INTERVIEW_ANSWER_SYSTEM_PROMPT,
+        user_prompt=user,
+        max_tokens=600,
+        tool_name="submit_interview_evaluation",
+        tool_description=(
+            "Bedöm intervjusvar. Ge total score 0-15 + delpoäng på "
+            "språkkvalitet + feedback."
+        ),
+        tool_schema=INTERVIEW_ANSWER_TOOL_SCHEMA,
+        teacher_id=teacher_id,
+    )

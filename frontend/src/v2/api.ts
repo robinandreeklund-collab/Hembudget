@@ -859,6 +859,30 @@ export type V2ArbetsformedlingenJob = {
   education_level: string;
   match_score: number;
   description: string;
+  // Sprint 7 · utökad annons-data
+  company_blurb: string;
+  job_description: string[];
+  requirements: string[];
+  meriter: string[];
+  benefits: string[];
+  employment_type: string;
+  application_deadline: string;
+  work_hours: string;
+  start_date: string;
+};
+
+export type V2CoverLetterPreviewIn = {
+  text: string;
+  yrke_display: string;
+  employer_name: string;
+  job_description?: string;
+  requirements?: string[];
+};
+
+export type V2CoverLetterPreviewOut = {
+  score: number;
+  feedback_md: string;
+  highlights: string[];
 };
 
 export type V2ArbetsformedlingenJobsResponse = {
@@ -2998,6 +3022,18 @@ export const v2Api = {
     api<V2ArbetsformedlingenApplication>(
       `/v2/arbetsformedlingen/applications/${appId}/abandon`,
       { method: "POST" },
+    ),
+  /** AI-feedback på personligt brev INNAN submit. Hjälper eleven
+   *  iterera utan att förbruka rond 1-tillfället. */
+  arbetsformedlingenCoverLetterPreview: (
+    body: V2CoverLetterPreviewIn,
+  ) =>
+    api<V2CoverLetterPreviewOut>(
+      "/v2/arbetsformedlingen/cover-letter-preview",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
     ),
   teacherAFApplications: (studentId: number) =>
     api<V2ArbetsformedlingenApplication[]>(

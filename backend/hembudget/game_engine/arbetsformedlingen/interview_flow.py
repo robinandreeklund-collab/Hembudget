@@ -30,7 +30,9 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class Round1Input:
-    cover_letter_hours: float = 1.0     # 0.5 - 4.0
+    """Sprint 7 · personligt brev (ersätter cover_letter_hours-slider).
+    Eleven skriver brevet, Sonnet bedömer kvalitet och ger feedback."""
+    cover_letter_text: str = ""
 
 
 @dataclass
@@ -79,6 +81,22 @@ def apply_to_job(
     today: date,
 ) -> JobApplication:
     """Skapa ny JobApplication, status round_1, current_round=1."""
+    # Lagra full annons-data så lärar-vy + AI-kontext kan visa
+    # exakt vad eleven såg när hen sökte (annonser regenereras
+    # varje månad, så utan denna snapshot går historiken förlorad).
+    job_ad_snapshot = {
+        "listing_id": opening.listing_id,
+        "description": opening.description,
+        "company_blurb": opening.company_blurb,
+        "job_description": opening.job_description,
+        "requirements": opening.requirements,
+        "meriter": opening.meriter,
+        "benefits": opening.benefits,
+        "employment_type": opening.employment_type,
+        "application_deadline": opening.application_deadline,
+        "work_hours": opening.work_hours,
+        "start_date": opening.start_date,
+    }
     app = JobApplication(
         yrke_key=opening.yrke_key,
         yrke_display=opening.yrke_display,
@@ -97,6 +115,8 @@ def apply_to_job(
         }},
         started_on=today,
     )
+    if hasattr(app, "job_ad_data"):
+        app.job_ad_data = job_ad_snapshot
     s.add(app)
     s.flush()
 
@@ -120,33 +140,106 @@ def _round1(
     s: Session, *, app: JobApplication, student_id: int,
     inp: Round1Input,
 ) -> RoundResult:
-    h = max(0.5, min(4.0, inp.cover_letter_hours))
-    # Mer tid = bättre intryck men kostar fritid + relation
-    quality = min(10, int(2 + h * 2))
-    score_delta = quality - 5
-    pentagon: dict[str, int] = {"safety": +1}
-    if h > 2:
-        pentagon["social"] = -1
-    if h > 1:
-        pentagon["leisure"] = -1
+    """Rond 1 · CV + personligt brev. Sonnet bedömer brev-kvalitet 0-25
+    poäng. Score_delta -10..+10 baserat på AI-score / 1.6.
+    """
+    text = (inp.cover_letter_text or "").strip()
+    word_count = len([w for w in text.split() if w])
+
+    # Hämta annons-data för AI-kontexten (om sparad)
+    job_ad = (app.job_ad_data or {}) if hasattr(app, "job_ad_data") else {}
+
+    # AI-bedömning · faller back till heuristik om AI saknas
+    ai_score = None
+    ai_feedback = None
+    ai_highlights: list[str] = []
+    if word_count >= 30:
+        try:
+            from ...school.ai import evaluate_cover_letter
+            from ...school.engines import master_session as _ms_dun
+            from ...school.models import Student as _Stu_dun
+            with _ms_dun() as ms:
+                stu = ms.get(_Stu_dun, student_id)
+                teacher_id = stu.teacher_id if stu else None
+            res = evaluate_cover_letter(
+                cover_letter_text=text,
+                job_title=app.yrke_display,
+                employer=app.employer_name,
+                job_description=job_ad.get("description")
+                    or app.yrke_display,
+                requirements=job_ad.get("requirements") or [],
+                teacher_id=teacher_id,
+            )
+            if res is not None:
+                ai_score = int(res.data.get("score", 12))
+                ai_feedback = res.data.get("feedback_md", "")
+                ai_highlights = res.data.get("highlights", []) or []
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "round1: AI-bedömning misslyckades — fallback till heuristik",
+            )
+
+    # Heuristik-fallback: bedöm baserat på längd
+    if ai_score is None:
+        if word_count < 50:
+            ai_score = 6
+            ai_feedback = (
+                "Brevet är för kort. Skriv 200-400 ord där du förklarar "
+                "varför just detta jobbet och ge konkreta exempel."
+            )
+        elif word_count < 150:
+            ai_score = 12
+            ai_feedback = (
+                "Skapligt utgångsläge men kunde vara mer detaljerat. "
+                "Lägg till ett konkret exempel från din erfarenhet."
+            )
+        elif word_count > 600:
+            ai_score = 14
+            ai_feedback = (
+                "För långt. Få brev läses helt om de är över 400 ord. "
+                "Kortare, tydligare = bättre."
+            )
+        else:
+            ai_score = 17
+            ai_feedback = "Lagom längd. Bra struktur."
+
+    # Mappa 0-25 → -10..+10
+    score_delta = max(-10, min(10, int(ai_score / 1.25 - 10)))
+
+    # Pentagon: alltid lite stress (-2 hälsa). Bra brev → +2 carrier.
+    # Dåligt brev → -1 self-confidence (safety).
+    pentagon: dict[str, int] = {"halsa": -2}
+    if ai_score >= 18:
+        pentagon["karriar"] = +2
+        pentagon["safety"] = +1
+    elif ai_score < 10:
+        pentagon["safety"] = -2
+
     feedback = (
-        f"**Rond 1 · CV + personligt brev**\n\n"
-        f"Du la {h:.1f} timmar på personligt brev. Mats läser det och "
-        f"bedömer det som **{['svagt','okej','bra','mycket bra','utmärkt'][min(4, quality//2)]}**.\n\n"
+        f"**Rond 1 · Personligt brev**\n\n"
+        f"AI-bedömning: **{ai_score}/25** poäng.\n\n"
+        f"{ai_feedback or ''}\n"
     )
-    if h < 1:
-        feedback += (
-            "Tips inför nästa gång: 1-2 h på brev brukar ge bästa "
-            "balans mellan kvalitet och egen tid.\n"
-        )
+    if ai_highlights:
+        feedback += "\n**Det här gjorde du bra:**\n"
+        for h in ai_highlights:
+            feedback += f"- {h}\n"
 
     rd = app.rounds_data or {}
     rd["round_1"] = {
-        "cover_letter_hours": h,
-        "quality": quality,
+        "cover_letter_text": text,
+        "word_count": word_count,
+        "ai_score": ai_score,
+        "ai_feedback": ai_feedback,
         "score_delta": score_delta,
     }
     app.rounds_data = rd
+    if hasattr(app, "cover_letter_text"):
+        app.cover_letter_text = text
+    if hasattr(app, "ai_feedback_md"):
+        existing = app.ai_feedback_md or ""
+        app.ai_feedback_md = (existing + "\n\n" + feedback).strip() if existing else feedback
     app.status = "round_2"
     app.current_round = 2
     return RoundResult(
@@ -163,37 +256,111 @@ _TONE_EFFECTS = {
 }
 
 
+_INTERVIEW_QUESTIONS = [
+    "Berätta kort om dig själv och varför du söker just det här jobbet.",
+    "Vad är din största styrka och kan du ge ett konkret exempel?",
+    "Vad är din lägsta lönenivå du kan acceptera?",
+    "Vilka tider passar för en personlig intervju?",
+]
+
+
 def _round2(
     s: Session, *, app: JobApplication, student_id: int,
     inp: Round2Input,
 ) -> RoundResult:
+    """Rond 2 · Telefonintervju. AI-bedömer kvaliteten på elevens svar
+    samt språket. Score_delta = (tone_delta) + (AI_score / 3)."""
     delta, extra = _TONE_EFFECTS.get(inp.tone, (+0, {}))
-    n_answers = len([a for a in inp.answers if a and len(a.strip()) > 5])
+    answers = [a for a in inp.answers if a and len(a.strip()) > 5]
+    n_answers = len(answers)
     if n_answers >= 4:
         delta += 1
-    score_delta = delta
-    pentagon: dict[str, int] = {"health": -2}
-    pentagon.update(extra)
+
+    # AI-bedömning av textsvaren (om eleven faktiskt skrev något)
+    ai_score = None
+    ai_lang_score = None
+    ai_feedback = None
+    if n_answers >= 2:
+        try:
+            from ...school.ai import evaluate_interview_answers
+            from ...school.engines import master_session as _ms_2
+            from ...school.models import Student as _Stu_2
+            with _ms_2() as ms:
+                stu = ms.get(_Stu_2, student_id)
+                teacher_id = stu.teacher_id if stu else None
+            qa = []
+            for i, a in enumerate(answers):
+                qa.append({
+                    "question": _INTERVIEW_QUESTIONS[i] if i < len(_INTERVIEW_QUESTIONS)
+                                else f"Fråga {i+1}",
+                    "answer": a,
+                })
+            res = evaluate_interview_answers(
+                job_title=app.yrke_display,
+                employer=app.employer_name,
+                questions_and_answers=qa,
+                teacher_id=teacher_id,
+            )
+            if res is not None:
+                ai_score = int(res.data.get("score", 8))
+                ai_lang_score = int(res.data.get("language_score", 3))
+                ai_feedback = res.data.get("feedback_md", "")
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "round2: AI-bedömning misslyckades",
+            )
+
+    # Mappa AI-score till score_delta. Tona-bonus läggs ovanpå.
+    if ai_score is not None:
+        delta += int(ai_score / 5 - 1.5)  # 0..15 → -1..+1.5
+
+    score_delta = max(-10, min(10, delta))
+    pentagon: dict[str, int] = {"halsa": -2}
+    pentagon.update({k: v for k, v in extra.items()})
+    if ai_lang_score is not None:
+        if ai_lang_score >= 4:
+            pentagon["karriar"] = pentagon.get("karriar", 0) + 1
+        elif ai_lang_score <= 1:
+            pentagon["safety"] = pentagon.get("safety", 0) - 1
 
     feedback = (
         f"**Rond 2 · Telefonintervju**\n\n"
-        f"Mats noterar att du valde tonen **{inp.tone}** och svarade "
-        f"på {n_answers} av frågorna utförligt. "
+        f"Du valde tonen **{inp.tone}** och svarade på {n_answers} "
+        f"frågor.\n\n"
     )
+    if ai_score is not None:
+        feedback += f"AI-bedömning: **{ai_score}/15** poäng på svarskvalitet"
+        if ai_lang_score is not None:
+            feedback += f" (varav språk {ai_lang_score}/5)"
+        feedback += ".\n\n"
+        if ai_feedback:
+            feedback += ai_feedback + "\n\n"
     if inp.tone == "ansprakvol":
         feedback += (
-            "Säkert i inställningen är bra — men för tidigt anspråksfull "
-            "kan rekryteraren tolka som arrogant.\n"
+            "_Säker inställning är bra — men för tidigt anspråksfull "
+            "kan rekryteraren tolka som arrogant._\n"
         )
     elif inp.tone == "arlig":
         feedback += (
-            "Ärlig är vinnande för relation, men kan vara för naivt om "
-            "du visar svaga sidor utan kontext.\n"
+            "_Ärlig är vinnande för relation, men kan vara för naivt om "
+            "du visar svaga sidor utan kontext._\n"
         )
 
     rd = app.rounds_data or {}
-    rd["round_2"] = {"tone": inp.tone, "n_answers": n_answers, "score_delta": score_delta}
+    rd["round_2"] = {
+        "tone": inp.tone,
+        "n_answers": n_answers,
+        "answers": answers,
+        "ai_score": ai_score,
+        "ai_lang_score": ai_lang_score,
+        "ai_feedback": ai_feedback,
+        "score_delta": score_delta,
+    }
     app.rounds_data = rd
+    if hasattr(app, "ai_feedback_md"):
+        existing = app.ai_feedback_md or ""
+        app.ai_feedback_md = (existing + "\n\n" + feedback).strip() if existing else feedback
     app.status = "round_3"
     app.current_round = 3
     return RoundResult(

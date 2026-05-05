@@ -9410,3 +9410,150 @@ def test_v2_dunning_paid_via_match_does_not_trigger(fx) -> None:
     n, status = _scope_query(sid, check)
     assert n == 0
     assert status == "paid"
+
+
+# =================================================================
+# Arbetsförmedlingen · Sprint 7 · personligt brev + AI-bedömning
+# =================================================================
+
+def test_v2_arbetsformedlingen_jobs_have_full_ad_data(fx) -> None:
+    """Job-listan ska returnera utökad annons-data: requirements,
+    meriter, benefits, employment_type, application_deadline."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    r = client.get(
+        "/v2/arbetsformedlingen/jobs?ym=2026-05",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert len(data["jobs"]) > 0
+    j = data["jobs"][0]
+    # Sprint 7-fält måste finnas
+    for field in (
+        "company_blurb", "job_description", "requirements",
+        "meriter", "benefits", "employment_type",
+        "application_deadline", "work_hours", "start_date",
+    ):
+        assert field in j, f"saknar {field}"
+    assert isinstance(j["requirements"], list)
+    assert len(j["requirements"]) > 0
+    assert isinstance(j["benefits"], list)
+
+
+def test_v2_arbetsformedlingen_apply_logs_activity(fx) -> None:
+    """apply triggar log_activity('job.applied') för lärar-spårning."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    r = client.get(
+        "/v2/arbetsformedlingen/jobs?ym=2026-05",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    job = r.json()["jobs"][0]
+    apply_r = client.post(
+        "/v2/arbetsformedlingen/apply",
+        headers={"Authorization": f"Bearer {stu}"},
+        json=job,
+    )
+    assert apply_r.status_code == 200, apply_r.text
+
+    from hembudget.school.models import StudentActivity
+    with master_session() as ms:
+        events = (
+            ms.query(StudentActivity)
+            .filter(
+                StudentActivity.student_id == sid,
+                StudentActivity.kind == "job.applied",
+            )
+            .all()
+        )
+        assert len(events) == 1
+        assert events[0].payload["yrke_key"] == job["yrke_key"]
+
+
+def test_v2_arbetsformedlingen_round1_takes_text_not_slider(fx, monkeypatch) -> None:
+    """Rond 1 tar nu cover_letter_text. Heuristik-fallback fungerar
+    när AI inte är aktiv (för kort brev → låg score)."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    # Mocka AI så vi inte hittar Anthropic-klient
+    from hembudget.school import ai as ai_mod
+    monkeypatch.setattr(ai_mod, "evaluate_cover_letter", lambda **_: None)
+
+    r = client.get(
+        "/v2/arbetsformedlingen/jobs?ym=2026-05",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    job = r.json()["jobs"][0]
+    apply_r = client.post(
+        "/v2/arbetsformedlingen/apply",
+        headers={"Authorization": f"Bearer {stu}"},
+        json=job,
+    )
+    app_id = apply_r.json()["id"]
+
+    # Skicka in rond 1 med kort text (heuristik ska ge låg score)
+    short_text = "Hej, jag vill ha jobbet."
+    round_r = client.post(
+        f"/v2/arbetsformedlingen/applications/{app_id}/round",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"payload": {"cover_letter_text": short_text}},
+    )
+    assert round_r.status_code == 200, round_r.text
+    out = round_r.json()
+    assert out["round_n"] == 1
+    # Score_delta ska vara negativt för kort text
+    assert out["score_delta"] < 0
+    assert "Personligt brev" in out["feedback_md"]
+
+
+def test_v2_arbetsformedlingen_cover_letter_preview_short_text(fx) -> None:
+    """Preview-endpoint kräver minst 30 ord."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    r = client.post(
+        "/v2/arbetsformedlingen/cover-letter-preview",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "text": "Hej jag vill ha jobbet",
+            "yrke_display": "IT-konsult",
+            "employer_name": "Visma",
+        },
+    )
+    assert r.status_code == 400
+    assert "30 ord" in r.json()["detail"]
+
+
+def test_v2_arbetsformedlingen_apply_stores_full_ad_in_application(fx) -> None:
+    """När eleven söker ska job_ad_data sparas på applikationen så
+    lärar-vy senare kan visa exakt vad eleven såg."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    r = client.get(
+        "/v2/arbetsformedlingen/jobs?ym=2026-05",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    job = r.json()["jobs"][0]
+    apply_r = client.post(
+        "/v2/arbetsformedlingen/apply",
+        headers={"Authorization": f"Bearer {stu}"},
+        json=job,
+    )
+    assert apply_r.status_code == 200
+    app_id = apply_r.json()["id"]
+
+    # Verifiera att job_ad_data är sparad i scope-DB
+    from hembudget.db.models import JobApplication
+    def check(ss):
+        a = ss.get(JobApplication, app_id)
+        return a.job_ad_data
+    ad_data = _scope_query(sid, check)
+    assert ad_data is not None
+    assert "requirements" in ad_data
+    assert "benefits" in ad_data
+    assert ad_data["employment_type"] == job["employment_type"]

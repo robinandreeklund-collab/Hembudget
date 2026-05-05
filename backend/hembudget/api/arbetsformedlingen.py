@@ -71,6 +71,16 @@ class JobOpeningOut(BaseModel):
     education_level: str
     match_score: int
     description: str
+    # Sprint 7 · utökad annons-data
+    company_blurb: str = ""
+    job_description: list[str] = []
+    requirements: list[str] = []
+    meriter: list[str] = []
+    benefits: list[str] = []
+    employment_type: str = ""
+    application_deadline: str = ""
+    work_hours: str = ""
+    start_date: str = ""
 
 
 class JobsResponse(BaseModel):
@@ -93,6 +103,16 @@ class ApplyIn(BaseModel):
     education_level: str
     match_score: int
     description: str = ""
+    # Sprint 7 · annonsdata bevaras vid apply så sparkad i job_ad_data
+    company_blurb: str = ""
+    job_description: list[str] = []
+    requirements: list[str] = []
+    meriter: list[str] = []
+    benefits: list[str] = []
+    employment_type: str = ""
+    application_deadline: str = ""
+    work_hours: str = ""
+    start_date: str = ""
 
 
 class JobApplicationOut(BaseModel):
@@ -264,6 +284,22 @@ def apply(
         app = apply_to_job(
             s, student_id=sid, opening=opening, today=_date.today(),
         )
+        # Lärar-spårning
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="job.applied",
+                summary=f"Sökte jobb: {opening.yrke_display} hos {opening.employer_name}",
+                payload={
+                    "application_id": app.id,
+                    "yrke_key": opening.yrke_key,
+                    "employer": opening.employer_name,
+                    "match_score": opening.match_score,
+                    "monthly_gross_median": opening.monthly_gross_median,
+                },
+            )
+        except Exception:
+            pass
         return _to_app_out(app)
 
 
@@ -320,6 +356,21 @@ def accept(
             app = accept_offer(s, student_id=sid, application_id=app_id)
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="job.accepted",
+                summary=f"Tog jobbet: {app.yrke_display} hos {app.employer_name}",
+                payload={
+                    "application_id": app.id,
+                    "yrke_key": app.yrke_key,
+                    "employer": app.employer_name,
+                    "monthly_gross_offered": app.monthly_gross_offered,
+                    "final_score": app.final_score,
+                },
+            )
+        except Exception:
+            pass
         return _to_app_out(app)
 
 
@@ -334,6 +385,19 @@ def decline(
             app = decline_offer(s, student_id=sid, application_id=app_id)
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="job.declined",
+                summary=f"Tackade nej till {app.yrke_display} hos {app.employer_name}",
+                payload={
+                    "application_id": app.id,
+                    "yrke_key": app.yrke_key,
+                    "final_score": app.final_score,
+                },
+            )
+        except Exception:
+            pass
         return _to_app_out(app)
 
 
@@ -348,7 +412,81 @@ def abandon(
             app = abandon_application(s, student_id=sid, application_id=app_id)
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="job.abandoned",
+                summary=f"Avbröt ansökan till {app.yrke_display}",
+                payload={"application_id": app.id, "yrke_key": app.yrke_key},
+            )
+        except Exception:
+            pass
         return _to_app_out(app)
+
+
+# === Cover-letter-preview · AI-feedback INNAN submit ===
+
+class CoverLetterPreviewIn(BaseModel):
+    text: str
+    yrke_display: str
+    employer_name: str
+    job_description: Optional[str] = None
+    requirements: list[str] = []
+
+
+class CoverLetterPreviewOut(BaseModel):
+    score: int
+    feedback_md: str
+    highlights: list[str] = []
+
+
+@router.post("/cover-letter-preview", response_model=CoverLetterPreviewOut)
+def cover_letter_preview(
+    body: CoverLetterPreviewIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Eleven får AI-feedback på personliga brevet INNAN hen submittar
+    rond 1. Hjälper hen iterera utan att förbruka rond-tillfället.
+    """
+    sid = _require_student(info)
+    text = (body.text or "").strip()
+    if len(text.split()) < 30:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Skriv minst 30 ord innan du ber om feedback.",
+        )
+    from ..school.ai import evaluate_cover_letter
+    from ..school.engines import master_session
+    from ..school.models import Student as _Stu_p
+    with master_session() as ms:
+        stu = ms.get(_Stu_p, sid)
+        teacher_id = stu.teacher_id if stu else None
+    try:
+        res = evaluate_cover_letter(
+            cover_letter_text=text,
+            job_title=body.yrke_display,
+            employer=body.employer_name,
+            job_description=body.job_description or body.yrke_display,
+            requirements=body.requirements,
+            teacher_id=teacher_id,
+        )
+        if res is None:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "AI-tjänsten gick inte att nå.",
+            )
+        return CoverLetterPreviewOut(
+            score=int(res.data.get("score", 12)),
+            feedback_md=res.data.get("feedback_md", ""),
+            highlights=res.data.get("highlights", []) or [],
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "AI-bedömning misslyckades.",
+        )
 
 
 # === Lärar-endpoint ===

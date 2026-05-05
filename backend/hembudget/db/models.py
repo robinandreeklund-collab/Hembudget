@@ -1801,6 +1801,27 @@ class JobApplication(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
+    # Förbättrat 5-rond-flöde · Sprint 7
+    # Personligt brev som eleven skriver i rond 1 (ersätter
+    # cover_letter_hours-slider). Sonnet bedömer kvalitet + ger
+    # feedback som visas i ai_feedback_md.
+    cover_letter_text: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    # Case-svar i rond 3 som lagras separat så lärare kan se
+    # elevens resonemang i lärar-overview (inte bara final score).
+    case_answer_text: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    # Aggregerad AI-feedback från Sonnet om brevet + intervjusvar.
+    # Visar sig som "Mats coach"-text i UI:t.
+    ai_feedback_md: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    # Lagrat full annons-data så lärar-vy kan visa exakt vad eleven
+    # såg när hen sökte (annonser regenereras varje månad och eleven
+    # skulle annars inte kunna spåra tillbaka).
+    job_ad_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
 
 class ActiveHome(TenantMixin, Base):
