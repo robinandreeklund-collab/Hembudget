@@ -83,20 +83,27 @@ export function HandelserV2() {
   const navigate = useNavigate();
 
   function refresh() {
-    Promise.all([
-      v2Api.eventsPending(),
-      v2Api.eventsHistory(20),
-      v2Api.eventInvitations(),
-      v2Api.eventClassmates(),
-    ])
-      .then(([p, h, i, c]) => {
-        setPending(p.events);
-        setHistory(h.events.filter((e) => e.status !== "pending"));
-        setInvites(i.invitations);
+    // Hämta varje endpoint INDIVIDUELLT — annars dör hela vyn vid
+    // första 410/500. Visa partial state istället för "kunde inte ladda".
+    v2Api.eventsPending()
+      .then((p) => setPending(p.events))
+      .catch(() => setPending([]));
+    v2Api.eventsHistory(20)
+      .then((h) => setHistory(h.events.filter((e) => e.status !== "pending")))
+      .catch(() => setHistory([]));
+    v2Api.eventInvitations()
+      .then((i) => setInvites(i.invitations))
+      .catch(() => setInvites([]));
+    v2Api.eventClassmates()
+      .then((c) => {
         setClassmates(c.classmates);
         setInvitesEnabled(c.invites_enabled);
       })
-      .catch((e) => setError(String((e as Error)?.message || e)));
+      .catch(() => {
+        setClassmates([]);
+        setInvitesEnabled(false);
+      });
+    setError(null);
   }
 
   useEffect(() => {
