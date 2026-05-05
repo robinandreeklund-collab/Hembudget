@@ -302,6 +302,9 @@ export function HubV2() {
                 {hub.pending_events && hub.pending_events.length > 0
                   && ` · ${hub.pending_events.length}`}
               </Link>
+              <Link to="/v2/huvudbok" className="hub-char-pill">
+                Huvudboken
+              </Link>
               <Link to="/v2/moduler" className="hub-char-pill">
                 Mina moduler
               </Link>

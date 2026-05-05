@@ -243,6 +243,12 @@ def build_app() -> FastAPI:
     app.include_router(elpris.router)
     app.include_router(funds.router)
     app.include_router(ledger.router)
+    # V2-alias för ledger-routern. Eleven anropar /v2/ledger/... från
+    # V2-frontenden så vi garanterat aldrig krockar med
+    # V1LegacyGateMiddleware (/ledger/ är V1-blockerad pga
+    # historisk pool-issues, men huvudbok-funktionen är pedagogiskt
+    # värdefull även för V2). Båda paths landar på samma handlers.
+    app.include_router(ledger.router, prefix="/v2")
     app.include_router(backup.router)
     app.include_router(settings_kv.router)
     app.include_router(utility.router)

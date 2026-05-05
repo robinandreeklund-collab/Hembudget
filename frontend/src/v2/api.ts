@@ -516,6 +516,70 @@ export type V2CreditFactor = {
   severity: "good" | "warn" | "bad" | "neutral";
 };
 
+// === Huvudbok / Ledger (V2) =============================================
+// Rapporterar balansrapport per konto + resultaträkning per kategori +
+// avstämningskontroller. Svarar på GET /v2/ledger/?month=YYYY-MM eller ?year=YYYY.
+
+export type LedgerAccount = {
+  id: number;
+  name: string;
+  type: string;
+  opening: number;
+  income: number;
+  expense: number;
+  transfer_in: number;
+  transfer_out: number;
+  closing: number;
+  fund_value?: number | null;
+  total_value?: number | null;
+  tx_count: number;
+};
+
+export type LedgerCategoryRow = {
+  id: number | null;
+  name: string;
+  income: number;
+  expense: number;
+  net: number;
+  tx_count: number;
+};
+
+export type LedgerCheck = {
+  type: string;
+  label: string;
+  status: "ok" | "warn" | "fail";
+  message: string;
+  detail_count?: number;
+};
+
+export type LedgerData = {
+  period: {
+    label: string;
+    start: string;
+    end: string;
+  };
+  locked_months: string[];
+  accounts: LedgerAccount[];
+  categories: LedgerCategoryRow[];
+  loans?: Array<{
+    name: string;
+    expected_balance: number;
+    matched_balance: number;
+    delta: number;
+  }>;
+  upcoming_summary?: Record<string, unknown>;
+  totals: {
+    income: number;
+    expenses: number;
+    net_result: number;
+    assets: number;
+    liabilities: number;
+    net_worth: number;
+    uncategorized_count: number;
+  };
+  checks: LedgerCheck[];
+};
+
 export type LoanData = {
   student_id: number;
   total_debt: number;
@@ -3887,6 +3951,12 @@ export const v2Api = {
       }`,
     ),
   lan: () => api<LoanData>("/v2/lan"),
+  /** Huvudbok / Ledger · period kan vara YYYY-MM eller YYYY. */
+  huvudbok: (period: string) => {
+    const isMonth = period.length === 7 && period.includes("-");
+    const qs = isMonth ? `month=${period}` : `year=${period}`;
+    return api<LedgerData>(`/v2/ledger/?${qs}`);
+  },
   /** Räkna KALP för ett tänkt lånebelopp (sparas i scope-DB). */
   kalp: (loanAmount: number, loanTermMonths: number = 300) =>
     api<V2KALPResponse>("/v2/lan/kalp", {
