@@ -265,6 +265,11 @@ def build_app() -> FastAPI:
     app.include_router(teacher_credit.router)
     app.include_router(wellbeing.router)
     app.include_router(events.router)
+    # V2-alias för events-routern. Eleven anropar /v2/events/... från
+    # V2-frontenden så vi garanterat aldrig krockar med V1LegacyGate-
+    # middleware. Båda paths landar på samma handlers — tester och
+    # V1-baserade kod fortsätter använda /events/...
+    app.include_router(events.router, prefix="/v2")
     app.include_router(teacher_wellbeing.router)
     app.include_router(employer.router)
     app.include_router(teacher_employer.router)

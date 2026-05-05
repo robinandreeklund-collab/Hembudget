@@ -2451,13 +2451,13 @@ export const v2Api = {
   hub: () => api<HubData>("/v2/hub"),
   // === Events / sociala händelser ===
   eventsPending: () =>
-    api<{ events: V2EventItem[]; count: number }>("/events/pending"),
+    api<{ events: V2EventItem[]; count: number }>("/v2/events/pending"),
   eventsHistory: (limit: number = 30) =>
     api<{ events: V2EventItem[]; count: number }>(
-      `/events/history?limit=${limit}`,
+      `/v2/events/history?limit=${limit}`,
     ),
   eventAccept: (id: number, accountId?: number, decisionReason?: string) =>
-    api<V2EventAcceptResponse>(`/events/${id}/accept`, {
+    api<V2EventAcceptResponse>(`/v2/events/${id}/accept`, {
       method: "POST",
       body: JSON.stringify({
         account_id: accountId,
@@ -2465,13 +2465,13 @@ export const v2Api = {
       }),
     }),
   eventDecline: (id: number, decisionReason?: string) =>
-    api<V2EventDeclineResponse>(`/events/${id}/decline`, {
+    api<V2EventDeclineResponse>(`/v2/events/${id}/decline`, {
       method: "POST",
       body: JSON.stringify({ decision_reason: decisionReason }),
     }),
   eventClassmates: () =>
     api<{ classmates: V2ClassmateItem[]; invites_enabled: boolean }>(
-      "/events/classmates",
+      "/v2/events/classmates",
     ),
   eventInviteClassmates: (
     eventId: number,
@@ -2479,7 +2479,7 @@ export const v2Api = {
     message?: string,
   ) =>
     api<{ created: number; invite_ids: number[] }>(
-      "/events/invite-classmates",
+      "/v2/events/invite-classmates",
       {
         method: "POST",
         body: JSON.stringify({
@@ -2491,7 +2491,7 @@ export const v2Api = {
     ),
   eventInvitations: () =>
     api<{ invitations: V2InviteItem[]; count: number }>(
-      "/events/invitations",
+      "/v2/events/invitations",
     ),
   eventInviteRespond: (
     inviteId: number,
@@ -2499,7 +2499,7 @@ export const v2Api = {
     decisionReason?: string,
   ) =>
     api<{ status: string; resulting_event_id: number | null }>(
-      "/events/invitations/respond",
+      "/v2/events/invitations/respond",
       {
         method: "POST",
         body: JSON.stringify({
