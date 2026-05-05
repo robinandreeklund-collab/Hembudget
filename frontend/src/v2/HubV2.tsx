@@ -218,7 +218,8 @@ export function HubV2() {
                   } else {
                     parts.push(
                       <span key="evt">
-                        Senaste händelse: <strong>{latestEvent.subject}</strong>
+                        Nästa att hantera:{" "}
+                        <strong>{latestEvent.subject}</strong>
                         .{" "}
                       </span>,
                     );
@@ -228,7 +229,7 @@ export function HubV2() {
                   parts.push(
                     <span key="lon">
                       Lönen <em>{SEK(character.net_salary_monthly)} kr</em>{" "}
-                      netto i fas.{" "}
+                      netto/månad.{" "}
                     </span>,
                   );
                 }
@@ -318,7 +319,9 @@ export function HubV2() {
             <div className="hub-recap-sub">live från transactions</div>
           </div>
           <div className="hub-recap-cell">
-            <div className="hub-recap-eye">Sparat denna mån</div>
+            <div className="hub-recap-eye">
+              {month_summary.saved >= 0 ? "Sparat denna mån" : "Underskott denna mån"}
+            </div>
             <div className="hub-recap-num">
               <em className="warm">
                 {month_summary.saved >= 0 ? "+ " : "− "}
@@ -348,7 +351,9 @@ export function HubV2() {
             </div>
             <div className="hub-recap-sub">
               {month_summary.save_rate_pct == null
-                ? "ingen lön denna mån"
+                ? character.net_salary_monthly
+                  ? "väntar månadens lön"
+                  : "ingen lön registrerad"
                 : "mål 15 %"}
             </div>
           </div>

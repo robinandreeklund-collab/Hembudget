@@ -383,8 +383,14 @@ export function PostladanV2() {
                   ? `+ ${SEK(m.amount)}`
                   : `${SEK(m.amount)}`;
 
-              const dueText =
-                m.status === "paid"
+              const isSalary = m.mail_type === "salary_slip";
+              const dueText = isSalary
+                ? m.status === "paid"
+                  ? `utbetald ${m.due_date ? SHORT_DATE(m.due_date) : ""}`.trim()
+                  : m.due_date
+                  ? `utbetalas ${SHORT_DATE(m.due_date)}`
+                  : "lönespec"
+                : m.status === "paid"
                   ? "betald"
                   : m.status === "exported"
                   ? `betalas ${SHORT_DATE(m.due_date)}`
