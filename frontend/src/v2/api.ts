@@ -455,6 +455,42 @@ export type LoanData = {
 
 // === Fas 2A · Lånegivaren ===
 
+export type V2LoanKind = "privatlan" | "billan" | "bolan" | "smslan";
+
+export type V2LoanApplyRequest = {
+  loan_kind: V2LoanKind;
+  amount: number;
+  term_months: number;
+  purpose?: string;
+  debit_account_id?: number;
+  accept_offer?: boolean;
+};
+
+export type V2WellbeingImpact = {
+  axis: string;
+  delta: number;
+  explanation: string;
+};
+
+export type V2LoanApplyResponse = {
+  application_id: number;
+  approved: boolean;
+  decline_reason?: string | null;
+  loan_kind: string;
+  score: number;
+  grade: string;
+  score_components: Record<string, number>;
+  kalp_passed: boolean;
+  kalp_left_after_all: number;
+  offered_rate?: number | null;
+  offered_monthly_payment?: number | null;
+  offered_total_repay?: number | null;
+  lender?: string | null;
+  loan_id?: number | null;
+  wellbeing_impact: V2WellbeingImpact[];
+  warnings: string[];
+};
+
 export type V2KALPResponse = {
   id: number;
   computed_at: string;
@@ -3702,6 +3738,12 @@ export const v2Api = {
         loan_amount: loanAmount,
         loan_term_months: loanTermMonths,
       }),
+    }),
+  /** Eleven ansöker om lån. accept_offer=false = bara prövning. */
+  loanApply: (req: V2LoanApplyRequest) =>
+    api<V2LoanApplyResponse>("/v2/lan/apply", {
+      method: "POST",
+      body: JSON.stringify(req),
     }),
   /** Lärar-API · seedа default-katalog (5 produkter). */
   teacherSeedDefaultLoanProducts: (studentId: number) =>

@@ -982,6 +982,15 @@ def _compute_credit_for_student(
             savings_buffer_months=savings_buffer_months,
             satisfaction_score=sat_score,
             months_on_platform=months_on_platform,
+            # Livssituations-faktorer från elevens profil. None om profil
+            # saknas (demo-läge eller äldre seed) — då hoppar formeln över
+            # dem och använder bara beteendefaktorer.
+            age=profile.age if profile else None,
+            monthly_net_income=(
+                profile.net_salary_monthly if profile else None
+            ),
+            family_status=profile.family_status if profile else None,
+            housing_type=profile.housing_type if profile else None,
         )
 
         # Cachea i master-DB (insert always — håller historik)

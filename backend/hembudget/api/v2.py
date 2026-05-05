@@ -26,7 +26,9 @@ from decimal import Decimal
 from ..db.base import session_scope
 from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
-    MailItem, Loan, LoanPayment, LoanProduct, PaymentMark, CreditCheck, KALPCalculation,
+    MailItem, Loan, LoanPayment, LoanProduct, LoanScheduleEntry,
+    CreditApplication,
+    PaymentMark, CreditCheck, KALPCalculation,
     TaxDeduction, TaxProposal, TaxYearReturn,
     InsurancePolicy, InsuranceClaim,
     UtilitySubscription, UtilityReading,
@@ -3935,6 +3937,708 @@ def post_kalp(
             ),
             monthly_left_after_all=float(kalp.monthly_left_after_all),
             passed=kalp.passed,
+        )
+
+
+# === Eleven ansöker själv om lån · /v2/lan/apply ===
+#
+# Verklighetstrogen lånesimulering. Eleven kan ansöka om fyra lånetyper:
+# privatlån, billån, bolån, SMS-lån. Varje lånetyp har:
+#   - Eget belopp/löptid-spann (verklighetsbaserat)
+#   - Egen ränta-bana (baseras på elevens UC-score)
+#   - Egen godkännande-tröskel (UC + KALP)
+#   - Egen pedagogisk wellbeing-impact (SMS-lån varnar safety; bolån
+#     är "stort beslut" → safety-)
+#
+# Hela flödet är spårbart för läraren via StudentActivity + lagras
+# alltid i CreditApplication (även avslag/abandon).
+
+LoanKind = Literal["privatlan", "billan", "bolan", "smslan"]
+
+
+# Specs per lånetyp — verklighetstrogna ranges (2024 svenska marknaden)
+_LOAN_KIND_SPECS: dict[str, dict] = {
+    "privatlan": {
+        "min_amount": 10_000,
+        "max_amount": 500_000,
+        "min_term": 12,
+        "max_term": 144,  # 12 år
+        "min_score": 500,  # C+
+        "rate_at_min_score": 0.12,  # 12 %
+        "rate_at_max_score": 0.045,  # 4.5 %
+        "lenders": ["Avanza", "SEB", "Marginalen", "Resurs"],
+        "label": "Privatlån",
+        "category_hint": "Privatlån",
+        "wellbeing": {
+            "economy": -3,
+            "safety": -2,
+        },
+        "deposit": True,  # pengarna går in på lönekontot
+    },
+    "billan": {
+        "min_amount": 50_000,
+        "max_amount": 500_000,
+        "min_term": 36,
+        "max_term": 84,  # 7 år
+        "min_score": 600,  # B+
+        "rate_at_min_score": 0.08,
+        "rate_at_max_score": 0.04,
+        "lenders": [
+            "Volkswagen Finans", "Toyota Financial",
+            "Marginalen Bank", "Nordea Finans",
+        ],
+        "label": "Billån",
+        "category_hint": "Billån",
+        "wellbeing": {
+            "economy": -2,
+            "safety": +1,  # bil ger trygghet/mobilitet
+        },
+        "deposit": False,  # pengarna går till bilförsäljaren — inte synligt
+    },
+    "bolan": {
+        "min_amount": 200_000,
+        "max_amount": 5_000_000,
+        "min_term": 120,  # 10 år
+        "max_term": 600,  # 50 år
+        "min_score": 600,
+        "rate_at_min_score": 0.055,
+        "rate_at_max_score": 0.025,
+        "lenders": ["SBAB", "Handelsbanken", "Swedbank", "SEB"],
+        "label": "Bolån",
+        "category_hint": "Bolån",
+        "wellbeing": {
+            "economy": -2,
+            "safety": +3,  # eget hem ökar trygghet
+        },
+        "deposit": False,  # går till säljaren
+    },
+    "smslan": {
+        "min_amount": 1_000,
+        "max_amount": 30_000,
+        "min_term": 1,
+        "max_term": 12,
+        "min_score": 0,  # ingen tröskel — det är poängen, det är en fälla
+        "rate_at_min_score": 0.50,  # 50 % effektiv årsränta
+        "rate_at_max_score": 0.30,  # 30 % effektiv årsränta minimum
+        "lenders": ["Folkia", "Klarna Express", "Trustbuddy", "MobilLån"],
+        "label": "SMS-lån",
+        "category_hint": "Privatlån",
+        "wellbeing": {
+            "economy": -5,
+            "safety": -8,  # tydlig pedagogisk varningssignal
+        },
+        "deposit": True,
+        "high_cost": True,
+    },
+}
+
+
+def _annuity_monthly(
+    principal: Decimal, annual_rate: float, months: int,
+) -> Decimal:
+    """Annuitetsmånadsbetalning. annual_rate är decimaltal (0.05 = 5 %)."""
+    if months <= 0:
+        return Decimal("0")
+    if annual_rate <= 0:
+        return (principal / Decimal(months)).quantize(Decimal("0.01"))
+    r = Decimal(str(annual_rate)) / Decimal("12")
+    n = months
+    factor = (r * (1 + r) ** n) / ((1 + r) ** n - 1)
+    return (principal * factor).quantize(Decimal("0.01"))
+
+
+def _rate_for_score(spec: dict, score: int) -> float:
+    """Linjär interpolering av ränta utifrån score.
+
+    Score >= 800 → bästa räntan. Score <= spec['min_score'] → sämsta.
+    SMS-lån: även "bra" score får 30 % — det är inneboende högkostnad.
+    """
+    min_score = spec["min_score"]
+    rate_low = spec["rate_at_max_score"]
+    rate_high = spec["rate_at_min_score"]
+    if score >= 800:
+        return rate_low
+    if score <= min_score:
+        return rate_high
+    # Lerp
+    frac = (score - min_score) / (800 - min_score)
+    return round(rate_high - (rate_high - rate_low) * frac, 4)
+
+
+def _pick_lender(spec: dict, student_id: int, amount: int) -> str:
+    """Deterministiskt val av bank baserat på elev + belopp."""
+    import hashlib as _hl
+    key = f"{student_id}-{amount}-{spec['label']}".encode()
+    h = int(_hl.sha256(key).hexdigest()[:8], 16)
+    return spec["lenders"][h % len(spec["lenders"])]
+
+
+def _compute_uc_for_apply(
+    scope_session: Session,
+    student_id: int,
+) -> "ScoreResult":  # noqa: F821 — typed via import inside func
+    """Räkna fram aktuell UC-score för en elev. Reutiliserar
+    bank.py:_compute_credit_for_student-logiken med v2-indata.
+    """
+    from ..school.credit_scoring import compute_score
+    from ..db.models import PaymentReminder, ScheduledPayment
+
+    late_payments = scope_session.query(PaymentReminder).count()
+    reminders_high = (
+        scope_session.query(PaymentReminder)
+        .filter(PaymentReminder.reminder_no >= 3)
+        .count()
+    )
+    failed_payments = (
+        scope_session.query(ScheduledPayment)
+        .filter(ScheduledPayment.status == "failed_no_funds")
+        .count()
+    )
+    debt_total = Decimal("0")
+    for L in scope_session.query(Loan).filter(Loan.active.is_(True)).all():
+        debt_total += Decimal(L.principal_amount or 0)
+
+    # Sparbuffer = (sparkonto + ISK) / snittutgifter senaste 3 mån
+    savings_balance = Decimal("0")
+    for acc in scope_session.query(Account).filter(
+        Account.type.in_(("savings", "isk")),
+    ).all():
+        ob = acc.opening_balance or Decimal("0")
+        from sqlalchemy import func as _sf
+        mv = scope_session.query(
+            _sf.coalesce(_sf.sum(Transaction.amount), 0),
+        ).filter(Transaction.account_id == acc.id).scalar() or Decimal("0")
+        savings_balance += ob + Decimal(str(mv))
+
+    today = _date.today()
+    cutoff = today - timedelta(days=90)
+    from sqlalchemy import func as _sf2
+    expenses = scope_session.query(
+        _sf2.coalesce(_sf2.sum(Transaction.amount), 0),
+    ).filter(
+        Transaction.amount < 0,
+        Transaction.date >= cutoff,
+    ).scalar() or 0
+    avg_monthly_expense = abs(Decimal(str(expenses))) / 3 or Decimal("1")
+    savings_buffer_months = (
+        float(savings_balance / avg_monthly_expense)
+        if avg_monthly_expense > 0 else 0.0
+    )
+
+    # Master-DB: profil + employer-satisfaction + ålder
+    with master_session() as ms:
+        profile = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        from ..school.employer_models import EmployerSatisfaction
+        sat = (
+            ms.query(EmployerSatisfaction)
+            .filter(EmployerSatisfaction.student_id == student_id)
+            .first()
+        )
+        sat_score = sat.score if sat else 70
+
+        gross_annual = (
+            Decimal(profile.gross_salary_monthly * 12)
+            if profile else Decimal("1")
+        )
+        debt_ratio = (
+            float(debt_total / gross_annual) if gross_annual > 0 else 0.0
+        )
+
+        st = ms.get(Student, student_id)
+        months_on_platform = 0
+        if st and st.created_at:
+            months_on_platform = (datetime.utcnow() - st.created_at).days // 30
+
+        return compute_score(
+            late_payments=late_payments,
+            failed_payments=failed_payments,
+            reminders_l3_or_higher=reminders_high,
+            debt_ratio=debt_ratio,
+            savings_buffer_months=savings_buffer_months,
+            satisfaction_score=sat_score,
+            months_on_platform=months_on_platform,
+            age=profile.age if profile else None,
+            monthly_net_income=(
+                profile.net_salary_monthly if profile else None
+            ),
+            family_status=profile.family_status if profile else None,
+            housing_type=profile.housing_type if profile else None,
+        )
+
+
+class V2LoanApplyRequest(BaseModel):
+    loan_kind: LoanKind
+    amount: float = Field(..., gt=0)
+    term_months: int = Field(..., gt=0, le=600)
+    purpose: Optional[str] = Field(None, max_length=200)
+    debit_account_id: Optional[int] = None  # konto pengarna utbetalas till
+    accept_offer: bool = Field(
+        default=False,
+        description=(
+            "False = bara prövning, ingen Loan skapas. True = eleven "
+            "har sett offerten och vill genomföra (skapar Loan + tx)."
+        ),
+    )
+
+
+class V2WellbeingImpact(BaseModel):
+    axis: str
+    delta: int
+    explanation: str
+
+
+class V2LoanApplyResponse(BaseModel):
+    application_id: int
+    approved: bool
+    decline_reason: Optional[str] = None
+    loan_kind: str
+    score: int
+    grade: str
+    score_components: dict
+    kalp_passed: bool
+    kalp_left_after_all: float
+    offered_rate: Optional[float] = None
+    offered_monthly_payment: Optional[float] = None
+    offered_total_repay: Optional[float] = None
+    lender: Optional[str] = None
+    loan_id: Optional[int] = None
+    wellbeing_impact: list[V2WellbeingImpact] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+@router.post("/lan/apply", response_model=V2LoanApplyResponse)
+def post_loan_apply(
+    body: V2LoanApplyRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2LoanApplyResponse:
+    """Eleven ansöker själv om lån. Verklighetstrogen flöde:
+
+    1. Validera att kind + belopp + löptid ligger inom verkliga ramar.
+    2. Räkna UC-score (via samma formel som /bank/credit-score).
+    3. Räkna KALP (Finansinspektionens stresstest 7 %).
+    4. Beslut:
+       - Beloppet utanför kind-ramar → avslag (för stort/litet/lång löptid)
+       - SMS-lån: alltid godkänt men markerad high-cost; varningar
+       - Andra: kräver score >= kind.min_score OCH KALP passed
+    5. Om accept_offer=True OCH godkänd: skapa Loan + utbetalningstx +
+       LoanScheduleEntry + wellbeing-delta + log_activity.
+    6. Annars: bara CreditApplication-rad (audit) + score+ränta-info.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast elever kan ansöka om lån",
+        )
+    student_id = info.student_id
+
+    spec = _LOAN_KIND_SPECS.get(body.loan_kind)
+    if spec is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Okänd lånetyp: {body.loan_kind}",
+        )
+
+    amount_dec = Decimal(str(body.amount))
+    warnings: list[str] = []
+
+    # Hård validering av belopp + löptid (banken skulle aldrig gå med på
+    # 5 mkr SMS-lån eller 10 års bolån, så avslå direkt här)
+    if amount_dec < spec["min_amount"]:
+        return _loan_apply_decline(
+            student_id, body, spec,
+            reason=(
+                f"Minsta belopp för {spec['label']} är "
+                f"{spec['min_amount']:,} kr".replace(",", " ")
+            ),
+        )
+    if amount_dec > spec["max_amount"]:
+        return _loan_apply_decline(
+            student_id, body, spec,
+            reason=(
+                f"Högsta belopp för {spec['label']} är "
+                f"{spec['max_amount']:,} kr".replace(",", " ")
+            ),
+        )
+    if body.term_months < spec["min_term"]:
+        return _loan_apply_decline(
+            student_id, body, spec,
+            reason=(
+                f"Kortaste löptid för {spec['label']} är "
+                f"{spec['min_term']} mån"
+            ),
+        )
+    if body.term_months > spec["max_term"]:
+        return _loan_apply_decline(
+            student_id, body, spec,
+            reason=(
+                f"Längsta löptid för {spec['label']} är "
+                f"{spec['max_term']} mån"
+            ),
+        )
+
+    # Räkna UC + KALP
+    with session_scope() as s:
+        score_result = _compute_uc_for_apply(s, student_id)
+
+        # KALP
+        with master_session() as ms:
+            profile = (
+                ms.query(StudentProfile)
+                .filter(StudentProfile.student_id == student_id)
+                .first()
+            )
+            net_monthly = (
+                Decimal(profile.net_salary_monthly or 0) if profile
+                else Decimal("0")
+            )
+            housing = (
+                Decimal(profile.housing_monthly or 0) if profile
+                else Decimal("0")
+            )
+            family = profile.family_status if profile else "ensam"
+
+        from ..loans.credit import compute_kalp
+        kalp = compute_kalp(
+            s,
+            monthly_income_net=net_monthly,
+            family_status=family,
+            monthly_housing=housing,
+            loan_amount=amount_dec,
+            loan_term_months=body.term_months,
+        )
+
+        # Beslut
+        offered_rate = _rate_for_score(spec, score_result.score)
+        monthly_payment = _annuity_monthly(
+            amount_dec, offered_rate, body.term_months,
+        )
+        total_repay = monthly_payment * body.term_months
+
+        # SMS-lån: alltid godkänt (med varning); andra kräver UC + KALP
+        is_sms = body.loan_kind == "smslan"
+        approved: bool
+        decline_reason: Optional[str] = None
+        if is_sms:
+            approved = True
+            warnings.append(
+                "VARNING: SMS-lån har effektiv årsränta över 30 %. "
+                "Du betalar tillbaka mer än dubbla beloppet om du "
+                "inte är försiktig."
+            )
+            if not kalp.passed:
+                warnings.append(
+                    "KALP visar att du inte har råd med betalningarna "
+                    "— lånet godkänns ändå (SMS-banker kollar inte) "
+                    "men du riskerar betalningsanmärkningar."
+                )
+        else:
+            if score_result.score < spec["min_score"]:
+                approved = False
+                decline_reason = (
+                    f"Din kreditscore är {score_result.score} "
+                    f"(grad {score_result.grade}). "
+                    f"{spec['label']} kräver minst {spec['min_score']} "
+                    f"(grad {_grade_for_threshold(spec['min_score'])})."
+                )
+            elif not kalp.passed:
+                approved = False
+                decline_reason = (
+                    "KALP-kalkylen visar att du inte har råd med "
+                    "månadsbetalningen efter levnadskostnader. "
+                    f"Du saknar {abs(int(kalp.monthly_left_after_all)):,} "
+                    "kr/mån".replace(",", " ")
+                )
+            else:
+                approved = True
+
+        # Bolån: kontantinsats-info (varning men inte avslag)
+        if body.loan_kind == "bolan" and approved:
+            min_kontantinsats = float(amount_dec) * 0.15
+            warnings.append(
+                f"Bolån kräver normalt minst 15 % kontantinsats. "
+                f"För detta belopp: minst "
+                f"{int(min_kontantinsats):,} kr".replace(",", " ")
+                + " (informativt — vi simulerar inte krav här)"
+            )
+
+        # Skapa CreditApplication-rad (audit alltid)
+        application = CreditApplication(
+            kind=body.loan_kind,
+            requested_amount=amount_dec,
+            requested_months=body.term_months,
+            purpose=body.purpose,
+            result="approved" if approved else "declined",
+            score_value=score_result.score,
+            decline_reason=decline_reason,
+            simulated_lender=_pick_lender(
+                spec, student_id, int(body.amount),
+            ),
+            offered_rate=offered_rate if approved else None,
+            offered_monthly_payment=(
+                monthly_payment if approved else None
+            ),
+            decided_at=datetime.utcnow(),
+        )
+        s.add(application)
+        s.flush()
+
+        loan_id: Optional[int] = None
+        wb_impacts: list[V2WellbeingImpact] = []
+
+        if approved and body.accept_offer:
+            # Skapa Loan + utbetalningstx + schema
+            loan = Loan(
+                name=f"{spec['label']} · {application.simulated_lender}",
+                lender=application.simulated_lender,
+                principal_amount=amount_dec,
+                start_date=_date.today(),
+                interest_rate=offered_rate,
+                binding_type="rörlig",
+                amortization_monthly=monthly_payment,
+                loan_kind=_map_kind_to_db(body.loan_kind),
+                is_high_cost_credit=bool(spec.get("high_cost")),
+                applied_at=datetime.utcnow(),
+                score_at_application=score_result.score,
+                active=True,
+                notes=body.purpose,
+            )
+            s.add(loan)
+            s.flush()
+            application.resulting_loan_id = loan.id
+            application.result = "accepted"
+
+            # Utbetalningstransaktion (om kind har deposit + konto specat)
+            if spec.get("deposit") and body.debit_account_id:
+                acc = s.get(Account, body.debit_account_id)
+                if acc is not None:
+                    import hashlib as _hl_loan
+                    tx_hash = _hl_loan.sha256(
+                        f"loan-deposit|{loan.id}|{amount_dec}".encode(),
+                    ).hexdigest()[:32]
+                    deposit_tx = Transaction(
+                        account_id=acc.id,
+                        date=_date.today(),
+                        amount=amount_dec,  # positivt
+                        currency="SEK",
+                        raw_description=(
+                            f"Utbetalning {spec['label']} · "
+                            f"{application.simulated_lender}"
+                        ),
+                        normalized_merchant=application.simulated_lender,
+                        hash=tx_hash,
+                        user_verified=True,
+                    )
+                    s.add(deposit_tx)
+
+            # Schedule-rader för hela löptiden — en interest-rad +
+            # en amortization-rad per månad (matcher räknar ihop dem
+            # mot bankens transaktion automatiskt).
+            from datetime import date as _ds
+            today = _ds.today()
+            balance = amount_dec
+            monthly_rate = Decimal(str(offered_rate)) / Decimal("12")
+            day_of_month = min(today.day, 28)
+            for i in range(1, body.term_months + 1):
+                # Beräkna förfallodag: samma dag i månad N
+                total_months = today.month + i
+                year = today.year + (total_months - 1) // 12
+                month_n = (total_months - 1) % 12 + 1
+                from datetime import date as _dt
+                try:
+                    due = _dt(year, month_n, day_of_month)
+                except ValueError:
+                    continue
+                interest_amt = (
+                    balance * monthly_rate
+                ).quantize(Decimal("0.01"))
+                amort_amt = (
+                    monthly_payment - interest_amt
+                ).quantize(Decimal("0.01"))
+                if interest_amt > 0:
+                    s.add(LoanScheduleEntry(
+                        loan_id=loan.id, due_date=due,
+                        amount=interest_amt, payment_type="interest",
+                    ))
+                if amort_amt > 0:
+                    s.add(LoanScheduleEntry(
+                        loan_id=loan.id, due_date=due,
+                        amount=amort_amt, payment_type="amortization",
+                    ))
+                    balance -= amort_amt
+
+            loan_id = loan.id
+
+        s.commit()
+
+    # === Wellbeing-deltas (master-DB) ===
+    if approved:
+        wb_spec = spec["wellbeing"]
+        for axis in ("economy", "safety"):
+            d = wb_spec.get(axis, 0)
+            if d != 0:
+                from ..game_engine.pentagon import apply_pentagon_delta
+                apply_pentagon_delta(
+                    student_id,
+                    axis=axis,
+                    requested_delta=d,
+                    reason_kind="loan_applied",
+                    reason_id=application.id,
+                    reason_table="credit_applications",
+                    explanation=(
+                        f"{spec['label']} · "
+                        f"{int(amount_dec):,} kr".replace(",", " ")
+                    ),
+                )
+                wb_impacts.append(V2WellbeingImpact(
+                    axis=axis, delta=d,
+                    explanation=(
+                        f"{spec['label']} påverkar {axis} med {d:+d}"
+                    ),
+                ))
+    else:
+        # Avslag → liten negativ economy (besviken) + safety -1 (osäkerhet)
+        from ..game_engine.pentagon import apply_pentagon_delta
+        apply_pentagon_delta(
+            student_id, axis="economy", requested_delta=-1,
+            reason_kind="loan_declined",
+            reason_id=application.id,
+            reason_table="credit_applications",
+            explanation=f"Avslag på {spec['label']}",
+        )
+
+    # === Lärar-spårning ===
+    from ..school.activity import log_activity
+    if approved and body.accept_offer:
+        log_activity(
+            kind="loan.created",
+            summary=(
+                f"Tog {spec['label']} {int(amount_dec):,} kr · "
+                f"{body.term_months} mån".replace(",", " ")
+            ),
+            payload={
+                "loan_id": loan_id,
+                "loan_kind": body.loan_kind,
+                "amount": float(amount_dec),
+                "term_months": body.term_months,
+                "rate": offered_rate,
+                "score": score_result.score,
+                "lender": application.simulated_lender,
+            },
+        )
+    elif approved:
+        log_activity(
+            kind="loan.offer_received",
+            summary=(
+                f"Fick offert på {spec['label']} {int(amount_dec):,} kr"
+            ).replace(",", " "),
+            payload={
+                "application_id": application.id,
+                "loan_kind": body.loan_kind,
+                "score": score_result.score,
+                "offered_rate": offered_rate,
+            },
+        )
+    else:
+        log_activity(
+            kind="loan.declined",
+            summary=(
+                f"Avslag på {spec['label']} "
+                f"{int(amount_dec):,} kr".replace(",", " ")
+            ),
+            payload={
+                "application_id": application.id,
+                "loan_kind": body.loan_kind,
+                "score": score_result.score,
+                "reason": decline_reason,
+            },
+        )
+
+    return V2LoanApplyResponse(
+        application_id=application.id,
+        approved=approved,
+        decline_reason=decline_reason,
+        loan_kind=body.loan_kind,
+        score=score_result.score,
+        grade=score_result.grade,
+        score_components=score_result.factors.get("_score_components", {}),
+        kalp_passed=kalp.passed,
+        kalp_left_after_all=float(kalp.monthly_left_after_all),
+        offered_rate=offered_rate if approved else None,
+        offered_monthly_payment=(
+            float(monthly_payment) if approved else None
+        ),
+        offered_total_repay=(
+            float(total_repay) if approved else None
+        ),
+        lender=application.simulated_lender if approved else None,
+        loan_id=loan_id,
+        wellbeing_impact=wb_impacts,
+        warnings=warnings,
+    )
+
+
+def _grade_for_threshold(min_score: int) -> str:
+    """Vilken grad krävs minst för en viss poängtröskel."""
+    from ..school.credit_scoring import _grade_from_score
+    return _grade_from_score(min_score)
+
+
+def _map_kind_to_db(api_kind: str) -> str:
+    """Mappa API-namn till Loan.loan_kind-enum."""
+    return {
+        "privatlan": "private",
+        "billan": "car",
+        "bolan": "mortgage",
+        "smslan": "sms",
+    }.get(api_kind, "other")
+
+
+def _loan_apply_decline(
+    student_id: int,
+    body: V2LoanApplyRequest,
+    spec: dict,
+    *,
+    reason: str,
+) -> V2LoanApplyResponse:
+    """Snabb-avslag (utan UC-räkning) för felaktiga indata."""
+    with session_scope() as s:
+        application = CreditApplication(
+            kind=body.loan_kind,
+            requested_amount=Decimal(str(body.amount)),
+            requested_months=body.term_months,
+            purpose=body.purpose,
+            result="declined",
+            decline_reason=reason,
+            simulated_lender=_pick_lender(spec, student_id, int(body.amount)),
+            decided_at=datetime.utcnow(),
+        )
+        s.add(application)
+        s.commit()
+        from ..school.activity import log_activity
+        log_activity(
+            kind="loan.declined",
+            summary=f"Avslag {spec['label']} · {reason[:60]}",
+            payload={
+                "application_id": application.id,
+                "loan_kind": body.loan_kind,
+                "reason": reason,
+            },
+        )
+        return V2LoanApplyResponse(
+            application_id=application.id,
+            approved=False,
+            decline_reason=reason,
+            loan_kind=body.loan_kind,
+            score=0,
+            grade="—",
+            score_components={},
+            kalp_passed=False,
+            kalp_left_after_all=0.0,
+            warnings=[],
         )
 
 

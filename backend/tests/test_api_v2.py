@@ -8884,3 +8884,199 @@ def test_v2_teacher_login_qr_bulk_only_own_students(fx) -> None:
     assert r.status_code == 200
     # Super-admin-läraren har inga elever
     assert r.json()["items"] == []
+
+
+# =================================================================
+# /v2/lan/apply — eleven ansöker själv om lån
+# =================================================================
+
+def _create_seeded_student_and_get_token(client, tch_tok, **overrides):
+    """Helper: skapa en elev + få student-token för loan-tester."""
+    create_r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch_tok}"},
+        json={
+            "first_name": "Lina",
+            "archetype": "vard_underskoterska",
+            "starting_level": 1,
+            **overrides,
+        },
+    )
+    assert create_r.status_code == 200, create_r.text
+    sid = create_r.json()["student_id"]
+    # Hämta login-code så vi kan logga in som elev
+    from hembudget.school.models import Student
+    with master_session() as s:
+        st = s.get(Student, sid)
+        login_code = st.login_code
+    login_r = client.post(
+        "/student/login",
+        json={"login_code": login_code},
+    )
+    assert login_r.status_code == 200, login_r.text
+    return sid, login_r.json()["token"]
+
+
+def test_v2_loan_apply_smslan_always_approved(fx) -> None:
+    """SMS-lån godkänns även med dålig score — det är pedagogiska poängen."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    r = client.post(
+        "/v2/lan/apply",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "loan_kind": "smslan",
+            "amount": 5000,
+            "term_months": 6,
+            "purpose": "test",
+            "accept_offer": False,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["approved"] is True
+    assert data["loan_kind"] == "smslan"
+    # Effektiv ränta måste vara minst 30 % (det är poängen)
+    assert (data["offered_rate"] or 0) >= 0.30
+    # Ska komma med varning
+    assert any("rta" in w or "VARNING" in w for w in data["warnings"])
+
+
+def test_v2_loan_apply_privatlan_huge_amount_kalp_declined(fx) -> None:
+    """500k privatlån på 12 mån = ~45k/mån — KALP felar för alla."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    r = client.post(
+        "/v2/lan/apply",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "loan_kind": "privatlan",
+            "amount": 500000,
+            "term_months": 12,
+            "accept_offer": False,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["approved"] is False
+    assert data["decline_reason"] is not None
+    # Score returneras även vid avslag
+    assert data["score"] >= 300
+
+
+def test_v2_loan_apply_amount_outside_range_declined(fx) -> None:
+    """Belopp utanför kind-spec → snabb-avslag."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    # SMS-lån max 30k — 100k ska avslås direkt
+    r = client.post(
+        "/v2/lan/apply",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "loan_kind": "smslan",
+            "amount": 100000,
+            "term_months": 6,
+            "accept_offer": False,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["approved"] is False
+    assert "ögsta belopp" in data["decline_reason"]
+
+
+def test_v2_loan_apply_smslan_accept_creates_loan_and_tx(fx) -> None:
+    """accept_offer=True med SMS-lån skapar Loan + utbetalningstx."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    # Hämta lönekontot (default-utbetalning)
+    bank_r = client.get(
+        "/v2/bank?account_id=0",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    accounts = bank_r.json()["accounts"]
+    checking = next(a for a in accounts if a["type"] == "checking")
+
+    r = client.post(
+        "/v2/lan/apply",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "loan_kind": "smslan",
+            "amount": 5000,
+            "term_months": 6,
+            "debit_account_id": checking["id"],
+            "accept_offer": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["approved"] is True
+    assert data["loan_id"] is not None
+
+    # Verifiera Loan-rad i scope-DB
+    from hembudget.db.models import Loan as _L, Transaction as _T, LoanScheduleEntry as _LSE
+    from hembudget.school.engines import scope_for_student, scope_context, get_scope_session
+    from hembudget.school.models import Student as _Stu
+    with master_session() as ms:
+        st = ms.get(_Stu, sid)
+        sk = scope_for_student(st)
+    with scope_context(sk):
+        with get_scope_session(sk)() as ss:
+            loan = ss.get(_L, data["loan_id"])
+            assert loan is not None
+            assert loan.is_high_cost_credit is True
+            assert loan.loan_kind == "sms"
+
+            # Utbetalningstx finns på checking — matchas via amount + lender
+            tx = ss.query(_T).filter(
+                _T.account_id == checking["id"],
+                _T.amount == 5000,
+                _T.normalized_merchant == loan.lender,
+            ).first()
+            assert tx is not None
+
+            # Schedule-rader finns (interest + amort × 6 mån = 12)
+            schedule = ss.query(_LSE).filter(_LSE.loan_id == loan.id).all()
+            assert len(schedule) >= 6  # Minst en rad per månad
+
+
+def test_v2_loan_apply_logs_activity_for_teacher(fx) -> None:
+    """Lärar-spårning: loan.created loggas till StudentActivity."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+
+    bank_r = client.get(
+        "/v2/bank?account_id=0",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    checking = next(a for a in bank_r.json()["accounts"] if a["type"] == "checking")
+
+    r = client.post(
+        "/v2/lan/apply",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "loan_kind": "smslan",
+            "amount": 5000,
+            "term_months": 6,
+            "debit_account_id": checking["id"],
+            "accept_offer": True,
+        },
+    )
+    assert r.status_code == 200
+
+    # Verifiera att StudentActivity har loan.created
+    from hembudget.school.models import StudentActivity
+    with master_session() as ms:
+        events = (
+            ms.query(StudentActivity)
+            .filter(StudentActivity.student_id == sid)
+            .filter(StudentActivity.kind == "loan.created")
+            .all()
+        )
+        assert len(events) == 1
+        assert events[0].payload["loan_kind"] == "smslan"
+        assert events[0].payload["amount"] == 5000
