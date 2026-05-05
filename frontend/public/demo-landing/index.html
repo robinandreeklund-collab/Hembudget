@@ -1745,6 +1745,34 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   font-family: var(--serif); font-style: italic; color: var(--fg);
 }
 /* === ECONOMY-SIM ANIMATION · levande spelmotor-visualisering === */
+/* === BESLUTSTRÄD-EMBED · iframe-wrapper för interaktiv simulering === */
+.decision-tree-embed {
+  margin: clamp(20px, 3vh, 40px) auto clamp(56px, 7vh, 80px);
+  max-width: 1100px;
+  /* 16:10 aspect ratio matchar iframens design (1200x800 i SVG-thumbnail) */
+  aspect-ratio: 1200 / 800;
+  position: relative;
+  background: linear-gradient(180deg, rgba(15,21,37,0.85), rgba(10,14,26,0.95));
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px -20px rgba(0,0,0,0.5);
+}
+.decision-tree-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+@media (max-width: 700px) {
+  .decision-tree-embed {
+    /* På mobil ge mer höjd så animationen faktiskt får plats */
+    aspect-ratio: 4 / 5;
+  }
+}
+
 .econsim {
   margin: clamp(20px, 3vh, 40px) auto clamp(56px, 7vh, 80px);
   max-width: 920px;
@@ -2635,114 +2663,14 @@ html.lenis, html.lenis body { height: auto; }
         <h2>En levande simulering av <em>hela ekonomilivet</em>.</h2>
       </header>
 
-      <!-- LEVANDE SPELMOTOR-ANIMATION · pentagon + 8 aktörer + partikelflöde -->
-      <div class="econsim" data-fx="fade-up" aria-hidden="true">
-        <div class="econsim-stage">
-          <svg class="econsim-svg" viewBox="0 0 720 540" preserveAspectRatio="xMidYMid meet">
-            <defs>
-              <radialGradient id="sim-glow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="rgba(220,76,43,0.55)" />
-                <stop offset="60%" stop-color="rgba(220,76,43,0.10)" />
-                <stop offset="100%" stop-color="rgba(220,76,43,0)" />
-              </radialGradient>
-              <radialGradient id="sim-glow-warm" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="rgba(251,191,36,0.55)" />
-                <stop offset="60%" stop-color="rgba(251,191,36,0.10)" />
-                <stop offset="100%" stop-color="rgba(251,191,36,0)" />
-              </radialGradient>
-              <radialGradient id="sim-glow-green" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="rgba(110,231,183,0.55)" />
-                <stop offset="60%" stop-color="rgba(110,231,183,0.10)" />
-                <stop offset="100%" stop-color="rgba(110,231,183,0)" />
-              </radialGradient>
-              <radialGradient id="sim-glow-indigo" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="rgba(129,140,248,0.55)" />
-                <stop offset="60%" stop-color="rgba(129,140,248,0.10)" />
-                <stop offset="100%" stop-color="rgba(129,140,248,0)" />
-              </radialGradient>
-              <filter id="sim-blur">
-                <feGaussianBlur stdDeviation="2" />
-              </filter>
-              <pattern id="sim-grid" x="0" y="0" width="48" height="48" patternUnits="userSpaceOnUse">
-                <path d="M 48 0 L 0 0 0 48" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
-              </pattern>
-            </defs>
-
-            <!-- Bakgrundsraster -->
-            <rect width="720" height="540" fill="url(#sim-grid)" />
-
-            <!-- Aktör-ring (8 aktörer + postlåda) -->
-            <g class="econsim-actors" transform="translate(360 270)">
-              <!-- Genereras av JS för precis vinkelplacering -->
-            </g>
-
-            <!-- Energi-linjer aktör → centrum (genereras vid aktiv händelse) -->
-            <g class="econsim-lines"></g>
-
-            <!-- Partikel-lager (pengar/fakturor flödar mellan punkter) -->
-            <g class="econsim-particles"></g>
-
-            <!-- Pentagon i mitten -->
-            <g class="econsim-pentagon" transform="translate(360 270)">
-              <!-- Bakgrundsringar -->
-              <polygon class="p-bg" points="0,-100 95,-31 59,81 -59,81 -95,-31"
-                       fill="rgba(15,21,37,0.6)" stroke="rgba(255,255,255,0.08)" />
-              <polygon class="p-bg" points="0,-75 71,-23 44,61 -44,61 -71,-23"
-                       fill="none" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2 3" />
-              <polygon class="p-bg" points="0,-50 47,-15 29,40 -29,40 -47,-15"
-                       fill="none" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2 3" />
-
-              <!-- Axel-linjer (rays from center) -->
-              <line x1="0" y1="0" x2="0" y2="-100" stroke="rgba(255,255,255,0.08)" />
-              <line x1="0" y1="0" x2="95" y2="-31" stroke="rgba(255,255,255,0.08)" />
-              <line x1="0" y1="0" x2="59" y2="81" stroke="rgba(255,255,255,0.08)" />
-              <line x1="0" y1="0" x2="-59" y2="81" stroke="rgba(255,255,255,0.08)" />
-              <line x1="0" y1="0" x2="-95" y2="-31" stroke="rgba(255,255,255,0.08)" />
-
-              <!-- Aktuell pentagon (uppdateras via JS) -->
-              <polygon class="p-now"
-                       fill="rgba(220,76,43,0.22)"
-                       stroke="rgba(220,76,43,0.85)"
-                       stroke-width="2"
-                       filter="url(#sim-blur)" />
-
-              <!-- Centrum-puck -->
-              <circle r="32" fill="rgba(15,21,37,0.95)" stroke="rgba(220,76,43,0.4)" stroke-width="1.5" />
-              <text class="p-score" text-anchor="middle" y="2"
-                    font-family="JetBrains Mono, monospace" font-size="22"
-                    font-weight="700" fill="#fff">68</text>
-              <text class="p-of" text-anchor="middle" y="18"
-                    font-family="JetBrains Mono, monospace" font-size="7"
-                    letter-spacing="1.4" fill="rgba(255,255,255,0.4)">AV 100</text>
-            </g>
-
-            <!-- 5 axel-etiketter runt pentagonen -->
-            <g class="econsim-axis-labels"></g>
-          </svg>
-
-          <!-- HUD ovanpå SVG: vecka + biz-kassa indikatorer -->
-          <div class="econsim-hud">
-            <div class="econsim-hud-cell">
-              <div class="econsim-hud-eye">● Sara A. · vecka <span class="econsim-week">12</span> av 48</div>
-              <div class="econsim-hud-meta">profil <strong>Sparsam · 16 år · Stockholm</strong></div>
-            </div>
-            <div class="econsim-hud-cell econsim-hud-right">
-              <div class="econsim-hud-eye">● Lönekonto</div>
-              <div class="econsim-hud-bal"><span class="econsim-balance">14 282</span> kr</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- LIVE EVENT-FEED · scrollande händelser -->
-        <div class="econsim-feed">
-          <div class="econsim-feed-eye">
-            <span class="econsim-feed-pulse">●</span>
-            Live spelmotor · deterministisk seed=42
-          </div>
-          <ul class="econsim-feed-list">
-            <!-- Items genereras + roteras av JS -->
-          </ul>
-        </div>
+      <!-- BESLUTSTRÄD-ANIMATION · interaktiv simulering (embed) -->
+      <div class="decision-tree-embed" data-fx="fade-up">
+        <iframe
+          src="/decision-tree.html"
+          title="Ekonomilabbet — Beslutsträd"
+          loading="lazy"
+          sandbox="allow-scripts allow-same-origin"
+        ></iframe>
       </div>
 
       <p class="about-lead">
