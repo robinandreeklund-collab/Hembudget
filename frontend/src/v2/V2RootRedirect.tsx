@@ -1,16 +1,14 @@
 /**
  * V2 root-redirect · väljer rätt destination för "/".
  *
- * Logik:
- * - localStorage `v2_force_v1` = "1" → /dashboard alltid (dev-toggle)
- * - student utan v2-onboarding → /v2/onboarding (default ny flow)
+ * Logik (V1-frontend är avvecklad — alla destinations är V2):
+ * - student utan v2-onboarding → /v2/onboarding
  * - student med v2-onboarding klar → /v2/hub
- * - lärare (inkl. super-admin) → /teacher/v2 (klass-hubben). Om
- *   force_v1 är satt går de till /teacher (v1) istället.
- * - demo → /dashboard
+ * - lärare (inkl. super-admin) → /teacher/v2 (klass-hubben)
+ * - demo → /v2/hub
  *
- * Om /v2/status fail:ar så fallback:ar vi till /dashboard så v1
- * inte påverkas av v2-bugg.
+ * Om /v2/status fail:ar fallback:ar vi till /v2/hub. Lärare som
+ * accidentellt landar där redirectas vidare av övriga routes.
  */
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
@@ -20,40 +18,21 @@ export function V2RootRedirect() {
   const [destination, setDestination] = useState<string | null>(null);
 
   useEffect(() => {
-    // OBS: v2_force_v1-flaggan är ett LÄRAR-dev-verktyg och får ALDRIG
-    // påverka elev-routing. Vi kollar status FÖRST, sen lägger på
-    // dev-overriden bara om role är teacher.
     v2Api
       .status()
       .then((s: V2Status) => {
-        const forceV1 =
-          typeof window !== "undefined" &&
-          window.localStorage.getItem("v2_force_v1") === "1";
-
         if (s.role === "teacher") {
-          // Teacher: default till v2-klass-hubben. Om läraren tryckt
-          // "Tvinga v1" i dev-footern → respektera det och gå till
-          // /teacher (v1).
-          setDestination(forceV1 ? "/teacher" : "/teacher/v2");
+          setDestination("/teacher/v2");
         } else if (s.role === "student") {
-          // Student: ignorera force_v1 helt — det är lärar-flagga.
-          // Rensa den om den råkar ligga kvar i samma browser.
-          if (forceV1) {
-            try {
-              window.localStorage.removeItem("v2_force_v1");
-            } catch {
-              /* ignore */
-            }
-          }
           if (!s.v2_onboarding_completed)
             setDestination("/v2/onboarding");
           else setDestination("/v2/hub");
         } else {
           // Demo eller okänt
-          setDestination("/dashboard");
+          setDestination("/v2/hub");
         }
       })
-      .catch(() => setDestination("/dashboard"));
+      .catch(() => setDestination("/v2/hub"));
   }, []);
 
   if (!destination) {

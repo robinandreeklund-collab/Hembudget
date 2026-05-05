@@ -20,6 +20,16 @@ function RedirectV1Mortgage() {
   // visas via /v2/uppdrag som lista). Skicka till hub som fallback.
   return <Navigate to="/v2/uppdrag" replace />;
 }
+
+// Roll-medveten root/catchall-redirect: lärare → /teacher/v2,
+// elev/demo → /v2/hub. Används som fallback för okända paths
+// och som ny / -route. Undviker buggen där lärare loggar in från
+// /login/teacher och hamnar på /v2/hub via catchall.
+function RoleAwareHomeRedirect() {
+  const { role } = useAuth();
+  if (role === "teacher") return <Navigate to="/teacher/v2" replace />;
+  return <Navigate to="/v2/hub" replace />;
+}
 import { BackendSetup } from "./components/BackendSetup";
 import { ImpersonationBanner } from "./components/ImpersonationBanner";
 import { MobileTopBar, Sidebar } from "./components/Sidebar";
@@ -579,7 +589,7 @@ export default function App() {
           <Route path="/reports" element={<Navigate to="/v2/portfolio" replace />} />
           <Route path="/settings" element={<Navigate to="/v2/hub" replace />} />
           <Route path="/Callback" element={<TibberCallback />} />
-          <Route path="*" element={<Navigate to="/v2/hub" replace />} />
+          <Route path="*" element={<RoleAwareHomeRedirect />} />
         </Routes>
       </main>
       </div>
