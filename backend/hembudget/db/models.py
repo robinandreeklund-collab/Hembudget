@@ -1742,6 +1742,20 @@ class MailItem(TenantMixin, Base):
         JSON, nullable=True,
     )
 
+    # Dunning · påminnelse-flödet (auto-eskalering av obetalda fakturor).
+    # När en faktura passerar förfallodag + 5/14/30/60 dagar skapar
+    # _run_dunning_for_student() en NY MailItem(mail_type='reminder')
+    # som pekar tillbaka på originalfakturan via parent_mail_id.
+    # reminder_level: 1=Påminnelse, 2=Sista påminnelsen, 3=Inkasso,
+    # 4=Kronofogden. Idempotens: en (parent_mail_id, reminder_level)
+    # finns max en gång.
+    parent_mail_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("mail_items.id"), nullable=True, index=True,
+    )
+    reminder_level: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+
 
 class JobApplication(TenantMixin, Base):
     """Spelmotor · Sprint 6 · pågående/avslutad jobbansökan.

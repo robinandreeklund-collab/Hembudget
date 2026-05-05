@@ -760,6 +760,9 @@ def run_migrations(engine: Engine) -> list[str]:
             # Strukturerad fakturadata · JSON för Postgres / TEXT för
             # SQLite. SQLAlchemy JSON-kolumnen mappar transparent.
             ("invoice_data", "invoice_data TEXT"),
+            # Dunning · auto-eskalering av obetalda fakturor
+            ("parent_mail_id", "parent_mail_id INTEGER"),
+            ("reminder_level", "reminder_level INTEGER"),
         ]
         for col_name, col_sql in mail_columns:
             if col_name not in mail_cols:

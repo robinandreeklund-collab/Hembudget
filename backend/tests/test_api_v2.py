@@ -9245,3 +9245,168 @@ def test_v2_hub_includes_pending_events(fx) -> None:
     assert len(data["pending_events"]) >= 1
     assert data["pending_events"][0]["category"] == "culture"
     assert data["pending_events"][0]["kind"] == "event"
+
+
+# =================================================================
+# Dunning-flödet · auto-eskalering av obetalda fakturor
+# =================================================================
+
+def _seed_overdue_invoice(sid: int, *, days_overdue: int = 10):
+    """Skapa en MailItem(invoice) som är overdue med X dagar."""
+    from datetime import date, timedelta
+    from decimal import Decimal as _Dec
+    from hembudget.db.models import MailItem
+    from hembudget.school.engines import (
+        scope_for_student, scope_context, get_scope_session,
+    )
+    from hembudget.school.models import Student as _Stu
+    with master_session() as ms:
+        st = ms.get(_Stu, sid)
+        sk = scope_for_student(st)
+    with scope_context(sk):
+        with get_scope_session(sk)() as ss:
+            mi = MailItem(
+                sender="Linköping Bostäder",
+                sender_short="HYR",
+                sender_kind="land",
+                mail_type="invoice",
+                subject="Hyresavi 2026-04",
+                body="Hyra 5 265 kr",
+                amount=_Dec("-5265"),
+                due_date=date.today() - timedelta(days=days_overdue),
+                status="unhandled",
+                ocr_reference="A1B2C3D4",
+                bankgiro="5402-3961",
+            )
+            ss.add(mi)
+            ss.commit()
+            return mi.id
+
+
+def _scope_query(sid: int, fn):
+    from hembudget.school.engines import (
+        scope_for_student, scope_context, get_scope_session,
+    )
+    from hembudget.school.models import Student as _Stu
+    with master_session() as ms:
+        st = ms.get(_Stu, sid)
+        sk = scope_for_student(st)
+    with scope_context(sk):
+        with get_scope_session(sk)() as ss:
+            return fn(ss)
+
+
+def test_v2_dunning_creates_paminnelse_after_5_days(fx) -> None:
+    """5 dagar förbi förfall → Påminnelse-mail i postlådan + 60 kr avgift."""
+    from hembudget.api import v2 as v2_mod
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+    _seed_overdue_invoice(sid, days_overdue=7)
+    v2_mod._dunning_cache.clear()
+
+    v2_mod._run_dunning_for_student(sid)
+
+    from hembudget.db.models import MailItem
+    reminders = _scope_query(sid, lambda ss: ss.query(MailItem).filter(
+        MailItem.mail_type == "reminder",
+        MailItem.reminder_level == 1,
+    ).all())
+    assert len(reminders) == 1
+    r = reminders[0]
+    assert "Påminnelse" in r.subject
+    assert float(r.amount) == -60
+
+
+def test_v2_dunning_kronofogden_creates_payment_mark(fx) -> None:
+    """60 dagar förbi förfall → Kronofogden + PaymentMark + UC-skuld."""
+    from hembudget.api import v2 as v2_mod
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+    _seed_overdue_invoice(sid, days_overdue=65)
+    v2_mod._dunning_cache.clear()
+
+    v2_mod._run_dunning_for_student(sid)
+
+    from hembudget.db.models import MailItem, PaymentMark
+    reminders = _scope_query(sid, lambda ss: ss.query(MailItem).filter(
+        MailItem.mail_type == "reminder",
+        MailItem.reminder_level == 4,
+    ).all())
+    assert len(reminders) == 1
+    assert reminders[0].sender == "Kronofogdemyndigheten"
+
+    marks = _scope_query(sid, lambda ss: ss.query(PaymentMark).filter(
+        PaymentMark.kind == "kronofogden",
+    ).all())
+    assert len(marks) == 1
+
+
+def test_v2_dunning_idempotent(fx) -> None:
+    """Två körningar i rad ska inte skapa dubbla reminders."""
+    from hembudget.api import v2 as v2_mod
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+    _seed_overdue_invoice(sid, days_overdue=8)
+
+    v2_mod._dunning_cache.clear()
+    v2_mod._run_dunning_for_student(sid)
+    v2_mod._dunning_cache.clear()  # bypass 60s cache
+    v2_mod._run_dunning_for_student(sid)
+
+    from hembudget.db.models import MailItem
+    reminders = _scope_query(sid, lambda ss: ss.query(MailItem).filter(
+        MailItem.mail_type == "reminder",
+    ).all())
+    # Bara en reminder per (parent, level)
+    assert len(reminders) == 1
+
+
+def test_v2_dunning_paid_via_match_does_not_trigger(fx) -> None:
+    """Om upcoming-match finns → marker mailet som paid, ingen reminder."""
+    from hembudget.api import v2 as v2_mod
+    from hembudget.db.models import (
+        MailItem, UpcomingTransaction, Transaction, Account,
+    )
+    from datetime import date, timedelta
+    from decimal import Decimal as _Dec
+
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+    mid = _seed_overdue_invoice(sid, days_overdue=20)
+
+    # Koppla mailet till en upcoming + matchande transaktion = "betald"
+    def setup(ss):
+        acc = ss.query(Account).filter(Account.type == "checking").first()
+        tx = Transaction(
+            account_id=acc.id, date=date.today() - timedelta(days=10),
+            amount=_Dec("-5265"), currency="SEK",
+            raw_description="Hyra Linköping Bostäder",
+            normalized_merchant="Linköping Bostäder",
+            hash="dunning-test-paid", user_verified=True,
+        )
+        ss.add(tx); ss.flush()
+        upc = UpcomingTransaction(
+            kind="bill", name="Hyra", amount=_Dec("5265"),
+            expected_date=date.today() - timedelta(days=20),
+            matched_transaction_id=tx.id,
+        )
+        ss.add(upc); ss.flush()
+        m = ss.get(MailItem, mid)
+        m.upcoming_id = upc.id
+        ss.commit()
+    _scope_query(sid, setup)
+
+    v2_mod._dunning_cache.clear()
+    v2_mod._run_dunning_for_student(sid)
+
+    # Inga reminders ska ha skapats — och original-mailet ska markerats
+    # som paid eftersom det är matchat
+    def check(ss):
+        reminders = ss.query(MailItem).filter(
+            MailItem.mail_type == "reminder",
+        ).all()
+        m = ss.get(MailItem, mid)
+        return len(reminders), m.status
+    n, status = _scope_query(sid, check)
+    assert n == 0
+    assert status == "paid"

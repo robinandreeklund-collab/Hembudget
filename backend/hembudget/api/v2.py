@@ -313,6 +313,14 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 target_sid,
             )
 
+        # Auto-tick: eskalera obetalda fakturor (cachat 60s per elev).
+        # Säkert att kalla varje hub-load eftersom helpern är cache-gated
+        # och idempotent. Tysta fel — ska aldrig påverka hub-vyn.
+        try:
+            _run_dunning_for_student(target_sid)
+        except Exception:
+            pass
+
     if target_sid is None:
         return HubResponse(
             student_id=0,
@@ -2006,6 +2014,14 @@ def get_mail(
 
     Demo/teacher får tom payload.
     """
+    # Auto-tick · eskalera obetalda fakturor innan vi listar mail
+    # så eleven ser nya reminder-mail i samma load. Cachat 60s.
+    if info.role == "student" and info.student_id is not None:
+        try:
+            _run_dunning_for_student(info.student_id)
+        except Exception:
+            pass
+
     if info.role != "student" or info.student_id is None:
         return _empty_mail(0)
 
@@ -16672,6 +16688,302 @@ def _auto_pay_historical_invoices(
 import threading as _threading_seed
 _SEED_CONCURRENCY = 2
 _seed_semaphore = _threading_seed.Semaphore(_SEED_CONCURRENCY)
+
+
+# === Dunning · automatisk eskalering av obetalda fakturor =========
+#
+# Verkligt svenskt påminnelse-flöde:
+#   5 dgr efter förfall  → Påminnelse  (60 kr avgift, lagstadgat max)
+#   14 dgr efter förfall → Sista påminnelsen (60 kr nytt avgift)
+#   30 dgr efter förfall → Inkassokrav (180 kr, lagstadgat max enligt
+#                                       inkassolagen § 5)
+#   60 dgr efter förfall → Kronofogden · betalningsföreläggande
+#                          (600 kr ansökan + betalningsanmärkning)
+#
+# Triggers vid varje GET /v2/hub och GET /v2/postladan, cachat 60s
+# per elev så vi inte kör helpern flera gånger på rad. En MailItem
+# räknas som BETALD (= ingen reminder triggas) när:
+#   1. mail.status == "paid", ELLER
+#   2. mail.upcoming_id är satt och tillhörande UpcomingTransaction
+#      har matched_transaction_id != NULL (autogiro/manuell tx matchade)
+#
+# Att bara EXPORTERA en faktura räcker INTE — pengarna måste faktiskt
+# ha lämnat kontot. Path 2 (eleven gjorde inget alls, ingen Upcoming)
+# eskaleras också via mail-fältet direkt.
+
+_dunning_cache: dict[int, float] = {}  # student_id → last-run-ts
+_DUNNING_CACHE_TTL = 60.0  # sekunder
+
+# Eskaleringssteg · (min_days_overdue, level, kind, fee, label, pent_safety, pent_economy)
+_DUNNING_STEPS = [
+    (5,  1, "påminnelse",  60,  "Påminnelse",                       -2, 0),
+    (14, 2, "påminnelse2", 60,  "Sista påminnelsen",                -3, -1),
+    (30, 3, "inkasso",     180, "Inkassokrav",                      -5, -3),
+    (60, 4, "kronofogden", 600, "Kronofogden · betalningsföreläggande", -10, -8),
+]
+
+
+def _run_dunning_for_student(student_id: int) -> None:
+    """Eskalera obetalda fakturor för en elev. Idempotent + cache-gated.
+    Kallas från /v2/hub och /v2/postladan. Tysta fel — får aldrig ta
+    ner request:en eftersom det är "live"-uppdatering, inte kärndata.
+
+    Sätter scope-ContextVar internt så helpern fungerar både via
+    request-flödet (där middleware sätter den) och vid direkt-anrop
+    från tester / batch-jobb.
+    """
+    import time as _t_dun
+    from datetime import date as _d_dun, timedelta as _td_dun
+    last = _dunning_cache.get(student_id, 0.0)
+    if _t_dun.time() - last < _DUNNING_CACHE_TTL:
+        return
+    _dunning_cache[student_id] = _t_dun.time()
+
+    # Resolva scope-key från student_id om ContextVar:n inte är satt
+    from ..school.engines import (
+        scope_for_student as _sfs_dun, scope_context as _sctx_dun,
+        get_current_scope as _gcs_dun,
+    )
+    from ..school.models import Student as _Stu_dun
+    scope_key = _gcs_dun()
+    if not scope_key:
+        with master_session() as ms:
+            stu = ms.get(_Stu_dun, student_id)
+            if stu is None:
+                return
+            scope_key = _sfs_dun(stu)
+
+    try:
+        with _sctx_dun(scope_key), session_scope() as s:
+            today = _d_dun.today()
+            # Hämta alla potentiellt overdue fakturor + påminnelser
+            # som inte är betalda/förfallna.
+            candidates = (
+                s.query(MailItem)
+                .filter(
+                    MailItem.mail_type.in_(("invoice", "reminder")),
+                    MailItem.status.in_(("unhandled", "viewed", "exported")),
+                    MailItem.due_date.isnot(None),
+                    MailItem.due_date <= today - _td_dun(days=5),
+                )
+                .all()
+            )
+            for orig in candidates:
+                # Kolla om den är BETALD via matchad upcoming
+                if _is_paid_via_upcoming(s, orig):
+                    orig.status = "paid"
+                    s.flush()
+                    continue
+
+                days_overdue = (today - orig.due_date).days
+                # Hitta högsta lämpliga eskaleringsnivå
+                target_step = None
+                for step in _DUNNING_STEPS:
+                    if days_overdue >= step[0]:
+                        target_step = step
+                if target_step is None:
+                    continue
+
+                # Idempotens: kolla om reminder för samma original +
+                # nivå redan finns i postlådan
+                existing = (
+                    s.query(MailItem)
+                    .filter(
+                        MailItem.mail_type == "reminder",
+                        MailItem.parent_mail_id == orig.id,
+                        MailItem.reminder_level == target_step[1],
+                    )
+                    .first()
+                )
+                if existing is not None:
+                    continue
+
+                _create_dunning_mail(s, orig, target_step, student_id)
+
+                # Vid kronofogden-nivå: skapa betalningsanmärkning
+                if target_step[1] == 4:
+                    _create_payment_mark(s, orig, target_step)
+
+                # Pentagon-delta
+                _, _, _, _, _, pent_safety, pent_economy = target_step
+                if pent_safety != 0 or pent_economy != 0:
+                    try:
+                        from ..game_engine.pentagon import apply_pentagon_delta
+                        if pent_safety != 0:
+                            apply_pentagon_delta(
+                                student_id, axis="safety",
+                                requested_delta=pent_safety,
+                                reason_kind=f"dunning_level_{target_step[1]}",
+                                reason_id=orig.id,
+                                reason_table="mail_items",
+                                explanation=f"{target_step[4]} · {orig.sender}",
+                            )
+                        if pent_economy != 0:
+                            apply_pentagon_delta(
+                                student_id, axis="economy",
+                                requested_delta=pent_economy,
+                                reason_kind=f"dunning_level_{target_step[1]}",
+                                reason_id=orig.id,
+                                reason_table="mail_items",
+                                explanation=f"{target_step[4]} · {orig.sender}",
+                            )
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "dunning: pentagon-delta misslyckades",
+                        )
+
+                # Vid level 3+ markera original som "expired" (ses inte
+                # längre som ohanterad i postlådans active-counter)
+                if target_step[1] >= 3:
+                    orig.status = "expired"
+                    s.flush()
+
+                # Lärar-spårning
+                try:
+                    from ..school.activity import log_activity
+                    log_activity(
+                        kind=f"dunning.{target_step[2]}",
+                        summary=f"{target_step[4]} skapad: {orig.sender}",
+                        payload={
+                            "original_mail_id": orig.id,
+                            "level": target_step[1],
+                            "fee": target_step[3],
+                            "days_overdue": days_overdue,
+                        },
+                    )
+                except Exception:
+                    pass
+            s.commit()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "dunning: helper failed för student=%s — sväljer", student_id,
+        )
+
+
+def _is_paid_via_upcoming(s, mail) -> bool:
+    """Är fakturan betald? Via mail.status='paid' ELLER kopplad
+    UpcomingTransaction har matched_transaction_id satt."""
+    if mail.status == "paid":
+        return True
+    if mail.upcoming_id is not None:
+        upc = s.get(UpcomingTransaction, mail.upcoming_id)
+        if upc is not None and upc.matched_transaction_id is not None:
+            return True
+    return False
+
+
+def _create_dunning_mail(s, orig, step, student_id: int) -> None:
+    """Skapa ny MailItem(mail_type='reminder') i postlådan + en
+    UpcomingTransaction för avgiften."""
+    from datetime import date as _d_dun, timedelta as _td_dun
+    import hashlib as _hl_dun
+    from decimal import Decimal as _Dec
+    _, level, _kind, fee, label, _, _ = step
+    today = _d_dun.today()
+    fee_due = today + _td_dun(days=14)
+
+    # Sender · "Inkasso AB" på inkasso-nivå, "Kronofogden" på level 4
+    if level == 4:
+        sender = "Kronofogdemyndigheten"
+        sender_short = "KFM"
+        sender_kind = "skv"
+    elif level == 3:
+        sender = f"Inkasso · {orig.sender}"
+        sender_short = "INK"
+        sender_kind = "other"
+    else:
+        sender = orig.sender
+        sender_short = orig.sender_short
+        sender_kind = orig.sender_kind
+
+    body = _build_dunning_body(orig, step)
+    new_mail = MailItem(
+        sender=sender,
+        sender_short=sender_short,
+        sender_kind=sender_kind,
+        sender_meta=f"påminnelse · nivå {level}",
+        mail_type="reminder",
+        subject=f"{label} · {orig.subject}",
+        body_meta=(
+            f"Avgift {fee} kr · ursprung {orig.subject}"
+        ),
+        body=body,
+        amount=_Dec(-fee),
+        due_date=fee_due,
+        status="unhandled",
+        is_recurring=False,
+        parent_mail_id=orig.id,
+        reminder_level=level,
+    )
+    s.add(new_mail)
+    s.flush()
+
+
+def _build_dunning_body(orig, step) -> str:
+    """Mänsklig text-body för reminder-mailet — pedagogiskt + realistiskt."""
+    _, level, _kind, fee, label, _, _ = step
+    orig_amt = abs(float(orig.amount or 0))
+    if level == 1:
+        return (
+            f"Hej,\n\nVi har inte tagit emot din betalning för "
+            f"{orig.subject} på {orig_amt:.0f} kr.\n\n"
+            f"Vänligen betala omgående. För denna påminnelse "
+            f"tillkommer en avgift på {fee} kr (lagstadgat max).\n\n"
+            f"Använd OCR + bankgiro från ursprungsfakturan."
+        )
+    if level == 2:
+        return (
+            f"Sista påminnelsen.\n\n"
+            f"Vi har fortfarande inte tagit emot din betalning för "
+            f"{orig.subject} på {orig_amt:.0f} kr.\n\n"
+            f"Om vi inte ser betalning inom 14 dagar lämnas ärendet "
+            f"till inkasso. En ny avgift på {fee} kr har lagts till."
+        )
+    if level == 3:
+        return (
+            f"INKASSOKRAV\n\n"
+            f"Ärendet har överlämnats till inkassobolag för indrivning.\n\n"
+            f"Skuld: {orig_amt:.0f} kr (ursprung: {orig.subject})\n"
+            f"Inkassoavgift: {fee} kr (max enl. inkassolagen § 5)\n"
+            f"Dröjsmålsränta tickar dagligen.\n\n"
+            f"Betala omgående för att undvika att ärendet lämnas till "
+            f"Kronofogden — det skulle ge en betalningsanmärkning på "
+            f"din kreditprofil i 3 år."
+        )
+    # level 4 — Kronofogden
+    return (
+        f"BETALNINGSFÖRELÄGGANDE — KRONOFOGDEMYNDIGHETEN\n\n"
+        f"Ett betalningsföreläggande har utfärdats mot dig.\n\n"
+        f"Skuld: {orig_amt:.0f} kr (ursprung: {orig.subject})\n"
+        f"Ansökningsavgift: {fee} kr\n\n"
+        f"En betalningsanmärkning har registrerats hos UC. "
+        f"Anmärkningen påverkar din möjlighet att få lån, hyra "
+        f"bostad och teckna abonnemang i 3 år.\n\n"
+        f"Bestrid eller betala inom 10 dagar."
+    )
+
+
+def _create_payment_mark(s, orig, step) -> None:
+    """Skapa PaymentMark för UC-score-effekt vid kronofogden-eskalering."""
+    from datetime import date as _d_dun
+    from decimal import Decimal as _Dec
+    from ..db.models import PaymentMark
+    today = _d_dun.today()
+    expires = _d_dun(today.year + 3, today.month, min(today.day, 28))
+    s.add(PaymentMark(
+        occurred_on=today,
+        creditor=orig.sender,
+        amount=abs(_Dec(str(orig.amount or 0))),
+        kind="kronofogden",
+        notes=(
+            f"Auto-skapad via dunning-flödet. "
+            f"Ursprung: {orig.subject} · {step[4]}"
+        ),
+        expires_at=expires,
+    ))
+    s.flush()
 
 
 def _seed_initial_student_data_safe(
