@@ -78,15 +78,12 @@ export function TeacherStudentSpelmotorPanel({ studentId }: { studentId: number 
   const [bizEnabled, setBizEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetch(`/v2/teacher/foretag/toggle/${studentId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`,
-      },
-      body: JSON.stringify({ enabled: false }),  // dry-read first
-    }).catch(() => undefined);
-    // Direkt-fetch student-data via existerande endpoint
+    // KRITISKT: tidigare körde detta useEffect ett POST /toggle med
+    // `enabled: false` som "dry-read" — vilket faktiskt skrev över
+    // flaggan till FALSE varje gång läraren laddade dashboarden. Det
+    // var DÄRFÖR business_mode_enabled "försvann" vid varje reload.
+    // Nu läser vi bara student-detalj-endpointen som redan returnerar
+    // business_mode_enabled i sin payload.
     fetch(`/v2/teacher/students/${studentId}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     }).then(r => r.json()).then((d) => {

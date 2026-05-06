@@ -17394,6 +17394,15 @@ def _seed_initial_student_data(
                 sp.has_mortgage = profile.housing.type in (
                     "bostadsratt", "villa", "radhus",
                 )
+                # Synca staden så hub-character-kort + postlåda-fakturor
+                # ("Umeå Bostäder", "Umeå kommun") matchar. school-
+                # profile_fixtures.generate_profile och game_engine-
+                # profile_generator.generate_profile delar inte RNG, så
+                # samma seed gav olika städer i de två systemen → eleven
+                # bodde i Umeå enligt hub men fick Stockholm Bostäder i
+                # postlådan. game_engine är source-of-truth eftersom det
+                # är det som driver postlåda + bank + tick.
+                sp.city = profile.city_display
                 # Synca också familje-status så insurance-coverage-gaps,
                 # KALP, hub-text använder samma värde som game_engine.
                 # Annars kan profile_fixtures säga "sambo" medan game_

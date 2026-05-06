@@ -445,7 +445,46 @@ def create_company(
         )
         s.add(c)
         s.flush()
-        return _to_company_out(c)
+        result = _to_company_out(c)
+
+        # Seed initiala vecko-tickar så bolaget inte är tomt direkt efter
+        # skapande. Eleven ska se några första offerter/kunder att jobba
+        # med · annars känns företagsdelen "död" tills nästa månadsskifte.
+        # 2 veckor räcker för pipeline_generator att producera ~4-8
+        # opportunities + första repuation_drift.
+        try:
+            from ..business.engine import run_business_week
+            for _ in range(2):
+                run_business_week(s, company=c)
+            s.flush()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "create_company: initial biz tick failed för company %s — "
+                "bolaget är skapat men kommer initialt vara tomt; nästa "
+                "vecko-tick fyller på.", c.id,
+            )
+
+    # Lärar-spårning · syns på lärar-dashboardens aktivitetsflöde
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="biz.company_created",
+            summary=f"Startade {industry.label.lower()}-bolag · {body.name}",
+            payload={
+                "company_id": result.id,
+                "company_name": body.name,
+                "form": body.form,
+                "industry_key": industry.key,
+                "city_key": city_key,
+                "share_capital": body.share_capital,
+                "vat_registered": body.vat_registered,
+            },
+        )
+    except Exception:
+        pass
+
+    return result
 
 
 @router.patch("/{company_id}", response_model=CompanyOut)
@@ -692,7 +731,31 @@ def add_invoice(
         )
         s.add(inv)
         s.flush()
-        return _invoice_to_out(inv, cust.name)
+        out = _invoice_to_out(inv, cust.name)
+        cust_name_for_log = cust.name
+        amount_for_log = float(amount + vat_amount)
+
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="biz.invoice_created",
+            summary=(
+                f"Skickade faktura {out.invoice_number} till "
+                f"{cust_name_for_log} · {amount_for_log:.0f} kr"
+            ),
+            payload={
+                "invoice_id": out.id,
+                "invoice_number": out.invoice_number,
+                "customer_id": body.customer_id,
+                "amount_total": amount_for_log,
+                "due_on": body.due_on,
+                "rot_rut_kind": body.rot_rut_kind,
+            },
+        )
+    except Exception:
+        pass
+
+    return out
 
 
 @router.post("/invoices/{invoice_id}/mark-paid", response_model=InvoiceOut)
@@ -725,7 +788,31 @@ def mark_invoice_paid(
         ))
         s.flush()
         cust = s.get(CompanyCustomer, inv.customer_id)
-        return _invoice_to_out(inv, cust.name if cust else "?")
+        out = _invoice_to_out(inv, cust.name if cust else "?")
+        amount_paid_log = float(
+            (inv.amount_excl_vat or Decimal(0))
+            + (inv.vat_amount or Decimal(0))
+        )
+        cust_name_log = cust.name if cust else "?"
+
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="biz.invoice_paid",
+            summary=(
+                f"Faktura {out.invoice_number} betald · {cust_name_log} · "
+                f"{amount_paid_log:.0f} kr"
+            ),
+            payload={
+                "invoice_id": out.id,
+                "invoice_number": out.invoice_number,
+                "amount_total": amount_paid_log,
+            },
+        )
+    except Exception:
+        pass
+
+    return out
 
 
 # === Endpoints: Owner Salary (AB) ===
@@ -783,7 +870,7 @@ def pay_owner_salary(
             notes=body.notes,
             student_id=info.student_id,
         )
-        return OwnerSalaryOut(
+        result = OwnerSalaryOut(
             id=row.id,
             paid_on=row.paid_on.isoformat(),
             gross_salary=float(row.gross_salary),
@@ -792,6 +879,28 @@ def pay_owner_salary(
             net_to_owner=float(row.net_to_owner),
             total_cost_to_company=float(row.total_cost_to_company),
         )
+
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="biz.owner_salary",
+            summary=(
+                f"Tog ut lön · brutto {result.gross_salary:.0f} kr · "
+                f"netto {result.net_to_owner:.0f} kr · "
+                f"AGI+sociala {result.employer_fee_amount:.0f} kr"
+            ),
+            payload={
+                "gross_salary": result.gross_salary,
+                "net_to_owner": result.net_to_owner,
+                "employer_fee": result.employer_fee_amount,
+                "prel_tax": result.prel_tax_amount,
+                "total_cost": result.total_cost_to_company,
+            },
+        )
+    except Exception:
+        pass
+
+    return result
 
 
 class OwnerWithdrawalIn(BaseModel):
@@ -926,7 +1035,7 @@ def file_vat(
             end=date.fromisoformat(body.end_date),
             due=date.fromisoformat(body.due_date),
         )
-        return VatPeriodOut(
+        result = VatPeriodOut(
             id=period.id,
             period_label=period.period_label,
             start_date=period.start_date.isoformat(),
@@ -938,6 +1047,26 @@ def file_vat(
             status=period.status,
             filed_on=period.filed_on.isoformat() if period.filed_on else None,
         )
+
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="biz.vat_filed",
+            summary=(
+                f"Lämnade in moms-deklaration {result.period_label} · "
+                f"netto {result.net_vat:.0f} kr"
+            ),
+            payload={
+                "period_label": result.period_label,
+                "output_vat": result.output_vat,
+                "input_vat": result.input_vat,
+                "net_vat": result.net_vat,
+            },
+        )
+    except Exception:
+        pass
+
+    return result
 
 
 # === Endpoints: Bolagsskatt ===
@@ -1849,6 +1978,30 @@ def teacher_toggle_business_mode(
                 "teacher_toggle_business_mode: kunde inte skicka "
                 "onboarding-mail för %s", student_id,
             )
+
+    # Lärar-spårning · syns på lärar-dashboardens aktivitetsflöde.
+    # student_id passas explicit eftersom toggle körs i lärarens session
+    # där ContextVar:n inte sätts av StudentScopeMiddleware.
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind=(
+                "biz.mode_activated_by_teacher" if body.enabled
+                else "biz.mode_deactivated_by_teacher"
+            ),
+            summary=(
+                f"Lärare {teacher_name} aktiverade företagsläget"
+                if body.enabled
+                else f"Lärare {teacher_name} stängde av företagsläget"
+            ),
+            payload={
+                "previously_enabled": previously_enabled,
+                "now_enabled": body.enabled,
+            },
+            student_id=student_id,
+        )
+    except Exception:
+        pass
 
     return BusinessModeStatusOut(
         enabled=body.enabled,
