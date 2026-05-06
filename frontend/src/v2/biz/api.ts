@@ -121,6 +121,13 @@ export type BizPentagon = {
     tidsatgang: number;
     vinst: number;
   };
+  axes_prev?: {
+    omsattning: number;
+    kundbas: number;
+    likviditet: number;
+    tidsatgang: number;
+    vinst: number;
+  } | null;
   total_score: number;
   metrics: {
     income_4w: number;
@@ -135,6 +142,36 @@ export type BizPentagon = {
 export type ModeStatus = {
   enabled: boolean;
   has_active_company: boolean;
+};
+
+// === BizBank-overview · matchar prototyp p-biz-bank ===
+export type BizBankAccount = {
+  eye: string;
+  name: string;
+  number: string;
+  balance: number;
+  balance_meta: string;
+  is_primary: boolean;
+};
+
+export type BizBankTx = {
+  occurred_on: string;
+  name: string;
+  name_sub: string | null;
+  category: string;
+  amount_signed: number;
+  is_income: boolean;
+  is_owner_salary: boolean;
+};
+
+export type BizBankOverview = {
+  accounts: BizBankAccount[];
+  transactions: BizBankTx[];
+  f_skatt_due: string | null;
+  f_skatt_amount: number;
+  own_salary_this_month: number;
+  next_vat_due: string | null;
+  next_vat_amount: number;
 };
 
 
@@ -203,6 +240,9 @@ export const bizApi = {
       net_to_owner: number;
       total_cost_to_company: number;
     }>(`/v2/foretag/owner-salary/preview?gross_salary=${gross}&is_young=${isYoung}`),
+
+  // BizBank overview (prototyp p-biz-bank)
+  bankOverview: () => call<BizBankOverview>("/v2/foretag/bank-overview"),
 
   // VAT
   listVatPeriods: () => call<VatPeriod[]>("/v2/foretag/vat/periods"),

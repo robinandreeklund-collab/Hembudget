@@ -461,6 +461,68 @@ def compute_business_pentagon(
 
     total = (omsattning + kundbas + likviditet + tidsatgang + vinst) // 5
 
+    # === Föregående 4-veckors-fönster (för biz-pent-prev jämförelse i UI) ===
+    # Backend räknar inte rekursivt — vi använder de redan-hämtade
+    # txs_12w (= 4-12v sedan = "förra månaden") och approximerar
+    # axlarna på samma sätt fast på det gamla fönstret. Saknas data →
+    # axes_prev = None så frontend hoppar över prev-polygonen.
+    axes_prev: Optional[dict] = None
+    if txs_12w:
+        income_prev = income_12w / 2 if income_12w else Decimal(0)  # ~ snitt 4v
+        expense_prev = sum(
+            (Decimal(t.amount_excl_vat or 0) for t in txs_12w
+             if t.kind in ("expense", "salary")),
+            Decimal(0),
+        ) / 2
+        profit_prev = income_prev - expense_prev
+        margin_prev = (
+            float(profit_prev / income_prev * 100)
+            if income_prev > 0 else 0.0
+        )
+        # Approximera ratio mot rolling-baseline (samma som ovan men
+        # förskjutet en period)
+        if rolling_baseline > 0:
+            ratio_prev = float(income_prev / rolling_baseline)
+            oms_prev = max(0, min(100, int(40 + ratio_prev * 25)))
+        else:
+            oms_prev = 50 if income_prev > 0 else 30
+        # Kundbas-prev: räkna fakturor i det gamla fönstret
+        n_inv_prev = (
+            s.query(CompanyInvoice)
+            .filter(
+                CompanyInvoice.company_id == company.id,
+                CompanyInvoice.status.in_(("sent", "paid")),
+                CompanyInvoice.issued_on >= twelve_weeks_ago,
+                CompanyInvoice.issued_on < four_weeks_ago,
+            )
+            .count()
+        )
+        kund_prev = min(100, 30 + n_inv_prev * 12)
+        # Likviditet-prev approximeras till nuvarande − profit_4w
+        # (= kassan som den var FÖRE de senaste 4 veckorna)
+        kassa_prev = kassa - profit_4w
+        liq_prev = max(0, min(100, int(50 + float(kassa_prev) / 1000)))
+        tid_prev = 60 if income_prev > 0 else 40
+        if income_prev == 0:
+            vinst_prev = 30
+        elif margin_prev >= 30:
+            vinst_prev = 90
+        elif margin_prev >= 15:
+            vinst_prev = 70
+        elif margin_prev >= 5:
+            vinst_prev = 55
+        elif margin_prev >= 0:
+            vinst_prev = 45
+        else:
+            vinst_prev = 25
+        axes_prev = {
+            "omsattning": oms_prev,
+            "kundbas": kund_prev,
+            "likviditet": liq_prev,
+            "tidsatgang": tid_prev,
+            "vinst": vinst_prev,
+        }
+
     return {
         "axes": {
             "omsattning": omsattning,
@@ -469,6 +531,7 @@ def compute_business_pentagon(
             "tidsatgang": tidsatgang,
             "vinst": vinst,
         },
+        "axes_prev": axes_prev,
         "total_score": total,
         "metrics": {
             "income_4w": float(income_4w),

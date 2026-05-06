@@ -1,15 +1,25 @@
 /**
- * Företagets pentagon — 5 axlar matchat mot vol-7-prototypen.
+ * Företagets pentagon — exakt prototyp-match (proposals/vol-7 p-biz-hub).
  *
  * Spec p-biz-hub:
- *   01 Omsättning · 4-veckors mot rolling baseline
- *   02 Kundbas · aktiva kunder + offertförfrågningar
+ *   01 Omsättning · 4-veckors mot rolling baseline · klick → bokföring
+ *   02 Kundbas · aktiva kunder + offertförfrågningar · klick → kunder
  *   03 Likviditet · företagets kassa + nästa moms-due
  *   04 Tidsåtgång · debiterbara/admin-timmar
- *   05 Vinst · marginal senaste 4 v
+ *   05 Vinst · marginal senaste 4 v · klick → bokföring
  *
- * Center-score 0-100 är snitt över axlarna.
+ * SVG geometri matchar prototypen (rad 5345-5359):
+ *   - 5 hörn på radius 260 i 600x600 viewbox
+ *   - 4 koncentriska polygoner som bakgrund (260 / 195 / 130 / 65)
+ *   - 5 axel-linjer från center
+ *   - biz-pent-prev: dashed jämförelse-polygon (förra 4-vecka-fönstret)
+ *   - biz-pent-now: fylld nuvarande pentagon med "breathe"-animation
+ *   - center-card med score 0-100
+ *
+ * Axel-labels positioneras med absolute via CSS-klasserna ax-eko/rel/har/fri/kar
+ * (matchar prototypen rad 381-385). Labels är klickbara där relevant.
  */
+import { Link } from "react-router-dom";
 import type { BizPentagon as BizPentagonData } from "./api";
 
 
@@ -17,19 +27,40 @@ const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
 
 
+function corner(i: number, r: number): { x: number; y: number } {
+  // 5 hörn, börjar uppåt (-90°), kloka mot 90°-stegg per ax
+  const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+  return {
+    x: Math.round(Math.cos(angle) * r),
+    y: Math.round(Math.sin(angle) * r),
+  };
+}
+
+function polygonPoints(scale: number, R = 260): string {
+  return [0, 1, 2, 3, 4]
+    .map((i) => {
+      const c = corner(i, R * scale);
+      return `${c.x},${c.y}`;
+    })
+    .join(" ");
+}
+
+function dataPolygonPoints(
+  axes: number[],
+  R = 260,
+): string {
+  return axes
+    .map((v, i) => {
+      const c = corner(i, R * (Math.max(0, Math.min(100, v)) / 100));
+      return `${c.x},${c.y}`;
+    })
+    .join(" ");
+}
+
+
 export function BizPentagon({ data }: { data: BizPentagonData }) {
-  const { axes, total_score, metrics } = data;
+  const { axes, axes_prev, total_score, metrics } = data;
 
-  // Pentagon-koordinater (5 axlar, börjar uppåt)
-  const cx = 300;
-  const cy = 300;
-  const R = 200;
-  const points = [0, 1, 2, 3, 4].map((i) => {
-    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
-    return { x: cx + R * Math.cos(angle), y: cy + R * Math.sin(angle), angle };
-  });
-
-  // Aktuell pentagon (skalat efter axlarnas score)
   const axesArr = [
     axes.omsattning,
     axes.kundbas,
@@ -37,154 +68,164 @@ export function BizPentagon({ data }: { data: BizPentagonData }) {
     axes.tidsatgang,
     axes.vinst,
   ];
-  const nowPath = axesArr.map((v, i) => {
-    const r = R * (v / 100);
-    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
-    return `${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`;
-  }).join(" ");
+  const nowPath = dataPolygonPoints(axesArr);
 
-  // Bakgrunds-rings (50/100/150/200)
-  const ringPath = (radius: number) =>
-    points.map((p) => {
-      const a = p.angle;
-      return `${cx + radius * Math.cos(a)},${cy + radius * Math.sin(a)}`;
-    }).join(" ");
+  const prevPath = axes_prev
+    ? dataPolygonPoints([
+        axes_prev.omsattning,
+        axes_prev.kundbas,
+        axes_prev.likviditet,
+        axes_prev.tidsatgang,
+        axes_prev.vinst,
+      ])
+    : null;
 
-  const labels: Array<[string, string, string, number]> = [
-    ["Omsättning", `${SEK(metrics.income_4w)} kr/4v`, axes.omsattning >= 60 ? "↑ aktiv" : axes.omsattning >= 40 ? "→ stabil" : "↓ låg", axes.omsattning],
-    ["Kundbas", `${metrics.n_invoices_active} aktiva fakturor`, "", axes.kundbas],
-    ["Likviditet", `${SEK(metrics.kassa)} kr på företagskontot`, metrics.kassa < 5000 ? "⚠ tunn" : "OK", axes.likviditet],
-    ["Tidsåtgång", "Förenklat 60/40 split", "— stabil", axes.tidsatgang],
-    ["Vinst", `${metrics.margin_4w_pct.toFixed(0)}% marginal`, `${SEK(metrics.profit_4w)} kr/4v`, axes.vinst],
-  ];
+  // Pre-compute label-data så JSX nedan blir lättläst.
+  const oms_trend = axes.omsattning - (axes_prev?.omsattning ?? axes.omsattning);
+  const vinst_trend = axes.vinst - (axes_prev?.vinst ?? axes.vinst);
 
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 720, margin: "0 auto" }}>
-      <svg viewBox="0 0 600 600" style={{ width: "100%", height: "auto" }}>
-        {/* Bakgrunds-axel-linjer */}
-        {points.map((p, i) => (
-          <line
-            key={i}
-            x1={cx} y1={cy} x2={p.x} y2={p.y}
-            stroke="rgba(99,102,241,0.2)"
-            strokeWidth="1"
-          />
-        ))}
-        {/* Bakgrunds-rings */}
-        {[0.25, 0.5, 0.75, 1].map((scale) => (
-          <polygon
-            key={scale}
-            points={ringPath(R * scale)}
-            fill="none"
-            stroke="rgba(99,102,241,0.15)"
-            strokeWidth="1"
-          />
-        ))}
-        {/* Aktuell pentagon */}
-        <polygon
-          points={nowPath}
-          fill="rgba(129,140,248,0.18)"
-          stroke="#818cf8"
-          strokeWidth="2.5"
-        />
-        {/* Center-score */}
-        <circle cx={cx} cy={cy} r="60" fill="rgba(15,21,37,0.95)" stroke="rgba(99,102,241,0.4)" strokeWidth="2" />
-        <text
-          x={cx} y={cy - 6}
-          textAnchor="middle"
-          fill="#c7d2fe"
-          fontSize="32"
-          fontWeight="700"
-          fontFamily="JetBrains Mono, monospace"
-        >
-          {total_score}
-        </text>
-        <text
-          x={cx} y={cy + 14}
-          textAnchor="middle"
-          fill="rgba(255,255,255,0.5)"
-          fontSize="9"
-          letterSpacing="1.2"
-        >
-          AV 100
-        </text>
+    <div className="pentagon-stage">
+      <svg
+        className="pentagon-svg"
+        viewBox="0 0 600 600"
+        aria-label="Företagets pentagon"
+      >
+        <g transform="translate(300,300)">
+          {/* 4 bakgrundsringar (matchar prototyp) */}
+          <polygon points={polygonPoints(1.0)} className="p-axis-line" />
+          <polygon points={polygonPoints(0.75)} className="p-axis-line" />
+          <polygon points={polygonPoints(0.5)} className="p-axis-line" />
+          <polygon points={polygonPoints(0.25)} className="p-axis-line" />
+          {/* 5 axel-linjer från center till hörn */}
+          {[0, 1, 2, 3, 4].map((i) => {
+            const c = corner(i, 260);
+            return (
+              <line
+                key={i}
+                x1="0"
+                y1="0"
+                x2={c.x}
+                y2={c.y}
+                className="p-axis-line"
+              />
+            );
+          })}
+          {/* Föregående 4-veckor (dashed) — om data finns */}
+          {prevPath && (
+            <polygon points={prevPath} className="biz-pent-prev" />
+          )}
+          {/* Aktuell pentagon */}
+          <polygon points={nowPath} className="biz-pent-now" />
+        </g>
       </svg>
 
-      {/* Axel-labels positionerat ut runt pentagonen */}
-      {labels.map(([name, val, sub, score], i) => {
-        const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
-        const r = 285;
-        // Procent-koordinater så det skalar med svg
-        const xPct = ((cx + r * Math.cos(angle)) / 600) * 100;
-        const yPct = ((cy + r * Math.sin(angle)) / 600) * 100;
+      {/* Axel 01 · Omsättning · klickbar → bokföring */}
+      <Link
+        to="/v2/foretag/bokforing"
+        className="biz-axis-label ax-eko"
+      >
+        <div className="biz-axis-label-eye">Axel 01</div>
+        <div className="biz-axis-label-name">Omsättning</div>
+        <div className="biz-axis-label-meta">
+          {SEK(metrics.income_4w)} kr/4v
+        </div>
+        <div
+          className="biz-axis-label-meta"
+          style={{
+            color:
+              oms_trend > 0 ? "#6ee7b7" : oms_trend < 0 ? "#fca5a5"
+                : "var(--text-mid)",
+          }}
+        >
+          {oms_trend > 0
+            ? `↑ +${oms_trend} mot v-4`
+            : oms_trend < 0
+            ? `↓ ${oms_trend} mot v-4`
+            : "— stabil"}
+        </div>
+      </Link>
 
-        // Alignment beroende på position
-        const isLeft = Math.cos(angle) < -0.3;
-        const isRight = Math.cos(angle) > 0.3;
-        const transform = isLeft
-          ? "translate(-100%, -50%)"
-          : isRight
-            ? "translate(0, -50%)"
-            : "translate(-50%, " + (Math.sin(angle) < 0 ? "-100%" : "0") + ")";
+      {/* Axel 02 · Kundbas · klickbar → kunder/fakturor */}
+      <Link
+        to="/v2/foretag/fakturor"
+        className="biz-axis-label ax-rel"
+      >
+        <div className="biz-axis-label-eye">Axel 02</div>
+        <div className="biz-axis-label-name">Kundbas</div>
+        <div className="biz-axis-label-meta">
+          {metrics.n_invoices_active} aktiva fakturor
+        </div>
+      </Link>
 
-        return (
+      {/* Axel 03 · Likviditet · klickbar → bank */}
+      <Link
+        to="/v2/foretag/bank"
+        className="biz-axis-label ax-har"
+      >
+        <div className="biz-axis-label-eye">Axel 03</div>
+        <div className="biz-axis-label-name">Likviditet</div>
+        <div className="biz-axis-label-meta">
+          {SEK(metrics.kassa)} kr på företagskontot
+        </div>
+        {metrics.kassa < 5000 && (
           <div
-            key={i}
-            style={{
-              position: "absolute",
-              left: `${xPct}%`,
-              top: `${yPct}%`,
-              transform,
-              maxWidth: 180,
-              textAlign: isLeft ? "right" : isRight ? "left" : "center",
-              padding: "4px 8px",
-            }}
+            className="biz-axis-label-meta"
+            style={{ color: "#fbbf24" }}
           >
-            <div
-              style={{
-                fontFamily: "JetBrains Mono, monospace",
-                fontSize: 9,
-                color: "#818cf8",
-                fontWeight: 700,
-                letterSpacing: 1.3,
-                textTransform: "uppercase",
-              }}
-            >
-              Axel {String(i + 1).padStart(2, "0")} · {score}/100
-            </div>
-            <div
-              style={{
-                color: "white",
-                fontSize: "0.95rem",
-                fontWeight: 600,
-                marginTop: 2,
-              }}
-            >
-              {name}
-            </div>
-            <div
-              style={{
-                fontSize: "0.78rem",
-                color: "rgba(255,255,255,0.6)",
-                marginTop: 2,
-              }}
-            >
-              {val}
-            </div>
-            {sub && (
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  color: score >= 60 ? "#6ee7b7" : score >= 40 ? "var(--warm)" : "#fda594",
-                  marginTop: 1,
-                }}
-              >
-                {sub}
-              </div>
-            )}
+            ⚠ tunn marginal
           </div>
-        );
-      })}
+        )}
+      </Link>
+
+      {/* Axel 04 · Tidsåtgång · ej klickbar (förenklat) */}
+      <a className="biz-axis-label ax-fri" href="#" onClick={(e) => e.preventDefault()}>
+        <div className="biz-axis-label-eye">Axel 04</div>
+        <div className="biz-axis-label-name">Tidsåtgång</div>
+        <div className="biz-axis-label-meta">
+          Förenklat 60/40 split
+        </div>
+        <div
+          className="biz-axis-label-meta"
+          style={{ color: "var(--text-mid)" }}
+        >
+          — stabil
+        </div>
+      </a>
+
+      {/* Axel 05 · Vinst · klickbar → bokföring */}
+      <Link
+        to="/v2/foretag/bokforing"
+        className="biz-axis-label ax-kar"
+      >
+        <div className="biz-axis-label-eye">Axel 05</div>
+        <div className="biz-axis-label-name">Vinst</div>
+        <div className="biz-axis-label-meta">
+          {SEK(metrics.profit_4w)} kr/4v · marginal{" "}
+          {metrics.margin_4w_pct.toFixed(0)}%
+        </div>
+        <div
+          className="biz-axis-label-meta"
+          style={{
+            color:
+              vinst_trend > 0 ? "#6ee7b7" : vinst_trend < 0 ? "#fca5a5"
+                : "var(--text-mid)",
+          }}
+        >
+          {vinst_trend > 0
+            ? `↑ +${vinst_trend} mot v-4`
+            : vinst_trend < 0
+            ? `↓ ${vinst_trend} mot v-4`
+            : "— stabil"}
+        </div>
+      </Link>
+
+      {/* Center-card */}
+      <div className="center-card">
+        <div className="center-eye">Företag</div>
+        <div className="center-num">{total_score}</div>
+        <div className="center-meta">av 100</div>
+      </div>
     </div>
   );
 }

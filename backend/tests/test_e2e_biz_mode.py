@@ -278,6 +278,58 @@ def test_biz_supplier_invoice_mass_send(app_with_student):
     assert invoices[0]["status"] == "open"
 
 
+def test_biz_bank_overview_shape(app_with_student):
+    """/v2/foretag/bank-overview returnerar 3 konton + tx-list +
+    moms-meta. Strukturen ska matcha BizBankOverviewOut-schemat."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+
+    # Utan bolag → 400
+    r = client.get("/v2/foretag/bank-overview", headers=H)
+    assert r.status_code == 400, r.text
+
+    # Skapa bolag
+    client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test AB", "form": "ab",
+            "industry_label": "konsult", "share_capital": 25000,
+        },
+    )
+
+    r = client.get("/v2/foretag/bank-overview", headers=H)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # 3 konton: företagskonto + skattekonto + buffert
+    assert len(data["accounts"]) == 3, f"Förväntade 3 konton, fick {len(data['accounts'])}"
+    primary = next((a for a in data["accounts"] if a["is_primary"]), None)
+    assert primary is not None
+    assert primary["eye"] == "Företagskonto"
+    # Tx-list finns (kan vara tom direkt efter create)
+    assert isinstance(data["transactions"], list)
+    # Meta-fält finns
+    assert "next_vat_due" in data
+    assert "own_salary_this_month" in data
+
+
+def test_biz_pentagon_includes_axes_prev(app_with_student):
+    """compute_business_pentagon ska returnera axes_prev när det finns
+    historisk data (4-12 v sedan). Direkt efter create finns ingen,
+    så axes_prev=None är OK."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    client.post(
+        "/v2/foretag", headers=H,
+        json={"name": "TT", "form": "ab", "industry_label": "tjänster"},
+    )
+    r = client.get("/v2/foretag/pentagon", headers=H)
+    assert r.status_code == 200, r.text
+    pent = r.json()
+    # axes_prev kan vara None när det inte finns historisk data
+    assert "axes_prev" in pent
+    # När det är None → frontend ritar ingen prev-polygon
+
+
 def test_biz_owner_salary_credits_private_account(app_with_student):
     """När eleven tar ut lön från AB ska pengarna landa på privat-konto."""
     client, teacher_token, student_token, _tid, sid = app_with_student

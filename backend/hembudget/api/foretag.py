@@ -810,6 +810,7 @@ def corporate_tax_estimate(
 
 class BusinessPentagonOut(BaseModel):
     axes: dict
+    axes_prev: Optional[dict] = None
     total_score: int
     metrics: dict
 
@@ -823,6 +824,196 @@ def business_pentagon(info: TokenInfo = Depends(require_token)):
         if c is None:
             raise HTTPException(400, "Skapa bolag först")
         return BusinessPentagonOut(**compute_business_pentagon(s, company=c))
+
+
+# === BizBank-overview · matchar prototypen p-biz-bank ===
+
+
+class BizBankAccountOut(BaseModel):
+    """Pseudo-konto för UI:n. Företag har ett kombinerat företagskonto
+    + skattekonto + buffert som syntetiseras från CompanyTransaction:s
+    kassa-saldo."""
+    eye: str
+    name: str
+    number: str
+    balance: float
+    balance_meta: str
+    is_primary: bool
+
+
+class BizBankTxOut(BaseModel):
+    occurred_on: str
+    name: str
+    name_sub: Optional[str]
+    category: str            # kategori-tag för UI: "Intäkt", "Drift", "Egen lön" m.fl.
+    amount_signed: float     # +/- från företagskontots perspektiv
+    is_income: bool
+    is_owner_salary: bool
+
+
+class BizBankOverviewOut(BaseModel):
+    accounts: list[BizBankAccountOut]
+    transactions: list[BizBankTxOut]
+    f_skatt_due: Optional[str]   # ISO-datum eller None
+    f_skatt_amount: float
+    own_salary_this_month: float
+    next_vat_due: Optional[str]
+    next_vat_amount: float
+
+
+@router.get("/bank-overview", response_model=BizBankOverviewOut)
+def biz_bank_overview(info: TokenInfo = Depends(require_token)):
+    """Aggregat-endpoint för p-biz-bank · returnerar:
+
+    - 3 konton (företagskonto, skattekonto, buffert) som syntetiseras
+      från company_transactions och vat_periods
+    - Senaste 30 dagars kontoutdrag (signed amount + namn + kategori)
+    - F-skatt-prognos (om Postgres har vat_periods · annars None)
+    - Egen lön denna månad (summa av kind=salary för innevarande mån)
+    - Nästa moms-due från vat_periods
+
+    Designprincip: matchar prototypens 3-kolumns acct-grid exakt och
+    pedagogiken om "separata bokföringsenheter".
+    """
+    _require_student(info)
+    with session_scope() as s:
+        c = _get_active_company(s)
+        if c is None:
+            raise HTTPException(400, "Skapa bolag först")
+
+        # === Företagskontots saldo (kassa) ===
+        # Samma logik som i compute_business_pentagon: ack income -
+        # ack expense/salary/vat_payment/tax_payment.
+        all_txs = (
+            s.query(CompanyTransaction)
+            .filter(CompanyTransaction.company_id == c.id)
+            .order_by(CompanyTransaction.occurred_on.desc())
+            .all()
+        )
+        total_income = sum(
+            (Decimal(t.amount_excl_vat or 0)
+             for t in all_txs if t.kind == "income"),
+            Decimal(0),
+        )
+        total_expense = sum(
+            (Decimal(t.amount_excl_vat or 0)
+             for t in all_txs
+             if t.kind in ("expense", "salary", "vat_payment", "tax_payment")),
+            Decimal(0),
+        )
+        kassa = total_income - total_expense
+
+        # === Skattekonto-saldo: summa vat_payment + tax_payment ===
+        skattekonto = sum(
+            (Decimal(t.amount_excl_vat or 0)
+             for t in all_txs
+             if t.kind in ("vat_payment", "tax_payment")),
+            Decimal(0),
+        )
+
+        # === Buffert-konto: pedagogisk, default 0 om inget separat sparkonto ===
+        # Vi syntetiserar 0 om eleven inte har avsatt explicit till
+        # buffert-kategori (kategori="buffert" markerar avsättning).
+        buffert = sum(
+            (Decimal(t.amount_excl_vat or 0)
+             for t in all_txs
+             if t.kind == "expense" and (t.category or "").lower() == "buffert"),
+            Decimal(0),
+        )
+
+        accounts = [
+            BizBankAccountOut(
+                eye="Företagskonto",
+                name=f"SEB Företag · {c.name}",
+                number=c.org_number or "—",
+                balance=float(kassa),
+                balance_meta="Tillgängligt",
+                is_primary=True,
+            ),
+            BizBankAccountOut(
+                eye="Skattekonto",
+                name="Skatteverket företag",
+                number="SKV — F-skatt",
+                balance=float(skattekonto),
+                balance_meta="F-skatt-saldo",
+                is_primary=False,
+            ),
+            BizBankAccountOut(
+                eye="Buffert",
+                name="Sparkonto biz",
+                number="Avsatt för moms + F-skatt",
+                balance=float(buffert),
+                balance_meta="Mål: 3 mån-utgifter",
+                is_primary=False,
+            ),
+        ]
+
+        # === Kontoutdrag · senaste 30 dgr ===
+        cutoff = date.today() - __import__("datetime").timedelta(days=30)
+        recent = [t for t in all_txs if t.occurred_on >= cutoff][:25]
+        tx_rows: list[BizBankTxOut] = []
+        for t in recent:
+            kind = t.kind
+            is_inc = kind == "income"
+            amount = float(t.amount_excl_vat or 0)
+            signed = amount if is_inc else -amount
+            if kind == "income":
+                cat = "Intäkt"
+            elif kind == "salary":
+                cat = "Egen lön"
+            elif kind == "vat_payment":
+                cat = "Moms"
+            elif kind == "tax_payment":
+                cat = "Skatt"
+            else:
+                cat = (t.category or "Drift").capitalize()
+            tx_rows.append(BizBankTxOut(
+                occurred_on=t.occurred_on.isoformat(),
+                name=t.description or f"Transaktion {t.id}",
+                name_sub=t.notes,
+                category=cat,
+                amount_signed=signed,
+                is_income=is_inc,
+                is_owner_salary=kind == "salary",
+            ))
+
+        # === F-skatt + nästa moms-due ===
+        from ..business.models import CompanyVatPeriod
+        next_vat = (
+            s.query(CompanyVatPeriod)
+            .filter(
+                CompanyVatPeriod.company_id == c.id,
+                CompanyVatPeriod.status == "open",
+            )
+            .order_by(CompanyVatPeriod.due_date.asc())
+            .first()
+        )
+        next_vat_due = (
+            next_vat.due_date.isoformat() if next_vat else None
+        )
+        next_vat_amount = (
+            float(next_vat.net_vat or 0) if next_vat else 0.0
+        )
+
+        # === Egen lön denna månad ===
+        first_of_month = date.today().replace(day=1)
+        salary_this = sum(
+            (Decimal(t.amount_excl_vat or 0)
+             for t in all_txs
+             if t.kind == "salary"
+             and t.occurred_on >= first_of_month),
+            Decimal(0),
+        )
+
+        return BizBankOverviewOut(
+            accounts=accounts,
+            transactions=tx_rows,
+            f_skatt_due=None,        # F-skatt-modulen ej fullt implementerad
+            f_skatt_amount=0.0,
+            own_salary_this_month=float(salary_this),
+            next_vat_due=next_vat_due,
+            next_vat_amount=next_vat_amount,
+        )
 
 
 # === Bug #7-utbyggnad · status-check (för CompanyMode-toggle) ===

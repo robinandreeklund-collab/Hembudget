@@ -64,6 +64,7 @@ import {
 import {
   BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
 } from "./v2/biz/BizGameMotorPages";
+import { BizBank } from "./v2/biz/BizBank";
 import { TeacherForetagKlassPage } from "./v2/TeacherForetagKlassPage";
 import { PensionV2 } from "./v2/PensionV2";
 import { AvanzaV2 } from "./v2/AvanzaV2";
@@ -400,6 +401,7 @@ export default function App() {
           <Route path="/v2/foretag/marknad" element={<BizMarknad />} />
           <Route path="/v2/foretag/beslut" element={<BizBeslut />} />
           <Route path="/v2/foretag/leverantorer" element={<BizLeverantorer />} />
+          <Route path="/v2/foretag/bank" element={<BizBank />} />
           <Route path="/teacher/v2/foretag-klass" element={<TeacherForetagKlassPage />} />
           <Route path="/v2/simulator" element={<SimulatorV2 />} />
           <Route
