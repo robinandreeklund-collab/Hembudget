@@ -2563,6 +2563,87 @@ def create_v2_transfer(
         )
 
 
+# === Upcoming-uppdatering (V2 · /upcoming-V1 är gateblockad i school) ===
+
+class V2UpcomingUpdateRequest(BaseModel):
+    """Eleven flyttar förfallodag eller byter debiterande konto.
+
+    Signerade dragningar (autogiro=True) blockeras → eleven måste
+    avsigna och signera om för att ändra datum (matchar verkliga
+    bankavtal: en signerad autogiro-fullmakt kan inte godtyckligt
+    ändras utan ny signering).
+    """
+    expected_date: Optional[_date] = None
+    debit_account_id: Optional[int] = None
+
+
+class V2UpcomingUpdateResponse(BaseModel):
+    id: int
+    expected_date: _date
+    debit_account_id: Optional[int]
+    autogiro: bool
+    is_paid: bool
+
+
+@router.patch(
+    "/upcoming/{upcoming_id}",
+    response_model=V2UpcomingUpdateResponse,
+)
+def update_upcoming_v2(
+    upcoming_id: int,
+    body: V2UpcomingUpdateRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2UpcomingUpdateResponse:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever",
+        )
+    with session_scope() as s:
+        u = s.get(UpcomingTransaction, upcoming_id)
+        if u is None:
+            raise HTTPException(404, "Upcoming hittades inte")
+        is_paid = u.matched_transaction_id is not None
+        if is_paid:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Fakturan är redan betald — datum kan inte ändras.",
+            )
+        # Pedagogisk regel: signerad autogiro är ett bindande avtal med
+        # banken. Eleven måste avsigna fakturan i postlådan först om
+        # förfallodatum behöver ändras.
+        if (
+            body.expected_date is not None
+            and bool(u.autogiro)
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Fakturan är signerad via BankID. Avsigna i "
+                "postlådan först om du behöver flytta datumet — "
+                "sedan signerar du om med nytt datum.",
+            )
+        if body.expected_date is not None:
+            u.expected_date = body.expected_date
+            # debit_date följer expected_date om den inte explicit satts
+            if u.debit_date is None or u.debit_date == u.expected_date:
+                u.debit_date = body.expected_date
+        if body.debit_account_id is not None:
+            # Validera att kontot finns + tillhör eleven
+            acc = s.get(Account, body.debit_account_id)
+            if acc is None:
+                raise HTTPException(
+                    400, f"Konto {body.debit_account_id} hittades inte",
+                )
+            u.debit_account_id = body.debit_account_id
+        s.flush()
+        return V2UpcomingUpdateResponse(
+            id=u.id,
+            expected_date=u.expected_date,
+            debit_account_id=u.debit_account_id,
+            autogiro=bool(u.autogiro),
+            is_paid=is_paid,
+        )
+
+
 # === Lärar-seed för postlådan ===
 
 class V2MailSeedItem(BaseModel):

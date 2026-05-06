@@ -3380,7 +3380,13 @@ export const v2Api = {
     upcomingId: number,
     body: { expected_date?: string; debit_account_id?: number },
   ) =>
-    api<unknown>(`/upcoming/${upcomingId}`, {
+    api<{
+      id: number;
+      expected_date: string;
+      debit_account_id: number | null;
+      autogiro: boolean;
+      is_paid: boolean;
+    }>(`/v2/upcoming/${upcomingId}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),

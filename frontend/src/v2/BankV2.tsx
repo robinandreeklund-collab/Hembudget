@@ -281,9 +281,19 @@ export function BankV2() {
         <input
           type="date"
           value={u.expected_date}
-          disabled={savingDate === u.id || u.is_paid}
+          // Signerade fakturor (autogiro/BankID) eller redan betalda
+          // dragningar låses — bindande bankavtal kan inte flyttas
+          // utan ny signering.
+          disabled={savingDate === u.id || u.is_paid || u.is_signed}
           onChange={(e) =>
             changeUpcomingDate(u.id, e.target.value)
+          }
+          title={
+            u.is_paid
+              ? "Fakturan är redan betald — datum kan inte ändras."
+              : u.is_signed
+              ? "Signerad via BankID — avsigna i postlådan först om du behöver flytta datumet."
+              : "Tryck för att flytta förfallodatumet."
           }
           style={{
             background: "rgba(255,255,255,0.04)",
@@ -297,7 +307,11 @@ export function BankV2() {
             fontFamily: "var(--mono)",
             fontSize: 10.5,
             width: "100%",
-            cursor: u.is_paid ? "not-allowed" : "pointer",
+            cursor:
+              u.is_paid || u.is_signed
+                ? "not-allowed"
+                : "pointer",
+            opacity: u.is_paid || u.is_signed ? 0.55 : 1,
           }}
         />
         <Link
