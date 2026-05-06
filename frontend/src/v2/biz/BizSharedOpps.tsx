@@ -334,6 +334,19 @@ function SharedQuoteModal({
   const [pitch, setPitch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [competitors, setCompetitors] = useState<Competitor[] | null>(null);
+
+  // Hämta konkurrent-bud om eleven redan lämnat eget bud — visar
+  // bolagsnamn, pris och leveranstid (pitch döljs förrän opp:en
+  // beslutats för att inte uppmuntra copy-paste).
+  useEffect(() => {
+    if (!opp.has_my_quote) return;
+    api<Competitor[]>(
+      `/v2/foretag/opportunities/shared/${opp.id}/competitors`,
+    )
+      .then(setCompetitors)
+      .catch(() => undefined);
+  }, [opp.id, opp.has_my_quote]);
 
   async function submit() {
     setSubmitting(true);
@@ -377,7 +390,7 @@ function SharedQuoteModal({
         }}
       >
         <h2 style={{ fontFamily: "Source Serif 4, Georgia, serif", color: "#fff", marginTop: 0 }}>
-          Lämna pool-bud · {opp.customer_name}
+          {opp.has_my_quote ? "Ditt bud · " : "Lämna pool-bud · "}{opp.customer_name}
         </h2>
         <div style={{
           background: "rgba(99,102,241,0.06)",
@@ -387,7 +400,7 @@ function SharedQuoteModal({
           marginTop: 10,
         }}>
           <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, color: "#818cf8", letterSpacing: 1.4, fontWeight: 700, marginBottom: 4 }}>
-            UPPDRAGET · {opp.n_competitors} klasskompisar har redan budat
+            UPPDRAGET · {opp.n_competitors} bolag har lämnat bud
           </div>
           <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 4 }}>
             {opp.title}
@@ -408,30 +421,102 @@ function SharedQuoteModal({
             </>
           )}
         </p>
-        <label style={{ color: "white", display: "block", marginTop: 12 }}>
-          Ditt pris (kr exkl moms)
-          <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} style={inputStyle} />
-        </label>
-        <label style={{ color: "white", display: "block", marginTop: 12 }}>
-          Leveranstid (dagar)
-          <input type="number" value={days} onChange={(e) => setDays(e.target.value)} style={inputStyle} />
-        </label>
-        <label style={{ color: "white", display: "block", marginTop: 12 }}>
-          Din pitch (frivilligt — höjer dina chanser)
-          <textarea
-            value={pitch}
-            onChange={(e) => setPitch(e.target.value)}
-            placeholder="Vad gör just er bra? Varför ska kunden välja er?"
-            style={{ ...inputStyle, minHeight: 80 }}
-          />
-        </label>
-        {err && <div style={{ ...errorBoxStyle, marginTop: 10 }}>{err}</div>}
-        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-          <button onClick={submit} disabled={submitting} style={btnPrimary}>
-            {submitting ? "Skickar…" : "Skicka offert →"}
-          </button>
-          <button onClick={() => onClose(false)} style={btnGhost}>Avbryt</button>
-        </div>
+
+        {opp.has_my_quote ? (
+          // === Vy-läge: bud redan lämnat → visa konkurrent-tabell ===
+          <div style={{ marginTop: 14 }}>
+            <div style={{
+              padding: "12px 14px",
+              background: "rgba(110,231,183,0.08)",
+              border: "1px solid rgba(110,231,183,0.30)",
+              borderRadius: 6,
+              marginBottom: 16,
+            }}>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: 1.4, color: "#6ee7b7", marginBottom: 4 }}>
+                ✓ DU HAR LÄMNAT BUD
+              </div>
+              <p style={{ color: "rgba(255,255,255,0.78)", margin: 0, fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.5 }}>
+                Vänta tills deadline — då bestämmer kunden vinnaren. Andras
+                pitch döljs tills dess (för att inte uppmuntra copy-paste),
+                men du ser pris och leveranstid redan nu.
+              </p>
+            </div>
+            <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, fontWeight: 700, letterSpacing: 1.2, color: "#c7d2fe", marginBottom: 8 }}>
+              ● ALLA BUD I LÖPET
+            </div>
+            {competitors === null ? (
+              <div style={{ color: "rgba(255,255,255,0.5)", fontFamily: "JetBrains Mono, monospace", fontSize: 11 }}>
+                Laddar bud…
+              </div>
+            ) : competitors.length === 0 ? (
+              <div style={{ color: "rgba(255,255,255,0.5)", fontFamily: "JetBrains Mono, monospace", fontSize: 11 }}>
+                Inga andra bud än.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                {competitors.map((c, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.6fr 0.8fr 0.8fr 70px",
+                      gap: 10,
+                      padding: "8px 12px",
+                      background: c.is_mine ? "rgba(251,191,36,0.08)" : "rgba(15,21,37,0.5)",
+                      border: `1px solid ${c.is_mine ? "rgba(251,191,36,0.30)" : "rgba(255,255,255,0.06)"}`,
+                      borderRadius: 6,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, color: "#fff" }}>
+                      {c.is_mine && "📍 "}{c.student_display}
+                    </div>
+                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#fbbf24" }}>
+                      {SEK(c.offered_price)} kr
+                    </div>
+                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "rgba(255,255,255,0.7)" }}>
+                      {c.offered_delivery_days} dgr
+                    </div>
+                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9, color: c.is_mine ? "#fbbf24" : "rgba(255,255,255,0.45)", letterSpacing: 1, textAlign: "right" }}>
+                      {c.is_mine ? "DITT" : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+              <button onClick={() => onClose(false)} style={btnGhost}>Stäng</button>
+            </div>
+          </div>
+        ) : (
+          // === Form-läge: lämna nytt bud ===
+          <>
+            <label style={{ color: "white", display: "block", marginTop: 12 }}>
+              Ditt pris (kr exkl moms)
+              <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={{ color: "white", display: "block", marginTop: 12 }}>
+              Leveranstid (dagar)
+              <input type="number" value={days} onChange={(e) => setDays(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={{ color: "white", display: "block", marginTop: 12 }}>
+              Din pitch (frivilligt — höjer dina chanser)
+              <textarea
+                value={pitch}
+                onChange={(e) => setPitch(e.target.value)}
+                placeholder="Vad gör just er bra? Varför ska kunden välja er?"
+                style={{ ...inputStyle, minHeight: 80 }}
+              />
+            </label>
+            {err && <div style={{ ...errorBoxStyle, marginTop: 10 }}>{err}</div>}
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button onClick={submit} disabled={submitting} style={btnPrimary}>
+                {submitting ? "Skickar…" : "Skicka offert →"}
+              </button>
+              <button onClick={() => onClose(false)} style={btnGhost}>Avbryt</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

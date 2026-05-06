@@ -534,11 +534,16 @@ def list_competitors(
     opp_id: int,
     info: TokenInfo = Depends(require_token),
 ):
-    """Visa konkurrentbudgivning för en BESLUTAD opp.
+    """Visa konkurrentbudgivning.
 
-    Pedagogiskt: när opp:en är decided får eleven se ALLA bud +
-    AI:s motivering. Lärorikt att jämföra sin egen mot vinnarens.
-    Bud döljs medan opp är open så elever inte kopierar varandra."""
+    Tre lägen:
+    1. Decided/expired → ALLA bud med pitch + AI-motivering (full insyn).
+    2. Open men eleven har själv lämnat bud → övriga bud visas med
+       bolagsnamn, pris och leveranstid. PITCH DÖLJS för att inte
+       elever ska kunna kopiera varandra direkt. Eleven ser sitt
+       eget pitch märkt 'Ditt'.
+    3. Open och eleven har INTE lämnat bud → tom lista (man måste
+       lämna bud först för att få se vilka man tävlar mot)."""
     student_id = _require_student(info)
     from ..school.engines import master_session
     from ..school.models import (
@@ -549,8 +554,23 @@ def list_competitors(
         opp = s.get(SharedOpportunity, opp_id)
         if opp is None:
             raise HTTPException(404, "Förfrågan saknas")
-        if opp.status not in ("decided", "expired"):
-            return []  # döljs medan deadline är öppen
+
+        is_decided = opp.status in ("decided", "expired")
+
+        # Har eleven själv lämnat bud?
+        my_quote = (
+            s.query(SharedQuote)
+            .filter(
+                SharedQuote.shared_opportunity_id == opp_id,
+                SharedQuote.student_id == student_id,
+            )
+            .first()
+        )
+        has_my_quote = my_quote is not None
+
+        # Open + utan eget bud → dölj allt (uppmuntrar att lämna bud)
+        if not is_decided and not has_my_quote:
+            return []
 
         quotes = (
             s.query(SharedQuote)
@@ -564,15 +584,19 @@ def list_competitors(
         name_map = {st.id: st.display_name for st in students}
         out = []
         for q in quotes:
+            is_mine = q.student_id == student_id
+            # Open + eget bud lämnat → dölj andras pitch (men visa pris,
+            # leveranstid + företagsnamn). Eget pitch syns alltid.
+            show_pitch = is_decided or is_mine
             out.append(SharedQuoteRowOut(
                 student_display=name_map.get(q.student_id, "Anonym")
                 + " · " + q.company_name,
                 offered_price=q.offered_price,
                 offered_delivery_days=q.offered_delivery_days,
-                pitch_text=q.pitch_text,
-                pitch_quality=q.pitch_quality,
+                pitch_text=q.pitch_text if show_pitch else None,
+                pitch_quality=q.pitch_quality if is_decided else None,
                 is_winner=q.is_winner,
-                is_mine=(q.student_id == student_id),
+                is_mine=is_mine,
             ))
         # Vinnaren först, övriga sorterade på pris
         out.sort(key=lambda r: (not r.is_winner, r.offered_price))
