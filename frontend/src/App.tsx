@@ -28,7 +28,11 @@ function RedirectV1Mortgage() {
 function RoleAwareHomeRedirect() {
   const { role } = useAuth();
   if (role === "teacher") return <Navigate to="/teacher/v2" replace />;
-  return <Navigate to="/v2/hub" replace />;
+  // Elev: gå via V2RootRedirect som kollar v2_onboarding_completed_at och
+  // skickar till /v2/onboarding om den inte är gjord — annars /v2/hub.
+  // Tidigare hårdkodades /v2/hub här, vilket skickade nya elever direkt
+  // in i dashbornen utan att gå via onboardingen.
+  return <V2RootRedirect />;
 }
 import { BackendSetup } from "./components/BackendSetup";
 import { ImpersonationBanner } from "./components/ImpersonationBanner";
