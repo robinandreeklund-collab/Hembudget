@@ -1367,6 +1367,101 @@ class ClassCompanyShare(MasterBase):
     )
 
 
+class SharedOpportunity(MasterBase):
+    """Klass-skopig offertförfrågan · delas mellan flera elev-företag.
+
+    Spec: dev/feature-allabolag.md (Fas C)
+
+    Genereras periodiskt per (teacher_id, industry_key) — alla elever
+    med matchande bransch ser samma förfrågan och tävlar med varsin
+    SharedQuote. När deadline_at passerar väljer AI vinnare baserat
+    på pris + pitch + leveranstid + rykte. Förlorarna får pedagogisk
+    förklaring varför.
+
+    Detta är pedagogiskt mycket starkare än per-elev-opps eftersom
+    eleven ser KONKRET varför AI valde någon annans offert — och
+    kan iaktta hur klasskompisar prissätter."""
+    __tablename__ = "shared_opportunities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    class_label: Mapped[Optional[str]] = mapped_column(
+        String(60), nullable=True, index=True,
+    )
+    industry_key: Mapped[str] = mapped_column(
+        String(40), nullable=False, index=True,
+    )
+    customer_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    customer_segment: Mapped[str] = mapped_column(
+        String(20), default="privat", nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    market_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_delivery_days: Mapped[int] = mapped_column(
+        Integer, default=14, nullable=False,
+    )
+    deadline_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True,
+    )
+    # Status: open | decided | expired
+    status: Mapped[str] = mapped_column(
+        String(20), default="open", nullable=False,
+    )
+    winner_student_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("students.id", ondelete="SET NULL"), nullable=True,
+    )
+    decision_explanation: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class SharedQuote(MasterBase):
+    """En elevs offert till en SharedOpportunity. Max ETT bud per elev
+    och förfrågan."""
+    __tablename__ = "shared_quotes"
+    __table_args__ = (
+        UniqueConstraint(
+            "shared_opportunity_id", "student_id",
+            name="uq_shared_quote_opp_student",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shared_opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("shared_opportunities.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    company_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    offered_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    offered_delivery_days: Mapped[int] = mapped_column(
+        Integer, nullable=False,
+    )
+    pitch_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pitch_quality: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True,
+    )
+    is_winner: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class TeacherAiPrompt(MasterBase):
     """Lärares anpassning av en AI-system-prompt.
 

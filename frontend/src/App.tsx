@@ -68,6 +68,7 @@ import {
   BizBolagsskatt, BizInstallningar,
 } from "./v2/biz/BizPages";
 import { BizArsredovisning } from "./v2/biz/BizArsredovisning";
+import { BizSharedOpps } from "./v2/biz/BizSharedOpps";
 import {
   BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
 } from "./v2/biz/BizGameMotorPages";
@@ -418,6 +419,8 @@ export default function App() {
           <Route path="/v2/allabolag" element={<AllabolagV2 />} />
           {/* Årsredovisning · AI Bolagsverket */}
           <Route path="/v2/foretag/arsredovisning" element={<BizArsredovisning />} />
+          {/* Klass-pool · shared opportunities */}
+          <Route path="/v2/foretag/klass-pool" element={<BizSharedOpps />} />
           <Route path="/v2/foretag/bokforing" element={<BizBokforing />} />
           <Route path="/v2/foretag/fakturor" element={<BizFakturor />} />
           <Route path="/v2/foretag/lon" element={<BizLon />} />

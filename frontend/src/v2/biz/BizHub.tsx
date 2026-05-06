@@ -220,6 +220,13 @@ export function BizHub() {
               Se hur du står dig <em>mot klassen</em>
             </div>
           </Link>
+          <Link to="/v2/foretag/klass-pool" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · klass</div>
+            <div className="biz-compass-node-name">Klass-pool</div>
+            <div className="biz-compass-node-val">
+              Tävla med klasskompisar om <em>samma kund</em>
+            </div>
+          </Link>
           <Link to="/v2/foretag/offerter" className="biz-compass-node">
             <div className="biz-compass-node-eye">Aktör · biz</div>
             <div className="biz-compass-node-name">Kunder & offerter</div>
