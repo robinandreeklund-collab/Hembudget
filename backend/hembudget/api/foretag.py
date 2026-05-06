@@ -1809,7 +1809,7 @@ def teacher_toggle_business_mode(
     from ..school.engines import (
         master_session, scope_context, scope_for_student,
     )
-    from ..school.models import Student, StudentProfile
+    from ..school.models import Student, StudentProfile, Teacher
     with master_session() as ms:
         stu = ms.get(Student, student_id)
         if stu is None or stu.teacher_id != info.teacher_id:
@@ -1818,7 +1818,7 @@ def teacher_toggle_business_mode(
         stu.business_mode_enabled = body.enabled
         ms.commit()
 
-        # Hämta elev-namn + stad för mail-content
+        # Hämta elev-namn + stad + lärar-namn för mail-content
         prof = (
             ms.query(StudentProfile)
             .filter(StudentProfile.student_id == student_id)
@@ -1826,6 +1826,12 @@ def teacher_toggle_business_mode(
         )
         student_first = (stu.display_name or "").split(" ")[0] or "Eleven"
         city_display = (prof.city if prof else None) or "din stad"
+        # Läraren som äger eleven (skapade den) signerar mailet
+        teacher = ms.get(Teacher, info.teacher_id)
+        teacher_name = (
+            teacher.name if teacher and teacher.name
+            else "Klassansvarig lärare"
+        )
         scope_key = scope_for_student(stu)
 
     # Skicka onboarding-mail · bara vid första aktivering (inte vid re-toggle)
@@ -1835,6 +1841,7 @@ def teacher_toggle_business_mode(
                 scope_key=scope_key,
                 student_first_name=student_first,
                 city_display=city_display,
+                teacher_name=teacher_name,
             )
         except Exception:
             import logging
@@ -1854,10 +1861,14 @@ def _send_business_onboarding_mail(
     scope_key: str,
     student_first_name: str,
     city_display: str,
+    teacher_name: str,
 ) -> None:
     """Skapa ett MailItem i elevens postlåda som introducerar
     företagsläget. Mail:et är pedagogiskt och förklarar att eleven
-    ska tänka på bransch-val + tidsåtgång + skatt + buffert."""
+    ska tänka på bransch-val + tidsåtgång + skatt + buffert.
+
+    Signeras av den lärare som skapade eleven · `teacher_name`
+    skickas in från caller (läses från Teacher.name)."""
     from ..db.models import MailItem
     from ..school.engines import scope_context, get_scope_session
     from datetime import datetime as _dt
@@ -1900,14 +1911,19 @@ def _send_business_onboarding_mail(
         f"1:1, det är en faktor).\n\n"
         f"När du är redo · klicka 'Byt till företag' i topbaren.\n\n"
         f"Lycka till.\n"
-        f"— Anders Lind, klassansvarig"
+        f"— {teacher_name}, klassansvarig"
     )
+
+    # Initialer för sender_short (max 4 tecken)
+    name_initials = "".join(
+        w[0] for w in teacher_name.split() if w
+    )[:4].upper() or "LÄR"
 
     with scope_context(scope_key):
         with get_scope_session(scope_key)() as s:
             mail = MailItem(
-                sender="Anders Lind · klassansvarig",
-                sender_short="LÄR",
+                sender=f"{teacher_name} · klassansvarig",
+                sender_short=name_initials,
                 sender_kind="other",
                 sender_meta="pedagogisk inramning · företagsläget",
                 mail_type="info",

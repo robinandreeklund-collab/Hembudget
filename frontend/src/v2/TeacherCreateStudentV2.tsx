@@ -247,8 +247,7 @@ export function TeacherCreateStudentV2() {
               }}
             >
               Karaktärsgenerering · 8-teckens-kod · partner-modell · Nivå 1
-              default. Eleven får v2 aktiverat direkt och hamnar på
-              v2-onboardingen vid första inloggning.
+              default.
             </p>
           </div>
           <div className="larare-head-meta">

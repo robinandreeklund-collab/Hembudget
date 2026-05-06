@@ -167,8 +167,7 @@ export function HubV2() {
             </h1>
             <p className="hub-lead">
               Du driver din ekonomi i <em>realtid</em>. Pentagonen tippar när
-              något händer. Allt här är{" "}
-              <em>live från databasen</em> — inga mockar.
+              något händer.
             </p>
           </div>
 

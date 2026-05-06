@@ -694,8 +694,36 @@ def _phase_h_milestone_mails(
     v24 · 'Halv-årsuppdatering — pentagon-jämförelse mot start.'
 
     Idempotent: kolla att mail med samma subject inte redan finns.
+    Mailen signeras av elevens lärare (dynamisk) · läses från
+    Teacher.name via current-actor-student-cookie.
     """
     from ...db.models import MailItem
+
+    # Hämta läraren som äger eleven · signerar milstolpe-mailen
+    teacher_name = "Klassansvarig lärare"
+    name_initials = "LÄR"
+    try:
+        from ...school.engines import (
+            master_session as _ms_t,
+            get_current_actor_student as _gcas_t,
+        )
+        from ...school.models import Student as _Stu_t, Teacher as _T_t
+        actor_id = _gcas_t()
+        if actor_id is not None:
+            with _ms_t() as _msdb_t:
+                _stu = _msdb_t.get(_Stu_t, actor_id)
+                if _stu is not None:
+                    _t = _msdb_t.get(_T_t, _stu.teacher_id)
+                    if _t is not None and _t.name:
+                        teacher_name = _t.name
+                        name_initials = "".join(
+                            w[0] for w in teacher_name.split() if w
+                        )[:4].upper() or "LÄR"
+    except Exception:
+        pass
+
+    # Lärar-namn används i body-texten där det refereras
+    teacher_first = teacher_name.split(" ")[0] if teacher_name else "läraren"
 
     milestones = {
         4:  ("Reflektera · 4 veckor i drift",
@@ -704,13 +732,13 @@ def _phase_h_milestone_mails(
              "stanna upp och fundera. Ligger dina priser i mitten av "
              "Konsumentverkets schablon? Är dina kunder främst privat, "
              "företag eller kommun? Vad ger bäst marginal? Skriv ner i "
-             "en reflektion för Anders Lind."),
+             f"en reflektion för {teacher_first}."),
         8:  ("Reflektera · 8 veckor i drift",
              "Mönster i kunder och betalning?",
              "8 veckor in. Vilka kunder betalar i tid? Vilka släpar? "
              "Finns det en bransch-trend i din kund-mix? Marginalen "
              "skiljer sig ofta 20+ % mellan privat och företag — har "
-             "du sett det? Reflektion till Anders."),
+             f"du sett det? Reflektion till {teacher_first}."),
         12: ("Reflektera · 12 veckor · första kvartalet",
              "Kassaflöde · vad lärde du dig?",
              "Första kvartalet klart. Hur har kassan rört sig? Var det "
@@ -740,8 +768,8 @@ def _phase_h_milestone_mails(
         return
 
     s.add(MailItem(
-        sender="Anders Lind · klassansvarig",
-        sender_short="LÄR",
+        sender=f"{teacher_name} · klassansvarig",
+        sender_short=name_initials,
         sender_kind="other",
         sender_meta=f"milstolpe · v{company.week_no}",
         mail_type="info",
