@@ -238,6 +238,7 @@ export const bizApi = {
     vat_period?: string;
     share_capital?: number | null;
     org_number?: string | null;
+    funding_method?: "cash" | "private_loan" | "business_loan_pg";
   }) =>
     call<Company>("/v2/foretag", { method: "POST", body: JSON.stringify(b) }),
 

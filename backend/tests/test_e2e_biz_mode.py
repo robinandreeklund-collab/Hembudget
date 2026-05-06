@@ -122,7 +122,7 @@ def test_biz_mode_full_flow(app_with_student):
             "name": "Sara A. AB",
             "form": "ab",
             "industry_key": "snickare",
-            "share_capital": 25000,
+            "share_capital": 25000, "funding_method": "business_loan_pg"
         },
     )
     assert r.status_code == 200, f"Kunde inte skapa bolag: {r.text}"
@@ -221,7 +221,7 @@ def test_biz_class_overview_shows_company(app_with_student):
     # Skapa bolag
     client.post(
         "/v2/foretag", headers=H_S,
-        json={"name": "Test AB", "form": "ab", "industry_key": "it_konsult"},
+        json={"name": "Test AB", "form": "ab", "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"},
     )
 
     # Lärare hämtar klass-aggregat
@@ -291,7 +291,7 @@ def test_biz_bank_overview_shape(app_with_student):
         "/v2/foretag", headers=H,
         json={
             "name": "Test AB", "form": "ab",
-            "industry_key": "it_konsult", "share_capital": 25000,
+            "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"
         },
     )
 
@@ -340,7 +340,7 @@ def test_biz_create_company_validates_industry_key(app_with_student):
         "/v2/foretag", headers=H,
         json={
             "name": "Test AB", "form": "ab",
-            "industry_key": "fri_text_blah",
+            "industry_key": "fri_text_blah", "share_capital": 25000, "funding_method": "business_loan_pg"
         },
     )
     assert r.status_code == 400, r.text
@@ -382,7 +382,7 @@ def test_biz_employment_decision_status_no_pending_at_start(app_with_student):
         "/v2/foretag", headers=H,
         json={
             "name": "Test", "form": "ab",
-            "industry_key": "it_konsult", "share_capital": 25000,
+            "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"
         },
     )
     r = client.get("/v2/foretag/employment-decision/status", headers=H)
@@ -452,7 +452,7 @@ def test_biz_pentagon_axis_detail_returns_factors_and_events(app_with_student):
     # Skapa bolag
     client.post(
         "/v2/foretag", headers=H,
-        json={"name": "Pentagon AB", "form": "ab", "industry_key": "it_konsult"},
+        json={"name": "Pentagon AB", "form": "ab", "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"},
     )
 
     # Alla 5 axlar ska ge en giltig BizAxisDetail
@@ -478,7 +478,7 @@ def test_biz_pentagon_includes_axes_prev(app_with_student):
     H = {"Authorization": f"Bearer {student_token}"}
     client.post(
         "/v2/foretag", headers=H,
-        json={"name": "TT", "form": "ab", "industry_key": "it_konsult"},
+        json={"name": "TT", "form": "ab", "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"},
     )
     r = client.get("/v2/foretag/pentagon", headers=H)
     assert r.status_code == 200, r.text
@@ -496,7 +496,7 @@ def test_biz_owner_salary_credits_private_account(app_with_student):
     # Skapa AB
     client.post(
         "/v2/foretag", headers=H_S,
-        json={"name": "AB", "form": "ab", "industry_key": "it_konsult"},
+        json={"name": "AB", "form": "ab", "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"},
     )
 
     # Hämta privat-konto saldo INNAN

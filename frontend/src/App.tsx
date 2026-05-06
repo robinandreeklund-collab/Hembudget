@@ -70,6 +70,7 @@ import {
 import { BizArsredovisning } from "./v2/biz/BizArsredovisning";
 import { BizSharedOpps } from "./v2/biz/BizSharedOpps";
 import { BizJobAds } from "./v2/biz/BizJobAds";
+import { BizTillvaxt } from "./v2/biz/BizTillvaxt";
 import { ArbetsformedlingenKlassJobb } from "./v2/ArbetsformedlingenKlassJobb";
 import {
   BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
@@ -425,6 +426,8 @@ export default function App() {
           <Route path="/v2/foretag/klass-pool" element={<BizSharedOpps />} />
           {/* Klass-företag jobbannonser (företagsägare) */}
           <Route path="/v2/foretag/jobbannonser" element={<BizJobAds />} />
+          {/* Tillväxt · lokaler, utrustning, kapacitet, lån */}
+          <Route path="/v2/foretag/tillvaxt" element={<BizTillvaxt />} />
           {/* Klass-företag jobb (arbetssökande elev) */}
           <Route path="/v2/arbetsformedlingen/klass-jobb" element={<ArbetsformedlingenKlassJobb />} />
           <Route path="/v2/foretag/bokforing" element={<BizBokforing />} />

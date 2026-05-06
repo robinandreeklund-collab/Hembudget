@@ -523,7 +523,131 @@ def _phase_f_charge_subscriptions(
             vat_amount=Decimal(str(int(round(weekly * 0.25)))),
         ))
         total_cost += weekly
+
+    # Lokal-hyra · 1/4 av månadshyra per biz-vecka
+    try:
+        from ..models import CompanyLocation
+        loc = (
+            s.query(CompanyLocation)
+            .filter(
+                CompanyLocation.company_id == company.id,
+                CompanyLocation.is_active.is_(True),
+            )
+            .first()
+        )
+        if loc and loc.monthly_cost > 0:
+            weekly_rent = int(round(loc.monthly_cost / 4))
+            s.add(CompanyTransaction(
+                company_id=company.id,
+                occurred_on=today,
+                kind="expense",
+                category="Lokal · hyra",
+                description=f"Veckohyra · {loc.location_kind}",
+                amount_excl_vat=Decimal(str(weekly_rent)),
+                vat_rate=Decimal("0.25"),
+                vat_amount=Decimal(str(int(round(weekly_rent * 0.25)))),
+            ))
+            total_cost += weekly_rent
+    except Exception:
+        log.exception("phase_f: lokal-hyra-debitering misslyckades")
+
+    # Lån-räntor · 1/4 av månadsbetalning per biz-vecka
+    try:
+        from ..models import CompanyLoan
+        active_loans = (
+            s.query(CompanyLoan)
+            .filter(
+                CompanyLoan.company_id == company.id,
+                CompanyLoan.status == "active",
+            )
+            .all()
+        )
+        for ln in active_loans:
+            weekly_pmt = int(round(ln.monthly_payment / 4))
+            if weekly_pmt <= 0:
+                continue
+            # Ränta + amortering proportionellt
+            monthly_rate = float(ln.interest_rate) / 12.0
+            interest_weekly = int(round(ln.outstanding * monthly_rate / 4))
+            amort_weekly = max(0, weekly_pmt - interest_weekly)
+            if amort_weekly > ln.outstanding:
+                amort_weekly = ln.outstanding
+            s.add(CompanyTransaction(
+                company_id=company.id,
+                occurred_on=today,
+                kind="expense",
+                category="Lån · ränta",
+                description=f"Veckoränta · {ln.lender}",
+                amount_excl_vat=Decimal(str(interest_weekly)),
+                vat_rate=Decimal("0.0"),
+                vat_amount=Decimal(0),
+            ))
+            if amort_weekly > 0:
+                s.add(CompanyTransaction(
+                    company_id=company.id,
+                    occurred_on=today,
+                    kind="expense",
+                    category="Lån · amortering",
+                    description=f"Veckoamortering · {ln.lender}",
+                    amount_excl_vat=Decimal(str(amort_weekly)),
+                    vat_rate=Decimal("0.0"),
+                    vat_amount=Decimal(0),
+                ))
+            ln.outstanding -= amort_weekly
+            if ln.outstanding <= 0 or ln.months_left <= 0:
+                ln.status = "repaid"
+            ln.months_left = max(0, ln.months_left - 1)
+            total_cost += interest_weekly + amort_weekly
+    except Exception:
+        log.exception("phase_f: lån-debitering misslyckades")
+
     summary.total_supplier_cost = total_cost
+
+
+def _update_capacity_from_growth(
+    s: Session, *, company: Company,
+) -> None:
+    """Synca delivery_capacity baserat på lokal × utrustning × MCP.
+
+    Körs INNAN _phase_c_generate_opportunities så pipeline_generator
+    har rätt cap-värde. Fail-soft: om CompanyLocation/Equipment saknas
+    bibehålls existerande delivery_capacity."""
+    try:
+        from ..models import (
+            CompanyEquipment, CompanyLocation, CompanyMcpRental,
+        )
+        loc = (
+            s.query(CompanyLocation)
+            .filter(
+                CompanyLocation.company_id == company.id,
+                CompanyLocation.is_active.is_(True),
+            )
+            .first()
+        )
+        eq = (
+            s.query(CompanyEquipment)
+            .filter(
+                CompanyEquipment.company_id == company.id,
+                CompanyEquipment.is_active.is_(True),
+            )
+            .first()
+        )
+        from datetime import date as _d
+        active_mcp = (
+            s.query(CompanyMcpRental)
+            .filter(
+                CompanyMcpRental.company_id == company.id,
+                CompanyMcpRental.status == "active",
+                CompanyMcpRental.ends_on >= _d.today(),
+            )
+            .count()
+        )
+        base = loc.max_concurrent_jobs if loc else 2
+        speed = float(eq.speed_multiplier) if eq else 1.0
+        new_cap = max(1, int(base * speed) + active_mcp)
+        company.delivery_capacity = new_cap
+    except Exception:
+        log.exception("update_capacity_from_growth misslyckades")
 
 
 def run_business_week(
@@ -555,6 +679,8 @@ def run_business_week(
     s.flush()
 
     try:
+        # Synca kapacitet från lokal/utrustning/MCP innan pipeline-gen
+        _update_capacity_from_growth(s, company=company)
         _phase_a_decide_quotes(s, company=company, today=today, summary=summary)
         _phase_b_collect_payments(
             s, company=company, today=today, summary=summary,

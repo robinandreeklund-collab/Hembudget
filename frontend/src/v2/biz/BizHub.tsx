@@ -285,6 +285,13 @@ export function BizHub() {
               AI Bolagsverket granskar
             </div>
           </Link>
+          <Link to="/v2/foretag/tillvaxt" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Verktyg · biz</div>
+            <div className="biz-compass-node-name">Tillväxt</div>
+            <div className="biz-compass-node-val">
+              Lokaler · utrustning · lån · MCP
+            </div>
+          </Link>
           <Link
             to="/v2/foretag/moms"
             className={`biz-compass-node${stats.next_vat_due ? " warn" : ""}`}
@@ -606,6 +613,7 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
   const [vatReg, setVatReg] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showCapitalDialog, setShowCapitalDialog] = useState(false);
 
   useEffect(() => {
     bizApi
@@ -614,7 +622,7 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
       .catch(() => undefined);
   }, []);
 
-  const create = async () => {
+  async function tryCreate(funding: "cash" | "private_loan" | "business_loan_pg") {
     if (!name.trim() || !selectedIndustry) return;
     setBusy(true);
     setErr(null);
@@ -626,16 +634,41 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
         vat_registered: vatReg,
         vat_period: "kvartal",
         share_capital: form === "ab" ? 25000 : null,
+        funding_method: funding,
       });
       onCreated(c);
     } catch (e) {
-      setErr(String((e as Error).message || e));
+      const msg = String((e as Error).message || e);
+      // 402 = privatkonto saknar pengar → visa dialog
+      if (msg.includes("Otillräckligt på privatkontot") || msg.includes("HTTP 402")) {
+        setShowCapitalDialog(true);
+        setBusy(false);
+        return;
+      }
+      setErr(msg);
     } finally {
       setBusy(false);
     }
-  };
+  }
 
+  const create = () => tryCreate("cash");
+
+  // Lyssna på showCapitalDialog och rendera den nedan
   const selected = industries.find((i) => i.key === selectedIndustry);
+
+  if (showCapitalDialog) {
+    return (
+      <BizHubShell>
+        <StartupCapitalDialog
+          onPick={(funding) => {
+            setShowCapitalDialog(false);
+            tryCreate(funding);
+          }}
+          onCancel={() => setShowCapitalDialog(false)}
+        />
+      </BizHubShell>
+    );
+  }
 
   return (
     <BizHubShell>
@@ -940,4 +973,125 @@ function weekOfYear(d: Date): number {
   t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
   return Math.ceil(((+t - +yearStart) / 86400000 + 1) / 7);
+}
+
+
+function StartupCapitalDialog({
+  onPick,
+  onCancel,
+}: {
+  onPick: (funding: "private_loan" | "business_loan_pg") => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div style={{
+      maxWidth: 720,
+      margin: "40px auto",
+      padding: "32px 28px",
+      background: "linear-gradient(135deg, rgba(251,191,36,0.06), rgba(15,21,37,0.6))",
+      border: "1px solid rgba(251,191,36,0.30)",
+      borderRadius: 12,
+    }}>
+      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#fbbf24", letterSpacing: 1.6, fontWeight: 700 }}>
+        ⚠ AKTIEKAPITAL SAKNAS
+      </div>
+      <h1 style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 26, color: "#fff", fontWeight: 700, margin: "8px 0 16px" }}>
+        Du saknar 25 000 kr <em style={{ color: "#fbbf24" }}>i aktiekapital</em>.
+      </h1>
+      <p style={{ color: "rgba(255,255,255,0.78)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 15, lineHeight: 1.6 }}>
+        För att starta aktiebolag krävs minst 25 000 kr som du satsar i bolaget.
+        Det är pengar som tillhör bolaget — du får inte ut dem som lön. Två vägar
+        att lösa det:
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 22 }}>
+        {/* Privat startup-lån */}
+        <div style={{
+          padding: 18,
+          background: "rgba(99,102,241,0.06)",
+          border: "1px solid rgba(99,102,241,0.30)",
+          borderRadius: 10,
+        }}>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: 1.4, color: "#c7d2fe" }}>
+            ALTERNATIV A
+          </div>
+          <h3 style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 18, color: "#fff", margin: "8px 0", fontWeight: 700 }}>
+            Privat startup-lån
+          </h3>
+          <p style={{ color: "rgba(255,255,255,0.8)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.55, margin: "8px 0" }}>
+            Du tar lån i ditt eget namn. Pengarna går in på privatkontot, sedan
+            in i bolaget som aktiekapital.
+          </p>
+          <ul style={{ color: "rgba(255,255,255,0.75)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.6, paddingLeft: 18, margin: "10px 0" }}>
+            <li>25 000 kr · 6 % ränta · 5 år</li>
+            <li>≈ 483 kr/mån från privatkontot</li>
+            <li>Total kostnad: ~28 990 kr</li>
+            <li>⚠ Påverkar din privata Trygghet-axel</li>
+          </ul>
+          <button onClick={() => onPick("private_loan")} style={{
+            marginTop: 10, width: "100%",
+            background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)",
+            color: "#c7d2fe", padding: "10px 18px", borderRadius: 6,
+            fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700,
+            letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer",
+          }}>
+            Ta privat lån →
+          </button>
+        </div>
+
+        {/* Företagslån med personlig borgen */}
+        <div style={{
+          padding: 18,
+          background: "rgba(251,191,36,0.06)",
+          border: "1px solid rgba(251,191,36,0.30)",
+          borderRadius: 10,
+        }}>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: 1.4, color: "#fbbf24" }}>
+            ALTERNATIV B
+          </div>
+          <h3 style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 18, color: "#fff", margin: "8px 0", fontWeight: 700 }}>
+            Företagslån · personlig borgen
+          </h3>
+          <p style={{ color: "rgba(255,255,255,0.8)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.55, margin: "8px 0" }}>
+            Bolaget tar lånet · pengarna stannar i bolagets kassa.
+            Du går i personlig borgen om bolaget går i konkurs.
+          </p>
+          <ul style={{ color: "rgba(255,255,255,0.75)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.6, paddingLeft: 18, margin: "10px 0" }}>
+            <li>25 000 kr · 7 % ränta · 5 år</li>
+            <li>≈ 495 kr/mån från bolagets kassa</li>
+            <li>Lägre privat-skuldsättning</li>
+            <li>⚠ Personlig borgen = du betalar om bolaget faller</li>
+          </ul>
+          <button onClick={() => onPick("business_loan_pg")} style={{
+            marginTop: 10, width: "100%",
+            background: "#fbbf24", border: "none",
+            color: "#422006", padding: "10px 18px", borderRadius: 6,
+            fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700,
+            letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer",
+          }}>
+            Ta företagslån →
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 22, padding: "14px 16px", background: "rgba(0,0,0,0.2)", borderLeft: "2px solid #6ee7b7", borderRadius: 4 }}>
+        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, color: "#6ee7b7", letterSpacing: 1.2, fontWeight: 700 }}>TIPS</div>
+        <p style={{ color: "rgba(255,255,255,0.8)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.55, margin: "6px 0 0" }}>
+          Eller välj <em>enskild firma</em> i stället. Den kräver inget aktiekapital alls
+          — men du har personligt ansvar för alla skulder och kan inte ta in nya delägare.
+        </p>
+      </div>
+
+      <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={onCancel} style={{
+          background: "transparent", border: "1px solid rgba(255,255,255,0.20)",
+          color: "rgba(255,255,255,0.7)", padding: "10px 18px", borderRadius: 6,
+          fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700,
+          letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer",
+        }}>
+          Avbryt · välj annan form
+        </button>
+      </div>
+    </div>
+  );
 }

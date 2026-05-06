@@ -693,3 +693,143 @@ class CompanyAnnualReport(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
+
+
+class CompanyLoan(TenantMixin, Base):
+    """Företagslån · syns på balansräkningen + AI Bolagsverket-granskning.
+
+    Spec: dev/feature-allabolag.md (Fas E)
+
+    Kan vara:
+    - "startup_capital" · använt för aktiekapital vid AB-start
+    - "growth" · för investering i lokal/utrustning/anställning
+    - "buffer" · likviditets-buffert vid svag period
+
+    Ränta + amorteringsplan beräknas vid skapande baserat på företags-UC.
+    Privat-lån (eleven står som personlig borgensman) syns i privat-
+    scope-DB:n via vanliga Loan-modellen · CompanyLoan här ÄR bolagets
+    lån i bolagets namn.
+    """
+    __tablename__ = "biz_company_loans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    purpose: Mapped[str] = mapped_column(
+        String(40), default="growth", nullable=False,
+    )  # startup_capital | growth | buffer
+    lender: Mapped[str] = mapped_column(
+        String(80), default="Företagsbanken AB", nullable=False,
+    )
+
+    # Finansiella villkor
+    principal: Mapped[int] = mapped_column(Integer, nullable=False)
+    outstanding: Mapped[int] = mapped_column(Integer, nullable=False)
+    interest_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4), nullable=False,
+    )  # 0.0950 = 9.50 %
+    monthly_payment: Mapped[int] = mapped_column(Integer, nullable=False)
+    months_total: Mapped[int] = mapped_column(Integer, nullable=False)
+    months_left: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Personlig borgen · ägaren riskerar privat-ekonomi om bolaget går omkull
+    is_personal_guarantee: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+
+    # Status: active | repaid | defaulted
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", nullable=False,
+    )
+
+    started_on: Mapped[date] = mapped_column(
+        Date, server_default=func.current_date(),
+    )
+    last_payment_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class CompanyLocation(TenantMixin, Base):
+    """Företagets lokal · gates max-anställda och max-jobs i tid.
+
+    Spec: Fas F"""
+    __tablename__ = "biz_company_locations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    location_kind: Mapped[str] = mapped_column(
+        String(40), nullable=False,
+    )  # home | rented_1r | rented_2r | office_50 | office_120
+    monthly_cost: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_employees: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_concurrent_jobs: Mapped[int] = mapped_column(
+        Integer, default=2, nullable=False,
+    )
+    is_owned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    purchase_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    started_on: Mapped[date] = mapped_column(
+        Date, server_default=func.current_date(),
+    )
+    ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class CompanyEquipment(TenantMixin, Base):
+    """Investering i bättre utrustning. Multiplicerar speed_per_employee.
+
+    Spec: Fas F"""
+    __tablename__ = "biz_company_equipment"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    equipment_kind: Mapped[str] = mapped_column(
+        String(40), nullable=False,
+    )  # standard | second_hand | premium | specialist
+    purchase_price: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    speed_multiplier: Mapped[Decimal] = mapped_column(
+        Numeric(4, 2), default=Decimal("1.00"), nullable=False,
+    )
+    breakdown_risk: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3), default=Decimal("0.000"), nullable=False,
+    )
+    purchased_on: Mapped[date] = mapped_column(
+        Date, server_default=func.current_date(),
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class CompanyMcpRental(TenantMixin, Base):
+    """MCP · 'More Capacity Programmatically' = inhyrd frilansare för
+    1 vecka. Snabb-fix när ingen anställd finns och deadlines pressar.
+
+    Spec: Fas F"""
+    __tablename__ = "biz_mcp_rentals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    weeks: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    cost_total: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_on: Mapped[date] = mapped_column(
+        Date, server_default=func.current_date(),
+    )
+    ends_on: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", nullable=False,
+    )  # active | finished

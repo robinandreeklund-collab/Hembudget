@@ -83,7 +83,14 @@ class CompanyIn(BaseModel):
     `industry_key` är obligatoriskt (en av de 10 fasta branscherna).
     `city_key` skickas INTE från klienten — det ärvs alltid från
     karaktärens StudentProfile.city. Om eleven försöker skicka
-    custom city → ignoreras."""
+    custom city → ignoreras.
+    `funding_method` styr hur aktiekapitalet (vid AB) finansieras:
+      'cash' = från privatkonto (default · kräver tillräckligt saldo)
+      'private_loan' = privat-startup-lån (skapas i privat-scope,
+        affekterar privat-pentagon Trygghet)
+      'business_loan_pg' = företagslån med personlig borgen
+        (skapas i bolagets scope, monthly_payment dras månadsvis)
+    """
     name: str = Field(min_length=2, max_length=160)
     form: str = Field(default="enskild_firma")
     org_number: Optional[str] = None
@@ -94,6 +101,10 @@ class CompanyIn(BaseModel):
     vat_registered: bool = True       # Default på · pedagogiskt viktigt
     vat_period: str = "kvartal"
     share_capital: Optional[int] = None
+    funding_method: str = Field(
+        default="cash",
+        pattern="^(cash|private_loan|business_loan_pg)$",
+    )
 
 
 class TransactionIn(BaseModel):
@@ -437,6 +448,91 @@ def create_company(
             "eller starta i en bransch som funkar lokalt.",
         )
 
+    # 4. Aktiekapital-koll (vid AB)
+    # Om body.form == "ab" måste eleven ha 25 000 kr någonstans.
+    # funding_method:
+    #   "cash": dra från privat-konto · kräver tillräckligt saldo
+    #   "private_loan": skapa Loan i privat-scope · ge 25k privat lån
+    #   "business_loan_pg": skapa CompanyLoan i biz-scope · personlig borgen
+    private_loan_id: Optional[int] = None
+    needed_capital = body.share_capital or 0
+    if body.form == "ab":
+        if needed_capital < 25000:
+            raise HTTPException(
+                400,
+                "Aktiebolag kräver minst 25 000 kr i aktiekapital.",
+            )
+        if body.funding_method == "cash":
+            # Kontrollera privatkonto-saldo
+            from ..db.base import session_scope as _ps_check
+            with _ps_check() as private_s:
+                from ..db.models import Account, Transaction
+                acc = (
+                    private_s.query(Account)
+                    .filter(Account.type == "checking")
+                    .first()
+                )
+                if acc is None:
+                    raise HTTPException(
+                        400,
+                        "Privat-konto saknas · kontakta lärare",
+                    )
+                # Beräkna saldo · alla transaktioner på kontot
+                bal = sum(
+                    float(t.amount or 0)
+                    for t in private_s.query(Transaction).filter(
+                        Transaction.account_id == acc.id
+                    ).all()
+                )
+                if bal < needed_capital:
+                    # Returnera särskild felkod 402 (payment required)
+                    raise HTTPException(
+                        402,
+                        f"Otillräckligt på privatkontot. Du har "
+                        f"{int(bal)} kr men behöver {needed_capital} kr i "
+                        "aktiekapital. Välj 'private_loan' för privat lån "
+                        "eller 'business_loan_pg' för företagslån med "
+                        "personlig borgen.",
+                    )
+                # Bokför uttag i privat-konto
+                from datetime import datetime as _dt
+                private_s.add(Transaction(
+                    account_id=acc.id,
+                    date=date.today(),
+                    amount=Decimal(str(-needed_capital)),
+                    currency="SEK",
+                    raw_description="Aktiekapital · ny AB",
+                    normalized_merchant="Bolagsverket",
+                    hash=f"share-cap-{int(_dt.utcnow().timestamp())}",
+                    user_verified=True,
+                ))
+                private_s.commit()
+        elif body.funding_method == "private_loan":
+            # Skapa privat lån i privat-scope · 5 år, 6 % ränta
+            from ..db.base import session_scope as _ps_check
+            from ..db.models import Loan
+            with _ps_check() as private_s:
+                pl = Loan(
+                    name="Startup-lån (aktiekapital)",
+                    lender="Företagsbanken AB",
+                    principal_amount=Decimal(str(needed_capital)),
+                    start_date=date.today(),
+                    interest_rate=0.06,
+                    binding_type="rörlig",
+                    amortization_monthly=Decimal(str(int(needed_capital / 60))),
+                    notes=(
+                        f"Lånat {needed_capital} kr för att starta AB. "
+                        "5 år återbetalning, 6 % ränta."
+                    ),
+                    active=True,
+                )
+                private_s.add(pl)
+                private_s.flush()
+                private_loan_id = pl.id
+                private_s.commit()
+        # business_loan_pg hanteras EFTER company-skapandet eftersom
+        # CompanyLoan är i bolagets scope-DB.
+
     with session_scope() as s:
         existing = _get_active_company(s)
         if existing is not None:
@@ -460,6 +556,45 @@ def create_company(
         s.add(c)
         s.flush()
         result = _to_company_out(c)
+
+        # Företagslån med personlig borgen · skapas i biz-scope
+        if body.form == "ab" and body.funding_method == "business_loan_pg" and needed_capital > 0:
+            from ..business.models import CompanyLoan
+            from .foretag_growth import _annuity_payment, LOAN_TERMS
+            terms = LOAN_TERMS["startup_capital"]
+            rate = terms["rate_with_guarantee"]  # personlig borgen → bättre ränta
+            months = terms["months"]
+            monthly = _annuity_payment(needed_capital, rate, months)
+            biz_loan = CompanyLoan(
+                company_id=c.id,
+                purpose="startup_capital",
+                lender="Företagsbanken AB",
+                principal=needed_capital,
+                outstanding=needed_capital,
+                interest_rate=Decimal(str(rate)),
+                monthly_payment=monthly,
+                months_total=months,
+                months_left=months,
+                is_personal_guarantee=True,
+                status="active",
+                started_on=date.today(),
+            )
+            s.add(biz_loan)
+            # Lånet syns som "income" på company kassan (motpost = skuld)
+            s.add(CompanyTransaction(
+                company_id=c.id,
+                occurred_on=date.today(),
+                kind="income",
+                category="Lån · startkapital",
+                description=(
+                    f"Startup-kapitallån · {needed_capital} kr · "
+                    f"{int(rate * 100)}% ränta · personlig borgen"
+                ),
+                amount_excl_vat=Decimal(str(needed_capital)),
+                vat_rate=Decimal("0.0"),
+                vat_amount=Decimal(0),
+            ))
+            s.flush()
 
         # Seed initiala vecko-tickar så bolaget inte är tomt direkt efter
         # skapande. Eleven ska se några första offerter/kunder att jobba
