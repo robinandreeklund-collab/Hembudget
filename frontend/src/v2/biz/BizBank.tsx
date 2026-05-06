@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { bizApi, type BizBankOverview } from "./api";
+import { BizActorShell } from "./BizActorShell";
 import "./biz.css";
 
 
@@ -44,20 +45,23 @@ export function BizBank() {
 
   if (error) {
     return (
-      <div className="biz-shell">
-        <Link to="/v2/foretag" className="biz-back">
-          Tillbaka till biz-hubben
-        </Link>
+      <BizActorShell
+        pillLabel="Aktör · biz · Banken (företag)"
+        title={<>Företagskonto.</>}
+      >
         <div className="biz-error">{error}</div>
-      </div>
+      </BizActorShell>
     );
   }
 
   if (!data) {
     return (
-      <div className="biz-shell">
+      <BizActorShell
+        pillLabel="Aktör · biz · Banken (företag)"
+        title={<>Laddar.</>}
+      >
         <div className="biz-empty">Laddar bank-data…</div>
-      </div>
+      </BizActorShell>
     );
   }
 
@@ -66,24 +70,21 @@ export function BizBank() {
   const lastTxDate = data.transactions[0]?.occurred_on;
 
   return (
-    <div className="biz-shell">
-      <Link to="/v2/foretag" className="biz-back">
-        Tillbaka till biz-hubben
-      </Link>
-
-      {/* === actor-head: rubrik + saldo-meta === */}
-      <header className="actor-head">
-        <div>
-          <span className="biz-pill">Aktör · biz · Banken (företag)</span>
-          <h1 className="actor-name" style={{ marginTop: 14 }}>
-            Företagskonto — <em>separat från privat</em>.
-          </h1>
-          <p className="actor-sub">
-            {primaryAcct?.name || "Företagskonto"} · separat från ditt
-            privatkonto · obligatoriskt enligt skattelagen
-          </p>
-        </div>
-        <div className="actor-meta">
+    <BizActorShell
+      pillLabel="Aktör · biz · Banken (företag)"
+      title={
+        <>
+          Företagskonto — <em>separat från privat</em>.
+        </>
+      }
+      subtitle={
+        <>
+          {primaryAcct?.name || "Företagskonto"} · separat från ditt
+          privatkonto · obligatoriskt enligt skattelagen
+        </>
+      }
+      meta={
+        <>
           Saldo: <strong>{SEK(primaryAcct?.balance || 0)} kr</strong>
           <br />
           Senaste rörelse:{" "}
@@ -103,9 +104,9 @@ export function BizBank() {
               F-skatt prognos: <strong>—</strong>
             </>
           )}
-        </div>
-      </header>
-
+        </>
+      }
+    >
       {/* === 3-konto-grid === */}
       <div className="acct-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         {data.accounts.map((acc) => (
@@ -324,6 +325,6 @@ export function BizBank() {
           direkt — utan på årsbasis när överskottet beskattas.
         </div>
       </div>
-    </div>
+    </BizActorShell>
   );
 }

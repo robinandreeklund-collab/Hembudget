@@ -2,6 +2,9 @@
  * BizActorShell · gemensam layout för alla biz-aktör-vyer.
  *
  * Matchar prototypen vol-7 p-biz-* exakt:
+ *   - V2Topbar med data-mode="business" → indigo theming
+ *   - v2-biz-root · dark gradient + grid backdrop
+ *   - biz-shell · layout-padding (max-width 1320, sidbredd)
  *   - actor-back · "Tillbaka till biz-hubben"
  *   - actor-head (grid 1fr auto): vänster = pill + actor-name + actor-sub,
  *     höger = actor-meta (mono-text med bold-värden)
@@ -11,6 +14,7 @@
  */
 import { useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { V2Topbar } from "../V2Topbar";
 import "./biz.css";
 
 
@@ -41,23 +45,26 @@ export function BizActorShell({
   }, []);
 
   return (
-    <div className="biz-shell">
-      <Link to={backTo} className="actor-back">
-        {backLabel}
-      </Link>
+    <div className="v2-biz-root">
+      <V2Topbar status={{ role: "student", is_super_admin: false }} />
+      <div className="biz-shell">
+        <Link to={backTo} className="actor-back">
+          {backLabel}
+        </Link>
 
-      <header className="actor-head">
-        <div>
-          <span className="biz-pill">{pillLabel}</span>
-          <h1 className="actor-name" style={{ marginTop: 14 }}>
-            {title}
-          </h1>
-          {subtitle && <p className="actor-sub">{subtitle}</p>}
-        </div>
-        {meta && <div className="actor-meta">{meta}</div>}
-      </header>
+        <header className="actor-head">
+          <div>
+            <span className="biz-pill">{pillLabel}</span>
+            <h1 className="actor-name" style={{ marginTop: 14 }}>
+              {title}
+            </h1>
+            {subtitle && <p className="actor-sub">{subtitle}</p>}
+          </div>
+          {meta && <div className="actor-meta">{meta}</div>}
+        </header>
 
-      {children}
+        {children}
+      </div>
     </div>
   );
 }

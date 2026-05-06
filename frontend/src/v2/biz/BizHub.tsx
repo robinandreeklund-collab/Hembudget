@@ -10,8 +10,9 @@
  *   4. compass · 7 företags-aktörer som klickbara noder
  *   5. peda-block "Hur biz & privat hänger ihop" — ordagrant från prototyp
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { V2Topbar } from "../V2Topbar";
 import {
   bizApi,
   type BizPentagon,
@@ -20,6 +21,25 @@ import {
 } from "./api";
 import { BizPentagon as BizPentagonChart } from "./BizPentagon";
 import "./biz.css";
+
+
+/** Hub-shell: V2Topbar + dark backdrop · samma wrapper som BizActorShell
+ * fast utan actor-head (eftersom hubben har egen char-card-design). */
+function BizHubShell({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const prev = document.body.getAttribute("data-mode");
+    document.body.setAttribute("data-mode", "business");
+    return () => {
+      document.body.setAttribute("data-mode", prev || "private");
+    };
+  }, []);
+  return (
+    <div className="v2-biz-root">
+      <V2Topbar status={{ role: "student", is_super_admin: false }} />
+      <div className="biz-shell">{children}</div>
+    </div>
+  );
+}
 
 
 const SEK = (n: number) =>
@@ -38,11 +58,7 @@ type HubStats = {
 
 
 export function BizHub() {
-  // Säkerställ att body[data-mode="business"] är satt (för indigo topbar)
-  useEffect(() => {
-    document.body.setAttribute("data-mode", "business");
-  }, []);
-
+  // body[data-mode="business"] sätts av BizHubShell · ingen useEffect här.
   const [company, setCompany] = useState<Company | null>(null);
   const [pentagon, setPentagon] = useState<BizPentagon | null>(null);
   const [allowed, setAllowed] = useState<boolean | null>(null);
@@ -123,15 +139,15 @@ export function BizHub() {
   if (allowed === false) return <BusinessNotAllowed />;
   if (loading) {
     return (
-      <div className="biz-shell">
+      <BizHubShell>
         <div className="biz-empty">Laddar bolagets data…</div>
-      </div>
+      </BizHubShell>
     );
   }
   if (!company) return <CompanyOnboarding onCreated={(c) => setCompany(c)} />;
 
   return (
-    <div className="biz-shell">
+    <BizHubShell>
       {/* === 1. HUB-HEAD: rubrik + biz-char-card === */}
       <div className="biz-hub-head">
         <div>
@@ -267,7 +283,7 @@ export function BizHub() {
 
       {/* Spelmotor-knappen längst ner (lärar-funktion) */}
       <TickWeekButton />
-    </div>
+    </BizHubShell>
   );
 }
 
@@ -599,7 +615,7 @@ function TickWeekButton() {
  * ====================================================================== */
 function BusinessNotAllowed() {
   return (
-    <div className="biz-shell">
+    <BizHubShell>
       <div
         style={{
           padding: "60px 40px",
@@ -645,7 +661,7 @@ function BusinessNotAllowed() {
           ← Tillbaka till privatekonomin
         </Link>
       </div>
-    </div>
+    </BizHubShell>
   );
 }
 
@@ -681,7 +697,7 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
   };
 
   return (
-    <div className="biz-shell">
+    <BizHubShell>
       <div
         style={{
           padding: "60px 40px",
@@ -754,7 +770,7 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
           {busy ? "Skapar…" : "Starta bolaget →"}
         </button>
       </div>
-    </div>
+    </BizHubShell>
   );
 }
 
