@@ -77,6 +77,26 @@ body[data-mode="business"]::before {
 }
 
 
+/* === Mode-paneler · matchar prototypens .panel-system ===
+ * Båda panelerna (privat + företag) är permanent mountade i DOM:en;
+ * body[data-mode] styr vilken som visas via display. Detta är kritiskt
+ * för en SMOOTH flip-animation: när modet byts mid-flip är swappen ren
+ * CSS — inga React-renders, inga API-anrop, inga layout-recomputes
+ * mid-animation. Identiskt med prototyp vol-7 rad 117-118 där
+ * .panel.active-klassen växlas mellan siblings i DOM:en. */
+.v2-mode-panel-private,
+.v2-mode-panel-business {
+  /* Block-default. Body[data-mode] överrider till none nedan. */
+  display: block;
+}
+body[data-mode="business"] .v2-mode-panel-private {
+  display: none;
+}
+body:not([data-mode="business"]) .v2-mode-panel-business {
+  display: none;
+}
+
+
 /* === Flip-target · BARA datan flippar (matchar prototypens .app) === */
 
 .v2-flip-perspective {

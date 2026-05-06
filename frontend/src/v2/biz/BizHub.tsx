@@ -26,15 +26,14 @@ import "./biz.css";
 
 
 /** Hub-shell: V2Topbar + dark backdrop · samma wrapper som BizActorShell
- * fast utan actor-head (eftersom hubben har egen char-card-design). */
+ * fast utan actor-head (eftersom hubben har egen char-card-design).
+ *
+ * OBS: body[data-mode] sätts av V2Topbar.toggleMode (samt initial
+ * useCompanyMode-mount). Vi sätter den INTE här, eftersom BizHub är
+ * permanent mountad inuti CompanyModeWrapper (även när panelet är
+ * display:none) — om vi tvingade "business" i en useEffect skulle
+ * privat-läget gå sönder så fort eleven besökt /v2/hub en gång. */
 function BizHubShell({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    const prev = document.body.getAttribute("data-mode");
-    document.body.setAttribute("data-mode", "business");
-    return () => {
-      document.body.setAttribute("data-mode", prev || "private");
-    };
-  }, []);
   return (
     <div className="v2-biz-root">
       <V2Topbar status={{ role: "student", is_super_admin: false }} />
