@@ -103,7 +103,7 @@ def create_job_ad(
     student_id = _require_student(info)
     from ..school.engines import master_session
     from ..school.models import (
-        ClassCompanyShare, CompanyJobAd, Student,
+        ClassCompanyShare, CompanyEmployment, CompanyJobAd, Student,
     )
 
     with session_scope() as scope_s:
@@ -115,6 +115,22 @@ def create_job_ad(
         if co is None:
             raise HTTPException(400, "Du måste ha ett aktivt företag")
         co_id = co.id
+
+        # Spärr · lokalen måste ha plats för en till anställd. Hemmakontor
+        # tillåter typiskt 0 anställda — då är jobbannonsen meningslös
+        # eftersom även om en klasskompis söker har du ingenstans att
+        # ha hen att jobba.
+        from ..business.models import CompanyLocation as _CLoc
+        loc = (
+            scope_s.query(_CLoc)
+            .filter(
+                _CLoc.company_id == co_id,
+                _CLoc.is_active.is_(True),
+            )
+            .first()
+        )
+        loc_max = int(loc.max_employees) if loc else 0
+        loc_label = loc.location_kind if loc else "Hemmakontor"
 
         # Försök hitta share. Saknas den = self-heal: kör sync_class_
         # company_share så cachen byggs nu istället för att tvinga eleven
@@ -169,6 +185,35 @@ def create_job_ad(
         share = s.get(ClassCompanyShare, share_id)
         if share is None:
             raise HTTPException(503, "Allabolag-cachen försvann")
+
+        # Räkna aktiva anställningar + ev. öppna jobbannonser så vi inte
+        # tillåter eleven posta fler än lokalen rymmer.
+        n_active_empls = (
+            s.query(CompanyEmployment)
+            .filter(
+                CompanyEmployment.company_share_id == share.id,
+                CompanyEmployment.status == "active",
+            )
+            .count()
+        )
+        n_open_ads = (
+            s.query(CompanyJobAd)
+            .filter(
+                CompanyJobAd.company_share_id == share.id,
+                CompanyJobAd.status == "open",
+            )
+            .count()
+        )
+        if n_active_empls + n_open_ads >= loc_max:
+            raise HTTPException(
+                403,
+                f"Lokalen ({loc_label}) har plats för max {loc_max} "
+                f"anställda. Du har redan {n_active_empls} anställd"
+                f"{'a' if n_active_empls != 1 else ''} + {n_open_ads} "
+                f"öppen{'a' if n_open_ads != 1 else ''} annons"
+                f"{'er' if n_open_ads != 1 else ''}. "
+                "Uppgradera lokalen i Tillväxt-vyn först.",
+            )
 
         ad = CompanyJobAd(
             company_share_id=share.id,
@@ -261,6 +306,167 @@ def list_my_job_ads(info: TokenInfo = Depends(require_token)):
         return []
 
 
+class OwnerEmploymentOut(BaseModel):
+    id: int
+    employee_display: str
+    monthly_salary: int
+    started_at: str
+    ended_at: Optional[str]
+    status: str  # active | notice_period | terminated
+    notice_days_left: Optional[int]
+
+
+@owner_router.get(
+    "/employments", response_model=list[OwnerEmploymentOut],
+)
+def list_my_employments(info: TokenInfo = Depends(require_token)):
+    """Lista alla anställda hos företagsägaren · för säga-upp-flödet."""
+    student_id = _require_student(info)
+    from ..school.engines import master_session
+    from ..school.models import (
+        ClassCompanyShare, CompanyEmployment, Student,
+    )
+    today = datetime.utcnow().date()
+    with master_session() as s:
+        # Hämta ägarens shares
+        share_ids = [
+            sid for (sid,) in (
+                s.query(ClassCompanyShare.id)
+                .filter(ClassCompanyShare.owner_student_id == student_id)
+                .all()
+            )
+        ]
+        if not share_ids:
+            return []
+        empls = (
+            s.query(CompanyEmployment)
+            .filter(CompanyEmployment.company_share_id.in_(share_ids))
+            .order_by(CompanyEmployment.started_at.desc())
+            .all()
+        )
+        # Auto-sweep · notice_period vars ended_at passerats → terminated
+        for e in empls:
+            if (
+                e.status == "notice_period"
+                and e.ended_at
+                and e.ended_at <= today
+            ):
+                e.status = "terminated"
+        s.flush()
+        emp_ids = list({e.employee_student_id for e in empls})
+        students = (
+            s.query(Student).filter(Student.id.in_(emp_ids)).all()
+        )
+        name_map = {st.id: st.display_name for st in students}
+        out = []
+        for e in empls:
+            notice_left: Optional[int] = None
+            if e.status == "notice_period" and e.ended_at:
+                notice_left = max(0, (e.ended_at - today).days)
+            out.append(OwnerEmploymentOut(
+                id=e.id,
+                employee_display=name_map.get(
+                    e.employee_student_id, "Anställd",
+                ),
+                monthly_salary=e.monthly_salary,
+                started_at=e.started_at.isoformat(),
+                ended_at=e.ended_at.isoformat() if e.ended_at else None,
+                status=e.status,
+                notice_days_left=notice_left,
+            ))
+        s.commit()
+        return out
+
+
+class TerminateEmploymentOut(BaseModel):
+    id: int
+    notice_period_months: int
+    end_date: str
+    status: str
+    message: str
+
+
+@owner_router.post(
+    "/employments/{empl_id}/terminate",
+    response_model=TerminateEmploymentOut,
+)
+def terminate_employment(
+    empl_id: int,
+    info: TokenInfo = Depends(require_token),
+):
+    """Säg upp en anställd. LAS-uppsägningstid baserat på anställningstid:
+        < 2 år → 1 mån
+        2-4 år → 2 mån
+        4-6 år → 3 mån
+        6-8 år → 4 mån
+        8-10 år → 5 mån
+        10+ år → 6 mån
+    Klass-företaget i skol-simuleringen kommer aldrig nå längre än
+    några månader, så praktiskt blir det 1 månad. Anställningen får
+    status='notice_period' och slutdatum sätts. Lön betalas tills
+    end_date av tick-engine via _phase_f.
+    """
+    student_id = _require_student(info)
+    from ..school.engines import master_session
+    from ..school.models import (
+        ClassCompanyShare, CompanyEmployment, Student,
+    )
+
+    today = datetime.utcnow().date()
+    with master_session() as s:
+        empl = s.get(CompanyEmployment, empl_id)
+        if empl is None:
+            raise HTTPException(404, "Anställning saknas")
+        share = s.get(ClassCompanyShare, empl.company_share_id)
+        if share is None or share.owner_student_id != student_id:
+            raise HTTPException(403, "Inte din anställd")
+        if empl.status != "active":
+            raise HTTPException(
+                409, f"Anställningen är redan i status '{empl.status}'",
+            )
+
+        # Räkna anställningstid → uppsägningstid (LAS § 11)
+        years_employed = (today - empl.started_at).days / 365.25
+        if years_employed >= 10:
+            notice_months = 6
+        elif years_employed >= 8:
+            notice_months = 5
+        elif years_employed >= 6:
+            notice_months = 4
+        elif years_employed >= 4:
+            notice_months = 3
+        elif years_employed >= 2:
+            notice_months = 2
+        else:
+            notice_months = 1
+
+        from datetime import timedelta as _td
+        end_date = today + _td(days=notice_months * 30)
+
+        empl.status = "notice_period"
+        empl.ended_at = end_date
+
+        # Klass-företag-cache: räkna ner n_employees när uppsägningen
+        # går ut (görs av tick-engine när status flippar till
+        # "terminated"); just nu räknas hen fortfarande aktivt anställd.
+
+        s.commit()
+        applicant = s.get(Student, empl.employee_student_id)
+        msg = (
+            f"{applicant.display_name if applicant else 'Anställd'} har "
+            f"sagts upp · uppsägningstid {notice_months} mån (LAS § 11). "
+            f"Slutdatum: {end_date.isoformat()}. Lön betalas till "
+            "slutdatumet."
+        )
+        return TerminateEmploymentOut(
+            id=empl.id,
+            notice_period_months=notice_months,
+            end_date=end_date.isoformat(),
+            status=empl.status,
+            message=msg,
+        )
+
+
 @owner_router.get("/{ad_id}/applications", response_model=list[JobApplicationOut])
 def list_applications(
     ad_id: int,
@@ -340,6 +546,54 @@ def decide_application(
         app_row.decided_at = now
 
         if body.decision == "accepted":
+            # Max-anställda-spärr · kolla aktuell lokal-kapacitet
+            try:
+                from ..business.models import (
+                    Company as _Co, CompanyLocation as _CLoc,
+                )
+                from ..db.base import session_scope as _scsc
+                with _scsc() as scope_s:
+                    co_local = (
+                        scope_s.query(_Co)
+                        .filter(_Co.active.is_(True))
+                        .first()
+                    )
+                    if co_local is not None:
+                        loc = (
+                            scope_s.query(_CLoc)
+                            .filter(
+                                _CLoc.company_id == co_local.id,
+                                _CLoc.is_active.is_(True),
+                            )
+                            .first()
+                        )
+                        loc_max = int(loc.max_employees) if loc else 0
+                        loc_label = (
+                            loc.location_kind if loc else "Hemmakontor"
+                        )
+                        n_active = (
+                            s.query(CompanyEmployment)
+                            .filter(
+                                CompanyEmployment.company_share_id
+                                == ad.company_share_id,
+                                CompanyEmployment.status == "active",
+                            )
+                            .count()
+                        )
+                        if n_active >= loc_max:
+                            raise HTTPException(
+                                403,
+                                f"Lokalen ({loc_label}) har plats för max "
+                                f"{loc_max} anställda. Du har redan "
+                                f"{n_active}. Uppgradera lokalen i "
+                                "Tillväxt-vyn först.",
+                            )
+            except HTTPException:
+                raise
+            except Exception:
+                log.exception(
+                    "decide_application: max_employees-check misslyckades",
+                )
             ad.status = "filled"
             ad.hired_student_id = app_row.applicant_student_id
             ad.filled_at = now

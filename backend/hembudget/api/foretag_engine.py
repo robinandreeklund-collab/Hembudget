@@ -789,11 +789,20 @@ def buy_marketing_package(
     with session_scope() as s:
         co = _get_active_company(s)
 
-        # Räcker pengarna? Vi har inte direkt tillgång till företagets
-        # kassa här — låter MarketingCampaign + transaktion gå igenom så
-        # ger eleven feedback via auto-tick (övertrasering syns på
-        # kontoutdraget). Pedagogiskt: konsekvensen får eleven se i
-        # bokföringen, inte som hård spärr.
+        # Hård spärr · paketet får inte ta kassan minus. Pedagogiskt:
+        # 750 000 kr TV-reklam när kassan är 50k är inte feedback-i-
+        # bokföringen, det är en katastrof. Returnera 402 så frontend
+        # kan föreslå att ta tillväxtlån eller välja billigare paket.
+        from .foretag_growth import _kassa
+        bal = _kassa(s, co)
+        if bal < pkg["cost"]:
+            raise HTTPException(
+                402,
+                f"Otillräcklig kassa · {pkg['cost'] - bal} kr saknas. "
+                f"Kassan är {bal} kr · paketet kostar {pkg['cost']} kr. "
+                "Ta ett tillväxtlån (Tillväxt → Lån) eller välj ett "
+                "billigare paket.",
+            )
 
         m = MarketingCampaign(
             company_id=co.id,
@@ -907,6 +916,21 @@ def create_decision(
     today = date.today()
     with session_scope() as s:
         co = _get_active_company(s)
+        # Kassa-spärr · engångskostnad + första veckans löpande kost
+        # ska få plats. Pedagogiskt: aktivera inte ett 35 000 kr/mån-
+        # beslut om kassan är 5 000 kr.
+        from .foretag_growth import _kassa
+        bal = _kassa(s, co)
+        weekly = int(round((body.monthly_cost or 0) / 4))
+        first_hit = (body.one_time_cost or 0) + weekly
+        if bal < first_hit:
+            raise HTTPException(
+                402,
+                f"Otillräcklig kassa · {first_hit - bal} kr saknas. "
+                f"Kassan är {bal} kr men beslutet kostar "
+                f"{body.one_time_cost} kr nu + {weekly} kr första veckan. "
+                "Ta ett tillväxtlån (Tillväxt → Lån) först.",
+            )
         d = BusinessDecision(
             company_id=co.id,
             kind=body.kind,

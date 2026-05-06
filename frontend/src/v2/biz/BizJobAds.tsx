@@ -33,6 +33,16 @@ type Application = {
   submitted_at: string;
 };
 
+type OwnerEmployment = {
+  id: number;
+  employee_display: string;
+  monthly_salary: number;
+  started_at: string;
+  ended_at: string | null;
+  status: string;
+  notice_days_left: number | null;
+};
+
 
 const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
@@ -40,6 +50,7 @@ const SEK = (n: number) =>
 
 export function BizJobAds() {
   const [ads, setAds] = useState<JobAd[]>([]);
+  const [employments, setEmployments] = useState<OwnerEmployment[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,9 +58,31 @@ export function BizJobAds() {
     api<JobAd[]>("/v2/foretag/job-ads/mine")
       .then(setAds)
       .catch((e) => setError(String((e as Error).message || e)));
+    api<OwnerEmployment[]>("/v2/foretag/job-ads/employments")
+      .then(setEmployments)
+      .catch(() => undefined);
   }
 
   useEffect(() => { refresh(); }, []);
+
+  async function terminateEmployment(empl: OwnerEmployment) {
+    if (!confirm(
+      `Säga upp ${empl.employee_display}?\n\n` +
+      "Uppsägningstiden räknas enligt LAS § 11 baserat på " +
+      "anställningstid. Lön betalas till slutdatumet.\n\n" +
+      "Detta går inte att ångra."
+    )) return;
+    try {
+      const res = await api<{ message: string }>(
+        `/v2/foretag/job-ads/employments/${empl.id}/terminate`,
+        { method: "POST" },
+      );
+      alert(res.message);
+      refresh();
+    } catch (e) {
+      alert(`Fel: ${(e as Error).message || e}`);
+    }
+  }
 
   const open = ads.filter((a) => a.status === "open");
   const filled = ads.filter((a) => a.status !== "open");
@@ -115,7 +148,77 @@ export function BizJobAds() {
         </>
       )}
 
-      {ads.length === 0 && (
+      {employments.length > 0 && (
+        <>
+          <div style={{ ...sectionEyeStyle, color: "#6ee7b7", marginTop: 32, marginBottom: 12 }}>
+            ● MINA ANSTÄLLDA · {employments.filter((e) => e.status === "active").length} aktiva
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {employments.map((e) => {
+              const isActive = e.status === "active";
+              const isNotice = e.status === "notice_period";
+              const bg = isActive
+                ? "rgba(110,231,183,0.05)"
+                : isNotice
+                  ? "rgba(251,191,36,0.06)"
+                  : "rgba(15,21,37,0.4)";
+              const border = isActive
+                ? "rgba(110,231,183,0.25)"
+                : isNotice
+                  ? "rgba(251,191,36,0.30)"
+                  : "rgba(255,255,255,0.06)";
+              return (
+                <div key={e.id} style={{
+                  padding: 14,
+                  background: bg,
+                  border: `1px solid ${border}`,
+                  borderRadius: 8,
+                  display: "flex", gap: 12, alignItems: "center",
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "Source Serif 4, Georgia, serif", color: "#fff", fontWeight: 700 }}>
+                      {e.employee_display}
+                    </div>
+                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.55)", letterSpacing: 0.6, marginTop: 4 }}>
+                      {SEK(e.monthly_salary)} kr/mån · sedan {e.started_at}
+                      {isNotice && e.notice_days_left !== null && (
+                        <span style={{ color: "#fbbf24", marginLeft: 8 }}>
+                          · UPPSAGD · slutar om {e.notice_days_left} dgr
+                        </span>
+                      )}
+                      {e.status === "terminated" && (
+                        <span style={{ color: "rgba(255,255,255,0.45)", marginLeft: 8 }}>
+                          · AVSLUTAD {e.ended_at}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {isActive && (
+                    <button
+                      onClick={() => terminateEmployment(e)}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid rgba(220,76,43,0.40)",
+                        color: "#fda594",
+                        padding: "7px 14px",
+                        borderRadius: 6,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 10, fontWeight: 700,
+                        letterSpacing: 1.2, textTransform: "uppercase",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Säg upp
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {ads.length === 0 && employments.length === 0 && (
         <div style={emptyStateStyle}>
           Du har inga jobbannonser. Klicka "Posta ny jobbannons" för att hitta en klasskompis till bolaget.
         </div>

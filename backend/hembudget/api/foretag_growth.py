@@ -462,8 +462,10 @@ def upgrade_location(
             cost = meta["purchase_price"]
             if kassa < cost:
                 raise HTTPException(
-                    400,
-                    f"Otillräcklig kassa · {cost - kassa} kr saknas",
+                    402,
+                    f"Otillräcklig kassa · {cost - kassa} kr saknas. "
+                    f"Kassan är {kassa} kr · lokalen kostar {cost} kr. "
+                    "Ta ett tillväxtlån (Tillväxt → Lån) först.",
                 )
             # Bokför som expense
             s.add(CompanyTransaction(
@@ -476,6 +478,18 @@ def upgrade_location(
                 vat_rate=Decimal("0.0"),
                 vat_amount=Decimal(0),
             ))
+        elif not body.is_purchase and meta["monthly_cost"] > 0:
+            # Hyra · första veckans hyra debiteras direkt av tick.
+            # Kräv minst 1 mån hyra som buffert så lokalen inte
+            # går minus dag 1.
+            min_buffer = meta["monthly_cost"]
+            if kassa < min_buffer:
+                raise HTTPException(
+                    402,
+                    f"Otillräcklig kassa för att hyra · {min_buffer} kr "
+                    f"behövs som första-månadens-buffert (kassan är {kassa} kr). "
+                    "Ta ett tillväxtlån (Tillväxt → Lån) först.",
+                )
         # Inaktivera gammal
         existing = _get_active_location(s, c.id)
         if existing is not None:
