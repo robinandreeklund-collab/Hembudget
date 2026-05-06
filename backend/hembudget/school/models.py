@@ -6,6 +6,7 @@ inte elev-data och student-DB:ar innehåller inte lärare/elever.
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -1359,6 +1360,20 @@ class ClassCompanyShare(MasterBase):
         DateTime, nullable=True,
     )
 
+    # Fas G · företags-UC + nivå-progression
+    uc_score: Mapped[int] = mapped_column(
+        Integer, default=50, nullable=False,
+    )  # 0-100 · företagets kreditvärdighet
+    uc_rating: Mapped[str] = mapped_column(
+        String(4), default="B", nullable=False,
+    )  # AAA | A | B | C | D
+    company_level: Mapped[str] = mapped_column(
+        String(20), default="startup", nullable=False,
+    )  # startup | vaxande | etablerat | marknadsledare
+    level_unlocked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
     last_synced_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
@@ -1560,6 +1575,119 @@ class CompanyEmployment(MasterBase):
     # Status: active | terminated
     status: Mapped[str] = mapped_column(
         String(20), default="active", nullable=False,
+    )
+
+
+class ClassSeasonEvent(MasterBase):
+    """Säsong-event aktiverat av läraren · Black Friday, kris osv.
+
+    Spec: Fas J"""
+    __tablename__ = "class_season_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    event_kind: Mapped[str] = mapped_column(
+        String(40), nullable=False,
+    )  # black_friday | recruitment_crisis | sustainability | bankruptcy_chain
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+    ends_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+
+
+class CompanyMentorship(MasterBase):
+    """Mentor-relation · framgångsrikt bolag hjälper svagare.
+
+    Båda bolagen får poäng. Mentorn får 'mentor_helps'-räknare,
+    mentee:n får tillfällig +rykte-boost.
+    Spec: Fas I"""
+    __tablename__ = "company_mentorships"
+    __table_args__ = (
+        UniqueConstraint(
+            "mentor_share_id", "mentee_share_id",
+            name="uq_company_mentorship",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mentor_share_id: Mapped[int] = mapped_column(
+        ForeignKey("class_company_shares.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    mentee_share_id: Mapped[int] = mapped_column(
+        ForeignKey("class_company_shares.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    ended_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+
+
+class StudentEntrepreneurScore(MasterBase):
+    """Elevens entreprenörspoäng + badges. Beräknas av compute helper
+    från ClassCompanyShare-data + relevanta events.
+
+    Spec: Fas H · multi-leaderboard"""
+    __tablename__ = "student_entrepreneur_scores"
+
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    total_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    badges: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True,
+    )  # {badge_key: earned_at_iso}
+    last_recomputed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class ClassWeeklyAward(MasterBase):
+    """Veckans vinnare per kategori. Skapas av compute helper.
+
+    Spec: Fas H"""
+    __tablename__ = "class_weekly_awards"
+    __table_args__ = (
+        UniqueConstraint(
+            "teacher_id", "category", "iso_year", "iso_week",
+            name="uq_class_weekly_award",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    iso_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    iso_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    winner_student_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("students.id", ondelete="SET NULL"), nullable=True,
+    )
+    winner_company_name: Mapped[Optional[str]] = mapped_column(
+        String(160), nullable=True,
+    )
+    metric_value: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 4), nullable=True,
+    )
+    awarded_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
     )
 
 

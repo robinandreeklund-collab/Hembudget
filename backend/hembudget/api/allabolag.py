@@ -53,6 +53,9 @@ class AllabolagRow(BaseModel):
     annual_report_status: str
     annual_report_year: Optional[int]
     annual_report_decided_at: Optional[str]
+    uc_score: int = 50
+    uc_rating: str = "B"
+    company_level: str = "startup"
     is_mine: bool
     is_published: bool
     owner_display_name: Optional[str]
@@ -72,6 +75,80 @@ class TogglePublishIn(BaseModel):
 
 
 # === Sync helper · uppdatera cache från scope-DB ===
+
+def _compute_uc(
+    *,
+    kassa: int,
+    margin_pct: float,
+    income_4w: int,
+    n_invoices_overdue: int,
+    reputation: int,
+    weeks_active: int,
+) -> tuple[int, str]:
+    """Räkna ut företags-UC 0-100 + rating-bokstav.
+
+    Spec: Fas G
+      Likviditet (kassa/4v-snittkostnad)  30 %
+      Vinstmarginal 4 v                   25 %
+      Försenade fakturor (negativt)        20 %
+      Rykte                                15 %
+      Företagets ålder                     10 %
+    """
+    # Likviditet · approx-månadskostnad = expense + lön. Eftersom vi inte
+    # har den direkt här tar vi income_4w som proxy: kassa relativt 4v-oms.
+    base_monthly = max(1, income_4w * 0.6)  # förenklad bedömning
+    liquidity_score = max(0, min(100, int(kassa / base_monthly * 50)))
+
+    # Marginal: 0-50 → 0-100 score
+    margin_score = max(0, min(100, int((margin_pct + 10) * 5)))
+
+    # Försenade fakturor: 0 = 100, 5+ = 0
+    overdue_score = max(0, min(100, 100 - n_invoices_overdue * 20))
+
+    # Rykte direkt
+    rep_score = reputation
+
+    # Ålder: 0v = 30, 12v+ = 100
+    age_score = max(30, min(100, 30 + weeks_active * 6))
+
+    score = int(round(
+        liquidity_score * 0.30
+        + margin_score * 0.25
+        + overdue_score * 0.20
+        + rep_score * 0.15
+        + age_score * 0.10
+    ))
+    score = max(0, min(100, score))
+
+    if score >= 75:
+        rating = "AAA"
+    elif score >= 60:
+        rating = "A"
+    elif score >= 40:
+        rating = "B"
+    elif score >= 20:
+        rating = "C"
+    else:
+        rating = "D"
+    return score, rating
+
+
+def _compute_level(
+    *,
+    income_4w: int,
+    kassa: int,
+    n_employees: int,
+    reputation: int,
+) -> str:
+    """4-nivå-progression. Spec: Fas G."""
+    if income_4w >= 500000 and n_employees >= 5 and reputation >= 85:
+        return "marknadsledare"
+    if income_4w >= 200000 and n_employees >= 3 and kassa >= 50000:
+        return "etablerat"
+    if income_4w >= 50000 and n_employees >= 1:
+        return "vaxande"
+    return "startup"
+
 
 def sync_class_company_share(
     s: SASession, *,
@@ -187,6 +264,28 @@ def sync_class_company_share(
             row.n_invoices_open = n_open
             row.n_invoices_overdue = n_overdue
             row.reputation = int(company.reputation or 50)
+
+            # Fas G · företags-UC + nivå-progression
+            uc_score, uc_rating = _compute_uc(
+                kassa=int(kassa),
+                margin_pct=margin,
+                income_4w=int(income),
+                n_invoices_overdue=n_overdue,
+                reputation=int(company.reputation or 50),
+                weeks_active=int(company.week_no or 0),
+            )
+            level = _compute_level(
+                income_4w=int(income),
+                kassa=int(kassa),
+                n_employees=n_employees,
+                reputation=int(company.reputation or 50),
+            )
+            if level != row.company_level and row.company_level:
+                row.level_unlocked_at = datetime.utcnow()
+            row.uc_score = uc_score
+            row.uc_rating = uc_rating
+            row.company_level = level
+
             row.last_synced_at = datetime.utcnow()
             ms.commit()
     except Exception:
@@ -274,6 +373,9 @@ def list_class_companies(info: TokenInfo = Depends(require_token)):
                 r.annual_report_decided_at.isoformat()
                 if r.annual_report_decided_at else None
             ),
+            uc_score=r.uc_score,
+            uc_rating=r.uc_rating,
+            company_level=r.company_level,
             is_mine=(r.owner_student_id == my_student_id),
             is_published=r.is_published,
             owner_display_name=name_map.get(r.owner_student_id),

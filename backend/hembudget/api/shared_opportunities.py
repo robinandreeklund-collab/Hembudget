@@ -105,7 +105,17 @@ def _emit_shared_opportunities_if_due(
         return 0
 
     now = datetime.utcnow()
-    cutoff = now - timedelta(hours=SHARED_EMIT_INTERVAL_HOURS)
+
+    # Fas J · Black Friday → 3× emit-frekvens
+    interval_hours = SHARED_EMIT_INTERVAL_HOURS
+    try:
+        from .biz_class_actions import is_event_active
+        if is_event_active(teacher_id, "black_friday"):
+            interval_hours = SHARED_EMIT_INTERVAL_HOURS / 3.0
+    except Exception:
+        pass
+
+    cutoff = now - timedelta(hours=interval_hours)
 
     with master_session() as s:
         # Senaste emit för denna kombo

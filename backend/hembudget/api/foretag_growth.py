@@ -670,6 +670,36 @@ def apply_loan(
         terms["rate_with_guarantee"] if body.is_personal_guarantee
         else terms["rate_no_guarantee"]
     )
+    # Fas G · UC påverkar räntan (justering ±5 %-enheter)
+    try:
+        from ..school.engines import master_session
+        from ..school.models import ClassCompanyShare
+        sid = info.student_id
+        with session_scope() as scope_s:
+            comp = _get_active_company(scope_s)
+        if comp is not None and sid is not None:
+            with master_session() as ms:
+                share = (
+                    ms.query(ClassCompanyShare)
+                    .filter(
+                        ClassCompanyShare.owner_student_id == sid,
+                        ClassCompanyShare.company_id_in_scope == comp.id,
+                    )
+                    .first()
+                )
+                if share is not None:
+                    if share.uc_rating == "AAA":
+                        rate -= 0.02
+                    elif share.uc_rating == "A":
+                        rate -= 0.01
+                    elif share.uc_rating == "C":
+                        rate += 0.02
+                    elif share.uc_rating == "D":
+                        rate += 0.05
+                    rate = max(0.03, rate)
+    except Exception:
+        pass
+
     months = terms["months"]
     monthly = _annuity_payment(body.principal, rate, months)
 

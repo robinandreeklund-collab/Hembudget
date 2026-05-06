@@ -72,6 +72,8 @@ import { BizSharedOpps } from "./v2/biz/BizSharedOpps";
 import { BizJobAds } from "./v2/biz/BizJobAds";
 import { BizTillvaxt } from "./v2/biz/BizTillvaxt";
 import { ArbetsformedlingenKlassJobb } from "./v2/ArbetsformedlingenKlassJobb";
+import { LeaderboardV2 } from "./v2/LeaderboardV2";
+import { TeacherSeasonEventsV2 } from "./v2/TeacherSeasonEventsV2";
 import {
   BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
 } from "./v2/biz/BizGameMotorPages";
@@ -428,6 +430,10 @@ export default function App() {
           <Route path="/v2/foretag/jobbannonser" element={<BizJobAds />} />
           {/* Tillväxt · lokaler, utrustning, kapacitet, lån */}
           <Route path="/v2/foretag/tillvaxt" element={<BizTillvaxt />} />
+          {/* Leaderboard · 12 kategorier + entreprenörspoäng + badges */}
+          <Route path="/v2/leaderboard" element={<LeaderboardV2 />} />
+          {/* Lärar-säsong-events */}
+          <Route path="/teacher/v2/season-events" element={<TeacherSeasonEventsV2 />} />
           {/* Klass-företag jobb (arbetssökande elev) */}
           <Route path="/v2/arbetsformedlingen/klass-jobb" element={<ArbetsformedlingenKlassJobb />} />
           <Route path="/v2/foretag/bokforing" element={<BizBokforing />} />

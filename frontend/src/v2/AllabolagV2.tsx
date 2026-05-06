@@ -35,10 +35,28 @@ type AllabolagRow = {
   annual_report_status: string;
   annual_report_year: number | null;
   annual_report_decided_at: string | null;
+  uc_score: number;
+  uc_rating: string;
+  company_level: string;
   is_mine: boolean;
   is_published: boolean;
   owner_display_name: string | null;
   last_synced_at: string;
+};
+
+
+const LEVEL_LABELS: Record<string, string> = {
+  startup: "Startup",
+  vaxande: "Växande",
+  etablerat: "Etablerat",
+  marknadsledare: "Marknadsledare",
+};
+
+const LEVEL_COLORS: Record<string, string> = {
+  startup: "rgba(255,255,255,0.5)",
+  vaxande: "#fbbf24",
+  etablerat: "#c7d2fe",
+  marknadsledare: "#6ee7b7",
 };
 
 type AllabolagOut = {
@@ -129,9 +147,19 @@ export function AllabolagV2() {
     <div className="v2-shell">
       <V2Topbar status={{ role: "student", is_super_admin: false }} />
       <div style={shellStyle}>
-        <Link to="/v2/hub" style={backLinkStyle}>
-          ← Tillbaka till hubben
-        </Link>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <Link to="/v2/hub" style={backLinkStyle}>
+            ← Tillbaka till hubben
+          </Link>
+          <Link to="/v2/leaderboard" style={{
+            fontFamily: "JetBrains Mono, monospace", fontSize: 10.5,
+            color: "#c7d2fe", letterSpacing: 1.2, textDecoration: "none",
+            background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.35)",
+            padding: "6px 12px", borderRadius: 6,
+          }}>
+            ● 12-KATEGORI-LEADERBOARD →
+          </Link>
+        </div>
 
         <header style={{ marginBottom: 32 }}>
           <span style={pillStyle}>● AKTÖR · ALLABOLAG · KLASSEN</span>
@@ -256,17 +284,27 @@ function CompanyRow({ row, rank }: { row: AllabolagRow; rank: number }) {
         {medal || `#${rank + 1}`}
       </div>
       <div>
-        <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 16, fontWeight: 700, color: "#fff" }}>
+        <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 16, fontWeight: 700, color: "#fff", display: "flex", gap: 8, alignItems: "baseline" }}>
           {row.company_name}
+          <span style={{
+            fontFamily: "JetBrains Mono, monospace", fontSize: 9, fontWeight: 700,
+            letterSpacing: 1.2, padding: "2px 8px", borderRadius: 100,
+            background: "rgba(255,255,255,0.05)",
+            border: `1px solid ${LEVEL_COLORS[row.company_level]}`,
+            color: LEVEL_COLORS[row.company_level],
+            textTransform: "uppercase",
+          }}>
+            {LEVEL_LABELS[row.company_level] || row.company_level}
+          </span>
           {row.is_mine && (
-            <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9, color: "#fbbf24", letterSpacing: 1.2, marginLeft: 10 }}>
-              DITT
+            <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9, color: "#fbbf24", letterSpacing: 1.2 }}>
+              · DITT
             </span>
           )}
         </div>
         <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2, letterSpacing: 0.5 }}>
           {row.industry_label || row.industry_key} · {row.form === "ab" ? "AB" : "EF"}
-          {row.owner_display_name && ` · ägare: ${row.owner_display_name}`}
+          {row.owner_display_name && ` · ägare: ${row.owner_display_name}`} · UC {row.uc_rating} ({row.uc_score})
         </div>
         {reportTone && (
           <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9, color: reportTone.color, marginTop: 4, letterSpacing: 0.8 }}>
