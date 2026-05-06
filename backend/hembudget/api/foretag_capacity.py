@@ -3,10 +3,12 @@
 Spec: Fas K · dev/feature-allabolag.md
 
 Modell:
-  Per person:        84 h produktiv tid/vecka
-  Privat-jobb äter:  weekly_hours_employed (default 40)
-  Anställda ger:     +84 h/anställd
-  MCP-frilans ger:   +40 h om aktiv
+  Ägaren:            84 h produktiv tid/v (entreprenörens egna timmar
+                     — inkl. kvällar/helger som man som egenföretagare
+                     ofta jobbar utöver dagjobbet)
+  Privat-jobb äter:  weekly_hours_employed (default 40 = heltidsjobb)
+  Anställda ger:     +40 h/heltidsanställd (svensk lagstadgad arbetstid)
+  MCP-frilans ger:   +40 h om aktiv (heltidsfrilansare 1 v)
 
 Tiers:
   T0 ≤ 100% kapacitet · ingen påföljd
@@ -39,9 +41,9 @@ router = APIRouter(prefix="/v2/foretag/capacity", tags=["foretag-capacity"])
 
 
 # Konfig
-PRODUCTIVE_HOURS_PER_PERSON_WEEK = 84.0
-EMPLOYEE_HOURS_PER_WEEK = 84.0
-MCP_HOURS_PER_WEEK = 40.0
+PRODUCTIVE_HOURS_PER_PERSON_WEEK = 84.0  # ägaren · inkl. kvällar/helger
+EMPLOYEE_HOURS_PER_WEEK = 40.0  # heltid · svensk lagstadgad arbetstid
+MCP_HOURS_PER_WEEK = 40.0  # frilans · 1 v heltid
 
 
 def _require_student(info: TokenInfo) -> int:

@@ -34,6 +34,8 @@ type SharedOpp = {
   has_my_quote: boolean;
   is_winner: boolean | null;
   decision_explanation: string | null;
+  estimated_hours: number;
+  hours_per_week: number;
 };
 
 type Competitor = {
@@ -183,9 +185,12 @@ function OppCard({ opp, onClick }: { opp: SharedOpp; onClick: () => void }) {
       <p style={{ color: "rgba(255,255,255,0.78)", fontFamily: "Inter, sans-serif", fontSize: 13, lineHeight: 1.5, margin: "8px 0" }}>
         {opp.description}
       </p>
-      <div style={{ display: "flex", gap: 18, marginTop: 10, fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.6)", letterSpacing: 0.6 }}>
+      <div style={{ display: "flex", gap: 18, marginTop: 10, flexWrap: "wrap", fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.6)", letterSpacing: 0.6 }}>
         <span>📅 Leverans inom <strong style={{ color: "#fff" }}>{opp.expected_delivery_days} dagar</strong></span>
         <span>💰 Riktpris <strong style={{ color: "#fbbf24" }}>{SEK(opp.market_price)} kr</strong></span>
+        {opp.estimated_hours > 0 && (
+          <span>⏱ Tid <strong style={{ color: "#6ee7b7" }}>{opp.estimated_hours} h</strong> · {opp.hours_per_week} h/v</span>
+        )}
         <span>👥 <strong style={{ color: "#c7d2fe" }}>{opp.n_competitors}</strong> konkurrenter</span>
         <span style={{ marginLeft: "auto", color: "#fbbf24", fontWeight: 700 }}>
           {opp.has_my_quote ? "ÄNDRA EJ MÖJLIGT" : "LÄMNA OFFERT →"}
@@ -391,10 +396,17 @@ function SharedQuoteModal({
             {opp.description}
           </div>
         </div>
-        <p style={{ color: "#aab", fontSize: "0.85rem", marginTop: 14 }}>
+        <p style={{ color: "#aab", fontSize: "0.85rem", marginTop: 14, lineHeight: 1.6 }}>
           Riktpris <strong style={{ color: "#fbbf24" }}>{SEK(opp.market_price)} kr</strong> ·
           förväntad leverans <strong style={{ color: "#fff" }}>{opp.expected_delivery_days} dagar</strong> ·
           deadline om <strong style={{ color: "#fda594" }}>{opp.hours_until_deadline.toFixed(1)} h</strong>
+          {opp.estimated_hours > 0 && (
+            <>
+              <br />
+              Uppskattad arbetsinsats: <strong style={{ color: "#6ee7b7" }}>{opp.estimated_hours} h</strong> totalt
+              {" "}<span style={{ color: "rgba(255,255,255,0.45)" }}>(≈ {opp.hours_per_week} h/v av din kapacitet)</span>
+            </>
+          )}
         </p>
         <label style={{ color: "white", display: "block", marginTop: 12 }}>
           Ditt pris (kr exkl moms)

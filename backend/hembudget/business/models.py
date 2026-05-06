@@ -857,6 +857,64 @@ class CompanyEquipment(TenantMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
+class CompanyAsset(TenantMixin, Base):
+    """Anläggningstillgång · inventarier eller fordon i bokföringen.
+
+    När bolaget köper bas-utrustning eller bil för > 5 000 kr ska detta
+    aktiveras som anläggningstillgång (BAS-konto 1220 Inventarier eller
+    1240 Fordon) — INTE bokföras som direkt kostnad. Avskrivning sker
+    sedan månadsvis enligt linjär plan över useful_life_months.
+
+    Skattereglerna (5 år för inventarier, 5-10 år för fordon) är
+    pedagogiskt förenklade här så eleven ser hur en investering syns
+    i resultatet över tid istället för som en stor smäll en månad.
+
+    Beräknat bokfört värde:
+       book_value = cost_excl_vat - accumulated_depreciation
+
+    När book_value når 0 → status="fully_depreciated" och inga fler
+    avskrivningar bokförs.
+    """
+    __tablename__ = "company_assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # asset_kind: equipment | vehicle | machine | other
+    asset_kind: Mapped[str] = mapped_column(
+        String(20), default="equipment", nullable=False,
+    )
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    # Inköpskostnad exkl moms (= aktiverat anskaffningsvärde)
+    cost_excl_vat: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False,
+    )
+    vat_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False, default=Decimal(0),
+    )
+    acquired_on: Mapped[date] = mapped_column(Date, nullable=False)
+    useful_life_months: Mapped[int] = mapped_column(
+        Integer, default=60, nullable=False,
+    )  # 60 = 5 år (inventarier), 120 = 10 år (fordon)
+    # Bokförda avskrivningar hittills · uppdateras månadsvis av tick
+    accumulated_depreciation: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False, default=Decimal(0),
+    )
+    last_depreciation_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    # active | fully_depreciated | disposed
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", nullable=False,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class CompanyMcpRental(TenantMixin, Base):
     """MCP · 'More Capacity Programmatically' = inhyrd frilansare för
     1 vecka. Snabb-fix när ingen anställd finns och deadlines pressar.

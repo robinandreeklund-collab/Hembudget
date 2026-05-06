@@ -636,6 +636,58 @@ def _phase_f_charge_subscriptions(
     except Exception:
         log.exception("phase_f: lån-debitering misslyckades")
 
+    # Avskrivningar · 1/4 av månadsavskrivning per biz-vecka
+    # Linjär plan: cost_excl_vat / useful_life_months · 4 för veckokostnad
+    try:
+        from ..models import CompanyAsset
+        active_assets = (
+            s.query(CompanyAsset)
+            .filter(
+                CompanyAsset.company_id == company.id,
+                CompanyAsset.status == "active",
+            )
+            .all()
+        )
+        for asset in active_assets:
+            life = max(1, int(asset.useful_life_months or 60))
+            monthly_dep = float(asset.cost_excl_vat or 0) / life
+            weekly_dep = int(round(monthly_dep / 4))
+            if weekly_dep <= 0:
+                continue
+            remaining = float(asset.cost_excl_vat or 0) - float(
+                asset.accumulated_depreciation or 0
+            )
+            if remaining <= 0:
+                asset.status = "fully_depreciated"
+                continue
+            booked = min(weekly_dep, int(remaining))
+            cat = (
+                "Avskrivning Inventarier"
+                if asset.asset_kind == "equipment"
+                else "Avskrivning Fordon"
+            )
+            s.add(CompanyTransaction(
+                company_id=company.id,
+                occurred_on=today,
+                kind="expense",
+                category=cat,
+                description=f"Veckoavskrivning · {asset.label}",
+                amount_excl_vat=Decimal(str(booked)),
+                vat_rate=Decimal("0.0"),
+                vat_amount=Decimal(0),
+            ))
+            asset.accumulated_depreciation = Decimal(
+                str(float(asset.accumulated_depreciation or 0) + booked)
+            )
+            asset.last_depreciation_on = today
+            if float(asset.accumulated_depreciation) >= float(
+                asset.cost_excl_vat or 0
+            ):
+                asset.status = "fully_depreciated"
+            total_cost += booked
+    except Exception:
+        log.exception("phase_f: avskrivnings-bokning misslyckades")
+
     summary.total_supplier_cost = total_cost
 
 

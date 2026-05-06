@@ -69,6 +69,9 @@ class SharedOpportunityOut(BaseModel):
     has_my_quote: bool
     is_winner: Optional[bool]
     decision_explanation: Optional[str]
+    # Tids-kapacitet · uppskattad arbetsinsats om jag vinner
+    estimated_hours: int = 0
+    hours_per_week: int = 0
 
 
 class SharedQuoteIn(BaseModel):
@@ -400,6 +403,15 @@ def list_shared_opportunities(info: TokenInfo = Depends(require_token)):
             my_quote = next(
                 (q for q in quotes if q.student_id == student_id), None,
             )
+            # Estimera arbetsinsats baserat på bransch + leveranstid
+            try:
+                from .foretag_capacity import estimate_job_hours
+                est_h, per_w = estimate_job_hours(
+                    opp.industry_key, opp.expected_delivery_days,
+                )
+            except Exception:
+                est_h, per_w = 0, 0
+
             out.append(SharedOpportunityOut(
                 id=opp.id,
                 customer_name=opp.customer_name,
@@ -422,6 +434,8 @@ def list_shared_opportunities(info: TokenInfo = Depends(require_token)):
                     if my_quote else None
                 ),
                 decision_explanation=opp.decision_explanation,
+                estimated_hours=est_h,
+                hours_per_week=per_w,
             ))
     return out
 

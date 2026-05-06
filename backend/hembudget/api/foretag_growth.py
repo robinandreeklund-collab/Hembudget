@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from .deps import TokenInfo, require_token
 from ..business.models import (
     Company,
+    CompanyAsset,
     CompanyEquipment,
     CompanyLoan,
     CompanyLocation,
@@ -918,6 +919,42 @@ def buy_startup_kit(
         if cost <= 0:
             raise HTTPException(400, "Inget att köpa")
 
+        # === Bokföring · korrekt redovisning av anläggningstillgång ===
+        # Inventarier > 5 000 kr aktiveras (BAS 1220 / 1240 Fordon) och
+        # skrivs av över useful_life_months. Detta innebär:
+        #   1. CompanyAsset-post skapas i tillgångsregistret
+        #   2. Köpet bokförs med kind="asset_purchase" — påverkar kassa
+        #      men INTE periodens resultat
+        #   3. Ingående moms (25 %) är direkt avdragsgill — bokförs på
+        #      asset_purchase-tx via vat_amount så befintlig moms-
+        #      redovisning plockar upp den i nästa VAT-period
+        #   4. Avskrivning bokförs månadsvis av tick-engine som vanlig
+        #      "expense" med kategori "Avskrivning Inventarier"/"Fordon"
+        category_label = (
+            "Inventarier" if body.item == "base_equipment" else "Fordon"
+        )
+        useful_life = 60 if body.item == "base_equipment" else 120
+        vat_amount = int(cost * 0.25)
+        today = date.today()
+
+        # Tillgångsregister-post · skapas oavsett funding-metod
+        asset = CompanyAsset(
+            company_id=c.id,
+            asset_kind="equipment" if body.item == "base_equipment" else "vehicle",
+            label=label,
+            cost_excl_vat=Decimal(str(cost)),
+            vat_amount=Decimal(str(vat_amount)),
+            acquired_on=today,
+            useful_life_months=useful_life,
+            accumulated_depreciation=Decimal(0),
+            status="active",
+            notes=(
+                f"Aktiverad {today.isoformat()} · avskrivs på "
+                f"{useful_life // 12} år ({useful_life} mån)."
+            ),
+        )
+        s.add(asset)
+
         if body.funding_method == "cash":
             if _kassa(s, c) < cost:
                 raise HTTPException(
@@ -927,16 +964,15 @@ def buy_startup_kit(
                 )
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
-                kind="expense",
-                category="Bas-utrustning" if body.item == "base_equipment" else "Bil",
-                description=f"Köpte {label}",
+                occurred_on=today,
+                kind="asset_purchase",
+                category=category_label,
+                description=f"Aktiverat: {label} · avskrivs över {useful_life} mån",
                 amount_excl_vat=Decimal(str(cost)),
                 vat_rate=Decimal("0.25"),
-                vat_amount=Decimal(str(int(cost * 0.25))),
+                vat_amount=Decimal(str(vat_amount)),
             ))
         elif body.funding_method == "business_loan_pg":
-            # Skapa företagslån med PG · går in som inkomst, finansierar köpet
             from ..business.models import CompanyLoan as _CL
             terms = LOAN_TERMS["growth"]
             rate = terms["rate_with_guarantee"]
@@ -954,13 +990,12 @@ def buy_startup_kit(
                 months_left=months,
                 is_personal_guarantee=True,
                 status="active",
-                started_on=date.today(),
+                started_on=today,
             )
             s.add(ln)
-            # Lånet → kassa, sedan köp = expense
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
+                occurred_on=today,
                 kind="income",
                 category="Lån",
                 description=f"Tillväxtlån · {label}",
@@ -970,16 +1005,18 @@ def buy_startup_kit(
             ))
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
-                kind="expense",
-                category="Bas-utrustning" if body.item == "base_equipment" else "Bil",
-                description=f"Köpte {label} (finansierat med lån)",
+                occurred_on=today,
+                kind="asset_purchase",
+                category=category_label,
+                description=(
+                    f"Aktiverat: {label} (finansierat med lån) · "
+                    f"avskrivs över {useful_life} mån"
+                ),
                 amount_excl_vat=Decimal(str(cost)),
                 vat_rate=Decimal("0.25"),
-                vat_amount=Decimal(str(int(cost * 0.25))),
+                vat_amount=Decimal(str(vat_amount)),
             ))
         elif body.funding_method == "private_loan":
-            # Skapa privat-lån i privat-scope
             from ..db.base import session_scope as _ps
             from ..db.models import Loan as _PL
             with _ps() as private_s:
@@ -987,7 +1024,7 @@ def buy_startup_kit(
                     name=f"Lån för bolagets {label}",
                     lender="Företagsbanken AB",
                     principal_amount=Decimal(str(cost)),
-                    start_date=date.today(),
+                    start_date=today,
                     interest_rate=0.06,
                     binding_type="rörlig",
                     amortization_monthly=Decimal(str(int(cost / 60))),
@@ -999,10 +1036,9 @@ def buy_startup_kit(
                 )
                 private_s.add(pl)
                 private_s.commit()
-            # Pengarna går till bolaget direkt som ägartillskott (inte intäkt)
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
+                occurred_on=today,
                 kind="income",
                 category="Ägartillskott",
                 description=f"Privat-lån · {label}",
@@ -1012,13 +1048,15 @@ def buy_startup_kit(
             ))
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
-                kind="expense",
-                category="Bas-utrustning" if body.item == "base_equipment" else "Bil",
-                description=f"Köpte {label}",
+                occurred_on=today,
+                kind="asset_purchase",
+                category=category_label,
+                description=(
+                    f"Aktiverat: {label} · avskrivs över {useful_life} mån"
+                ),
                 amount_excl_vat=Decimal(str(cost)),
                 vat_rate=Decimal("0.25"),
-                vat_amount=Decimal(str(int(cost * 0.25))),
+                vat_amount=Decimal(str(vat_amount)),
             ))
 
         # Sätt flaggan
