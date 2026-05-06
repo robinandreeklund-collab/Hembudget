@@ -97,6 +97,7 @@ import { KompetensV2 } from "./v2/KompetensV2";
 import { TeacherKompetensOverviewPage } from "./v2/TeacherKompetensOverviewPage";
 import { GuideProvider } from "./v2/guides/GuideContext";
 import { GuideOverlay } from "./v2/guides/GuideOverlay";
+import { V2Topbar } from "./v2/V2Topbar";
 import { V2DevFooter } from "./v2/V2DevFooter";
 import { EchoDrawer } from "./v2/EchoDrawer";
 import { MalV2 } from "./v2/MalV2";
@@ -318,6 +319,17 @@ export default function App() {
         <V2DevFooter
           role={role || "student"}
           isSuperAdmin={!!v2Status?.is_super_admin}
+        />
+      )}
+      {/* App-nivå V2Topbar · single instance · stays put under flip
+       * (matchar prototyp där .topbar är utanför .app som flips).
+       * Per-page <V2Topbar> är no-ops via singleton-mönster i komponenten. */}
+      {isV2Path && (
+        <V2Topbar
+          status={{
+            role: role || "student",
+            is_super_admin: !!v2Status?.is_super_admin,
+          }}
         />
       )}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 v2-flip-perspective">

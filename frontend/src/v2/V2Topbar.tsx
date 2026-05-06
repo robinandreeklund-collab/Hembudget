@@ -119,7 +119,29 @@ function writeMode(m: Mode) {
   window.dispatchEvent(new CustomEvent(MODE_EVENT, { detail: { mode: m } }));
 }
 
+// === Singleton-mönster · bara EN V2Topbar renderas oavsett hur många
+// platser som anropar <V2Topbar />. App-nivå-instansen är persistent
+// över route-byten · per-page-instanser blir no-ops så topbar inte
+// re-mountas vid mode-switch (vilket skulle kollapsa flip-animationen).
+let _topbarMountedCount = 0;
+
 export function V2Topbar({ status }: { status: Status }) {
+  // Singleton-check vid första render
+  const [isPrimary] = useState(() => {
+    if (_topbarMountedCount === 0) {
+      _topbarMountedCount = 1;
+      return true;
+    }
+    return false;
+  });
+  useEffect(() => {
+    if (!isPrimary) return;
+    return () => {
+      // Bara primary-instansen kan släppa låset
+      _topbarMountedCount = 0;
+    };
+  }, [isPrimary]);
+
   const location = useLocation();
   const navigate = useNavigate();
   const crumbs = getCrumbs(location.pathname);
@@ -158,8 +180,9 @@ export function V2Topbar({ status }: { status: Status }) {
     return () => window.removeEventListener(MODE_EVENT, onChange);
   }, []);
 
-  // Hämta AI-token-status (visas i meter)
+  // Hämta AI-token-status (visas i meter) · bara primary-instansen
   useEffect(() => {
+    if (!isPrimary) return;
     api<{
       ai_enabled: boolean;
       available: boolean;
@@ -190,10 +213,12 @@ export function V2Topbar({ status }: { status: Status }) {
         .catch(() => undefined);
     }, 30000);
     return () => clearInterval(t);
-  }, []);
+  }, [isPrimary]);
 
-  // Hämta elevens karaktärs-info för level-badge + biz-badge
+  // Hämta elevens karaktärs-info för level-badge + biz-badge ·
+  // bara primary-instansen
   useEffect(() => {
+    if (!isPrimary) return;
     if (isTeacher) {
       setStudentInfo(null);
       return;
@@ -220,7 +245,7 @@ export function V2Topbar({ status }: { status: Status }) {
         }),
       )
       .catch(() => setStudentInfo(null));
-  }, [isTeacher]);
+  }, [isTeacher, isPrimary]);
 
   function toggleMode() {
     const next: Mode = mode === "private" ? "business" : "private";
@@ -264,6 +289,11 @@ export function V2Topbar({ status }: { status: Status }) {
       : 0;
   const tokensRemaining =
     tokens && tokens.limit > 0 ? Math.max(0, tokens.limit - tokens.used) : 0;
+
+  // Singleton · bara primary-instansen renderar. Per-page-instanser
+  // blir no-ops så topbar inte re-mountas vid route-byte · viktigt
+  // för att flip-animationen ska se clean ut (topbar persistent).
+  if (!isPrimary) return null;
 
   return (
     <header
