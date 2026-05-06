@@ -13,6 +13,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -1261,6 +1262,108 @@ class StudentActivity(MasterBase):
     payload: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), index=True,
+    )
+
+
+class ClassCompanyShare(MasterBase):
+    """Klass-skopig spegling av en elev-ägd Company.
+
+    Företaget bor i elevens scope-DB (per-tenant Postgres-rader eller
+    per-fil SQLite). Den här raden är en cache i master-DB:n så att
+    /v2/allabolag-aktören kan lista ALLA klassens företag i en query
+    utan att fan-out:a läsningar över N elever.
+
+    Cachen uppdateras av `sync_class_company_share` som anropas från
+    auto_tick_if_due (varje gång företaget tickas) + från
+    annual_report_submit-flow. Stale-tolerance ~1 timme — Allabolag
+    är ingen realtidsvy.
+
+    Privacy: bara aggregat (omsättning, vinst, antal anställda)
+    speglas hit. Aldrig transaktionslistor eller kund-namn.
+    """
+    __tablename__ = "class_company_shares"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_student_id", "company_id_in_scope",
+            name="uq_class_company_share_owner_company",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    owner_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Klass-filter (om läraren har flera klasser)
+    class_label: Mapped[Optional[str]] = mapped_column(
+        String(60), nullable=True, index=True,
+    )
+    # Lokal id i ägarens scope-DB · för djuplänk vid behov
+    company_id_in_scope: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Speglade fält (läraren ser alltid namn/bransch oavsett publish-status)
+    company_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    industry_label: Mapped[Optional[str]] = mapped_column(
+        String(120), nullable=True,
+    )
+    industry_key: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    city_key: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    form: Mapped[str] = mapped_column(
+        String(20), default="enskild_firma", nullable=False,
+    )
+    started_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    # Publish-toggle: ägaren kan dölja företaget från klasskompisar.
+    # Lärare ser ALLTID alla. Default True — kollegial transparens.
+    is_published: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+
+    # Aggregat-cache (uppdateras vid varje auto-tick)
+    revenue_4w: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    profit_4w: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    margin_pct: Mapped[float] = mapped_column(
+        Float, default=0.0, nullable=False,
+    )
+    kassa: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    n_employees: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    n_invoices_open: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    n_invoices_overdue: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    reputation: Mapped[int] = mapped_column(
+        Integer, default=50, nullable=False,
+    )
+    week_no: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Bolagsverket-status (Fas B: deklaration)
+    annual_report_status: Mapped[str] = mapped_column(
+        String(20), default="not_due", nullable=False,
+    )  # not_due | draft | submitted | reviewing | approved | rejected
+    annual_report_year: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    annual_report_decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+    last_synced_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
     )
 
 

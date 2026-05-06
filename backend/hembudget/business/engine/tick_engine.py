@@ -654,6 +654,34 @@ def auto_tick_if_due(s: Session, *, company: Company) -> int:
     company.last_auto_tick_at = last + _td(
         hours=n * AUTO_TICK_INTERVAL_HOURS,
     )
+
+    # Sync till Allabolag-cachen (master-DB) så klassens scoreboard
+    # uppdateras. Fail-soft: om sync krashar fortsätter ändå auto-tick.
+    if n > 0:
+        try:
+            from ...school.engines import (
+                master_session as _ms,
+                get_current_actor_student as _gcas,
+            )
+            from ...school.models import Student as _Stu
+            from ...api.allabolag import sync_class_company_share
+            sid = _gcas()
+            if sid is not None:
+                with _ms() as _msess:
+                    stu = _msess.get(_Stu, sid)
+                    if stu is not None:
+                        sync_class_company_share(
+                            s,
+                            company=company,
+                            teacher_id=stu.teacher_id,
+                            student_id=sid,
+                            class_label=stu.class_label,
+                        )
+        except Exception:
+            log.exception(
+                "auto_tick: Allabolag-sync misslyckades för company=%s",
+                company.id,
+            )
     return n
 
 

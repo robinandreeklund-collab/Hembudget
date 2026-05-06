@@ -15,13 +15,14 @@ from fastapi.middleware.cors import CORSMiddleware
 faulthandler.enable()
 
 from .api import (
-    admin, ai, ai_admin, arbetsformedlingen, auth, backup, balances, bank,
-    boendemarknad, budget, chat, credit, elpris, email_auth, employer,
-    foretag, foretag_engine, funds, game_engine, landing, ledger, loans,
-    modules, reports, scenarios, school, settings_kv, smtp_admin,
-    stock_trading, stocks, tax, events, teacher_ai_prompts, teacher_credit,
-    teacher_employer, teacher_stocks, teacher_wellbeing, transactions,
-    transfers, upcoming, upload, utility, v2, wellbeing,
+    admin, ai, ai_admin, allabolag, arbetsformedlingen, auth, backup,
+    balances, bank, boendemarknad, budget, chat, credit, elpris,
+    email_auth, employer, foretag, foretag_engine, funds, game_engine,
+    landing, ledger, loans, modules, reports, scenarios, school,
+    settings_kv, smtp_admin, stock_trading, stocks, tax, events,
+    teacher_ai_prompts, teacher_credit, teacher_employer, teacher_stocks,
+    teacher_wellbeing, transactions, transfers, upcoming, upload, utility,
+    v2, wellbeing,
 )
 from .config import settings
 
@@ -270,6 +271,7 @@ def build_app() -> FastAPI:
     app.include_router(credit.router)
     app.include_router(teacher_credit.router)
     app.include_router(teacher_ai_prompts.router)
+    app.include_router(allabolag.router)
     app.include_router(wellbeing.router)
     app.include_router(events.router)
     # V2-alias för events-routern. Eleven anropar /v2/events/... från

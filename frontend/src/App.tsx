@@ -61,6 +61,7 @@ import { TeacherClassesV2 } from "./v2/TeacherClassesV2";
 import { TeacherTimeOnTaskV2 } from "./v2/TeacherTimeOnTaskV2";
 import { TeacherRubricsV2 } from "./v2/TeacherRubricsV2";
 import { TeacherAiPromptsV2 } from "./v2/TeacherAiPromptsV2";
+import { AllabolagV2 } from "./v2/AllabolagV2";
 import { ModuleViewV2 } from "./v2/ModuleViewV2";
 import {
   BizBokforing, BizFakturor, BizLon, BizMoms,
@@ -412,6 +413,8 @@ export default function App() {
           {/* Bug #12 · Modul-detalj v2 */}
           <Route path="/v2/moduler/:moduleId" element={<ModuleViewV2 />} />
           {/* Bug #7-utbyggnad · Företagsläget · 6 vyer */}
+          {/* Allabolag · klass-skopig scoreboard */}
+          <Route path="/v2/allabolag" element={<AllabolagV2 />} />
           <Route path="/v2/foretag/bokforing" element={<BizBokforing />} />
           <Route path="/v2/foretag/fakturor" element={<BizFakturor />} />
           <Route path="/v2/foretag/lon" element={<BizLon />} />

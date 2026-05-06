@@ -479,6 +479,29 @@ def create_company(
                 "vecko-tick fyller på.", c.id,
             )
 
+        # Sync till Allabolag-cachen så företaget syns på klassens
+        # scoreboard direkt efter skapande.
+        try:
+            from ..school.engines import master_session as _ms_share
+            from ..school.models import Student as _Stu_share
+            from .allabolag import sync_class_company_share
+            with _ms_share() as _ms_s:
+                stu_share = _ms_s.get(_Stu_share, student_id)
+                if stu_share is not None:
+                    sync_class_company_share(
+                        s,
+                        company=c,
+                        teacher_id=stu_share.teacher_id,
+                        student_id=student_id,
+                        class_label=stu_share.class_label,
+                    )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "create_company: Allabolag-sync misslyckades för company %s",
+                c.id,
+            )
+
     # Lärar-spårning · syns på lärar-dashboardens aktivitetsflöde
     try:
         from ..school.activity import log_activity

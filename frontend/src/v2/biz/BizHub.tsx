@@ -213,6 +213,13 @@ export function BizHub() {
       <div className="compass">
         <div className="compass-eye">Företagets aktörer · sju rum att gå in i</div>
         <div className="compass-grid" style={{ marginBottom: 18 }}>
+          <Link to="/v2/allabolag" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · klass</div>
+            <div className="biz-compass-node-name">Allabolag</div>
+            <div className="biz-compass-node-val">
+              Se hur du står dig <em>mot klassen</em>
+            </div>
+          </Link>
           <Link to="/v2/foretag/offerter" className="biz-compass-node">
             <div className="biz-compass-node-eye">Aktör · biz</div>
             <div className="biz-compass-node-name">Kunder & offerter</div>
