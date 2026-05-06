@@ -9393,15 +9393,20 @@ def test_v2_dunning_creates_paminnelse_after_5_days(fx) -> None:
     from hembudget.api import v2 as v2_mod
     client, tch, *_ = fx
     sid, stu = _create_seeded_student_and_get_token(client, tch)
-    _seed_overdue_invoice(sid, days_overdue=7)
+    mid = _seed_overdue_invoice(sid, days_overdue=7)
     v2_mod._dunning_cache.clear()
 
     v2_mod._run_dunning_for_student(sid)
 
+    # Filtrera på parent_mail_id — student-seeden inkluderar
+    # current-month-fakturor (t.ex. hyra 1:a) som också kan vara
+    # overdue runt månadens början, och dunningen plockar dem korrekt
+    # upp. Vi vill bara verifiera att VÅR test-faktura fick rätt mail.
     from hembudget.db.models import MailItem
     reminders = _scope_query(sid, lambda ss: ss.query(MailItem).filter(
         MailItem.mail_type == "reminder",
         MailItem.reminder_level == 1,
+        MailItem.parent_mail_id == mid,
     ).all())
     assert len(reminders) == 1
     r = reminders[0]
@@ -9414,7 +9419,7 @@ def test_v2_dunning_kronofogden_creates_payment_mark(fx) -> None:
     from hembudget.api import v2 as v2_mod
     client, tch, *_ = fx
     sid, stu = _create_seeded_student_and_get_token(client, tch)
-    _seed_overdue_invoice(sid, days_overdue=65)
+    mid = _seed_overdue_invoice(sid, days_overdue=65)
     v2_mod._dunning_cache.clear()
 
     v2_mod._run_dunning_for_student(sid)
@@ -9423,12 +9428,14 @@ def test_v2_dunning_kronofogden_creates_payment_mark(fx) -> None:
     reminders = _scope_query(sid, lambda ss: ss.query(MailItem).filter(
         MailItem.mail_type == "reminder",
         MailItem.reminder_level == 4,
+        MailItem.parent_mail_id == mid,
     ).all())
     assert len(reminders) == 1
     assert reminders[0].sender == "Kronofogdemyndigheten"
 
     marks = _scope_query(sid, lambda ss: ss.query(PaymentMark).filter(
         PaymentMark.kind == "kronofogden",
+        PaymentMark.creditor == "Linköping Bostäder",
     ).all())
     assert len(marks) == 1
 
@@ -9438,7 +9445,7 @@ def test_v2_dunning_idempotent(fx) -> None:
     from hembudget.api import v2 as v2_mod
     client, tch, *_ = fx
     sid, stu = _create_seeded_student_and_get_token(client, tch)
-    _seed_overdue_invoice(sid, days_overdue=8)
+    mid = _seed_overdue_invoice(sid, days_overdue=8)
 
     v2_mod._dunning_cache.clear()
     v2_mod._run_dunning_for_student(sid)
@@ -9448,8 +9455,9 @@ def test_v2_dunning_idempotent(fx) -> None:
     from hembudget.db.models import MailItem
     reminders = _scope_query(sid, lambda ss: ss.query(MailItem).filter(
         MailItem.mail_type == "reminder",
+        MailItem.parent_mail_id == mid,
     ).all())
-    # Bara en reminder per (parent, level)
+    # Bara en reminder per (parent, level) för vår test-faktura
     assert len(reminders) == 1
 
 
@@ -9491,11 +9499,14 @@ def test_v2_dunning_paid_via_match_does_not_trigger(fx) -> None:
     v2_mod._dunning_cache.clear()
     v2_mod._run_dunning_for_student(sid)
 
-    # Inga reminders ska ha skapats — och original-mailet ska markerats
-    # som paid eftersom det är matchat
+    # Inga reminders ska ha skapats för VÅR test-faktura — och
+    # original-mailet ska markerats som paid eftersom det är matchat.
+    # Andra seedade fakturor (current-month-hyra) kan trigga reminders
+    # men det är orelaterat till det vi testar här.
     def check(ss):
         reminders = ss.query(MailItem).filter(
             MailItem.mail_type == "reminder",
+            MailItem.parent_mail_id == mid,
         ).all()
         m = ss.get(MailItem, mid)
         return len(reminders), m.status
