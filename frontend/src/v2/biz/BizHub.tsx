@@ -613,7 +613,7 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showCapitalDialog, setShowCapitalDialog] = useState(false);
-  const [capitalDialogReason, setCapitalDialogReason] = useState<string | null>(null);
+  const [isBufferCase, setIsBufferCase] = useState(false);
 
   useEffect(() => {
     bizApi
@@ -641,9 +641,9 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
       const msg = String((e as Error).message || e);
       // 402 = privatkonto saknar pengar / saknar buffert → visa dialog
       if (msg.includes("HTTP 402")) {
-        // Plocka ut backend-detaljen (efter "HTTP 402: ... — <detail>")
-        const m = msg.match(/—\s*(.+)$/);
-        setCapitalDialogReason(m ? m[1] : msg);
+        // Skilj på "saknar pengar helt" vs "har pengar men ingen buffert"
+        // baserat på backend-meddelandet — utan att visa det rått.
+        setIsBufferCase(msg.includes("trygghets-bufferten"));
         setShowCapitalDialog(true);
         setBusy(false);
         return;
@@ -663,7 +663,7 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
     return (
       <BizHubShell>
         <StartupCapitalDialog
-          reason={capitalDialogReason}
+          isBufferCase={isBufferCase}
           onPick={(funding) => {
             setShowCapitalDialog(false);
             tryCreate(funding);
@@ -981,16 +981,14 @@ function weekOfYear(d: Date): number {
 
 
 function StartupCapitalDialog({
-  reason,
+  isBufferCase = false,
   onPick,
   onCancel,
 }: {
-  reason?: string | null;
+  isBufferCase?: boolean;
   onPick: (funding: "private_loan" | "business_loan_pg") => void;
   onCancel: () => void;
 }) {
-  // Skilj på två fall: helt utan pengar vs. har pengar men ingen buffert kvar
-  const isBufferCase = !!(reason && reason.includes("trygghets-bufferten"));
   const eye = isBufferCase ? "⚠ FÖR LITEN BUFFERT" : "⚠ AKTIEKAPITAL SAKNAS";
   return (
     <div style={{
@@ -1011,21 +1009,6 @@ function StartupCapitalDialog({
           <>Du saknar 25 000 kr <em style={{ color: "#fbbf24" }}>i aktiekapital</em>.</>
         )}
       </h1>
-      {reason && (
-        <div style={{
-          padding: "12px 14px",
-          marginBottom: 14,
-          background: "rgba(220,76,43,0.06)",
-          borderLeft: "2px solid #fda594",
-          borderRadius: 4,
-          fontFamily: "Source Serif 4, Georgia, serif",
-          fontSize: 13.5,
-          color: "rgba(255,255,255,0.85)",
-          lineHeight: 1.55,
-        }}>
-          {reason}
-        </div>
-      )}
       <p style={{ color: "rgba(255,255,255,0.78)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 15, lineHeight: 1.6 }}>
         {isBufferCase
           ? "Att tömma kassan på första dagen är en klassisk nybörjar-fälla. Mat, hyra och Spotify dras dagarna efter och tar dig minus innan första kunden hunnit betala. Bättre att lämna bufferten orörd och låna istället:"
