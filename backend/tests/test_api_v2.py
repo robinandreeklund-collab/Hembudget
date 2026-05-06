@@ -7679,6 +7679,33 @@ def test_v2_teacher_delete_student_with_onboarding_events(fx) -> None:
         assert s.query(_OE).filter(_OE.student_id == ulla_id).count() == 0
 
 
+def test_v2_teacher_delete_student_pre_cleanup_covers_all_master_fks(fx) -> None:
+    """Regression: pre-cleanup måste enumerera ALLA master-tabeller med
+    FK till students.id, inte bara v2_onboarding_events. När en ny FK
+    tillkommer ska delete-flödet automatiskt rensa den. Testet validerar
+    att enumeration-koden ser fler tabeller än bara den hårdkodade.
+    """
+    from hembudget.school.models import MasterBase
+    tables_with_student_fk = []
+    for table in MasterBase.metadata.sorted_tables:
+        for fk in table.foreign_keys:
+            if (
+                fk.column.table.name == "students"
+                and fk.column.name == "id"
+            ):
+                tables_with_student_fk.append(table.name)
+                break
+    # Förutsättning: minst 5 tabeller refererar students.id (annars är
+    # auto-enumeration meningslös och vi bör hårdkoda).
+    assert len(tables_with_student_fk) >= 5, (
+        f"Bara {len(tables_with_student_fk)} master-tabell(er) "
+        f"refererar students.id — auto-enumeration är inte värd det. "
+        f"Tabeller: {tables_with_student_fk}"
+    )
+    # v2_onboarding_events SKA finnas — det var den ursprungliga buggen.
+    assert "v2_onboarding_events" in tables_with_student_fk
+
+
 def test_v2_teacher_delete_student_other_teachers_student_404(fx) -> None:
     """Lärare kan inte radera annan lärares elev."""
     client, _tch, _sa, _stu, _tid, _said, sid = fx

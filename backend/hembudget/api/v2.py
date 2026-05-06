@@ -16358,25 +16358,79 @@ def v2_delete_student(
         # Master-radering · CASCADE tar bort StudentProfile,
         # BankIDSession, WeekTickRun, etc. via FK ON DELETE.
         #
-        # SÄKERHETSNÄT: V2OnboardingEvent skapades historiskt UTAN
-        # ondelete=CASCADE i Postgres. Migrationen i school/engines.py
-        # konverterar existerande FK till CASCADE, men om denna instans
-        # inte har kört den migrationen än (eller om den failade) skulle
-        # `s.delete(st)` ge IntegrityError → 500. Radera raderna
-        # explicit så vi är garanterat säkra.
+        # SÄKERHETSNÄT: Flera tabeller skapades historiskt UTAN
+        # ondelete=CASCADE i Postgres. `Base.metadata.create_all()`
+        # ändrar ALDRIG en existerande FK-constraint, så instanser
+        # som var live FÖRE vi lade till CASCADE i modellen har kvar
+        # blocking-FK:s. Resultatet är IntegrityError → 500 i UI när
+        # läraren trycker "Radera" — utan att eleven syns försvinna.
+        #
+        # I stället för att försöka migrera FK:n vid uppstart för
+        # varje tabell (sårbart, kan failas i prod om Cloud SQL har
+        # låst tabellen) raderar vi rader explicit från alla
+        # master-DB-tabeller som har en FK till students.id.
+        # Vi loopar metadata och hittar dem dynamiskt så vi inte
+        # missar någon framtida tabell.
+        from ..school.models import MasterBase
         try:
-            from ..school.models import V2OnboardingEvent
-            s.query(V2OnboardingEvent).filter(
-                V2OnboardingEvent.student_id == student_id,
-            ).delete(synchronize_session=False)
+            tables_with_student_fk = []
+            for table in MasterBase.metadata.sorted_tables:
+                for fk in table.foreign_keys:
+                    if (
+                        fk.column.table.name == "students"
+                        and fk.column.name == "id"
+                    ):
+                        tables_with_student_fk.append(
+                            (table, fk.parent.name),
+                        )
+                        break
+            # Radera child-rows först (sorted_tables ger parent→child;
+            # vi vill child→parent).
+            for table, fk_col in reversed(tables_with_student_fk):
+                if table.name == "students":
+                    continue
+                try:
+                    s.execute(
+                        table.delete().where(
+                            table.c[fk_col] == student_id,
+                        ),
+                    )
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "v2_delete_student: pre-cleanup av %s "
+                        "(FK %s) failade — fortsätter ändå",
+                        table.name, fk_col,
+                    )
         except Exception:
             import logging
             logging.getLogger(__name__).exception(
-                "v2_delete_student: pre-cleanup av "
-                "v2_onboarding_events failade — fortsätter ändå",
+                "v2_delete_student: kunde inte enumerera "
+                "student-FK:s — fortsätter med s.delete(st)",
             )
-        s.delete(st)
-        s.commit()
+        try:
+            s.delete(st)
+            s.commit()
+        except Exception as e:
+            # Sista raderingen failade trots pre-cleanup — vanligtvis
+            # IntegrityError från en FK vi missade att enumerera.
+            # Returnera ett begripligt felmeddelande till frontend
+            # istället för en tyst 500.
+            import logging
+            logging.getLogger(__name__).exception(
+                "v2_delete_student: master-radering failade för %s",
+                student_id,
+            )
+            try:
+                s.rollback()
+            except Exception:
+                pass
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Kunde inte radera elev {student_id}: "
+                f"{type(e).__name__}. Kontakta admin om det "
+                "fortsätter — backloggar har detaljerna.",
+            ) from e
 
     return Response(status_code=204)
 
