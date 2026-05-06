@@ -16905,6 +16905,7 @@ def _ensure_student_has_initial_data(
 
 def _auto_pay_historical_invoices(
     student: "Student", year_month: str,
+    cutoff_date: Optional[_date] = None,
 ) -> None:
     """Markera alla fakturor från en historisk månad som BETALDA via
     autogiro + skapa motsvarande Transaction från lönekonto.
@@ -16914,6 +16915,11 @@ def _auto_pay_historical_invoices(
     postlådan. Vi simulerar att autogiro drog dem på due_date.
 
     Idempotent via stable hash. year_month = "YYYY-MM".
+
+    `cutoff_date` (valfritt): Om satt, betala bara fakturor där
+    due_date < cutoff_date. Används för innevarande månad så bara
+    redan-förfallna fakturor auto-betalas (= "i dag är 6 maj och
+    hyran för 1 maj är förfallen, ska redan vara dragen").
     """
     from datetime import date as _d_pay
     from hashlib import sha256 as _sha
@@ -16930,6 +16936,12 @@ def _auto_pay_historical_invoices(
         )
     except Exception:
         return
+
+    # Cutoff: inom innevarande månad vill vi bara dra det som
+    # faktiskt redan förfallit, inte allt som ska komma framöver.
+    effective_end = period_end
+    if cutoff_date is not None and cutoff_date < period_end:
+        effective_end = cutoff_date
 
     scope_key = _sfs_p(student)
     with _sctx_p(scope_key):
@@ -16951,7 +16963,7 @@ def _auto_pay_historical_invoices(
                     MailItem.mail_type.in_(["invoice", "salary_slip"]),
                     MailItem.status.in_(["unhandled", "viewed"]),
                     MailItem.due_date >= period_start,
-                    MailItem.due_date < period_end,
+                    MailItem.due_date < effective_end,
                 )
                 .all()
             )
@@ -17480,38 +17492,47 @@ def _seed_initial_student_data(
                     student.id,
                 )
 
-    try:
-        # === Steg 2 (FÖRRA MÅNADEN, april) ===
-        # Förra månaden HAR redan hänt — fakturor är betalda via
-        # autogiro, lönen är dragen, utgifter är genomförda. Eleven
-        # ska se den som färdig historik (ingen "ohanterad" faktura).
-        tick_month(
-            student,
-            profile,
-            year_month,
-            spend_profile=spend_profile,
-            starting_level=starting_level,
-        )
-        # Auto-betala alla fakturor från förra månaden — skapa
-        # autogiro-transaktioner från lönekonto + markera mail
-        # som status="paid" så de inte ligger kvar i postlådan
-        # som ohanterade.
-        _auto_pay_historical_invoices(student, year_month)
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "_seed_initial_student_data: tick_month (förra mån) failed för %s",
-            student.id,
-        )
+    # === Steg 2 (HISTORISKA MÅNADER) ===
+    # Seedar de SENASTE 4 månaderna bakåt så Arbetsgivar-vyns
+    # "Lönespecar · senaste 4 månader"-widget faktiskt visar 4 rader,
+    # och så att eleven ser etablerad historik på bankkontot vid
+    # första inloggningen istället för bara senaste lönen.
+    # Alla månader t.o.m. förra hela månaden auto-betalas.
+    historical_months: list[str] = []
+    cur_y, cur_m = today.year, today.month
+    for back in range(4, 0, -1):  # 4, 3, 2, 1 mån bakåt
+        ty = cur_y
+        tm = cur_m - back
+        while tm <= 0:
+            tm += 12
+            ty -= 1
+        historical_months.append(f"{ty:04d}-{tm:02d}")
 
-    # === Steg 2b (NUVARANDE MÅNAD, maj) ===
+    for hist_ym in historical_months:
+        try:
+            tick_month(
+                student,
+                profile,
+                hist_ym,
+                spend_profile=spend_profile,
+                starting_level=starting_level,
+            )
+            _auto_pay_historical_invoices(student, hist_ym)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "_seed_initial_student_data: tick_month (%s) failed "
+                "för %s",
+                hist_ym, student.id,
+            )
+
+    # === Steg 2b (NUVARANDE MÅNAD) ===
     # Tick även innevarande månad — då släpps fakturor + lön via
     # realtid-projektion (auto-detect i tick_month sätter
-    # release_base = NOW när year_month >= current_ym). Eleven
-    # ser nya fakturor rulla in över 5 skoldagar.
+    # release_base = NOW när year_month >= current_ym).
     today2 = _d.today()
     current_ym = f"{today2.year:04d}-{today2.month:02d}"
-    if current_ym != year_month:  # Skippa om vi seedat current redan
+    if current_ym not in historical_months:
         try:
             tick_month(
                 student,
@@ -17519,6 +17540,14 @@ def _seed_initial_student_data(
                 current_ym,
                 spend_profile=spend_profile,
                 starting_level=starting_level,
+            )
+            # Viktigt: auto-betala fakturor i NUVARANDE månad vars
+            # förfallodag redan passerats. Annars startar eleven med
+            # förfallna fakturor + redan-triggade påminnelser
+            # (klassisk hyran-1:a-i-månaden-fälla för nya elever
+            # som skapas mitt i månaden).
+            _auto_pay_historical_invoices(
+                student, current_ym, cutoff_date=today2,
             )
         except Exception:
             import logging
@@ -17538,8 +17567,11 @@ def _seed_initial_student_data(
         from ..budget.seed import seed_initial_budget_for_months
         with scope_context(scope_key):
             with session_scope() as s:
-                months_to_seed = [year_month]
-                if current_ym != year_month:
+                # Budget för senaste historiska månaden + innevarande.
+                # Att seeda alla 4 historiska gör budgeten brusig och
+                # adderar lite värde — eleven justerar bara framåt.
+                months_to_seed = [historical_months[-1]]
+                if current_ym not in months_to_seed:
                     months_to_seed.append(current_ym)
                 seed_initial_budget_for_months(
                     s, profile=profile, year_months=months_to_seed,

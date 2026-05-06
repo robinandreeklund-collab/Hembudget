@@ -26,7 +26,8 @@ from ..profile_generator.schema import GeneratedProfile
 from ..release_schedule import release_at_for_day
 
 
-SALARY_DAY = 25  # Utbetalningsdag
+SALARY_DAY = 25  # Utbetalningsdag · pengarna landar på kontot
+LONESPEC_DAY = 22  # Lönespec-mailet · normalt 2-3 dagar före utbetalning
 
 
 def _payday(year_month: str) -> date:
@@ -98,7 +99,17 @@ def _create_salary_for(
         year_month=year_month,
     )
 
-    released_at = (
+    # Lönespec-mailet kommer 2-3 dagar FÖRE lön-transaktionen (det är
+    # så det funkar i verkligheten · skattedagen är 22-23, lönedagen 25).
+    # I real-tids-projektionen blir mailet alltså synligt innan pengarna
+    # syns på kontot — eleven hinner läsa specen, kontrollera skatten,
+    # och INNAN pengarna landar.
+    mail_released_at = (
+        release_at_for_day(release_base, LONESPEC_DAY)
+        if release_base is not None
+        else None
+    )
+    tx_released_at = (
         release_at_for_day(release_base, SALARY_DAY)
         if release_base is not None
         else None
@@ -117,7 +128,7 @@ def _create_salary_for(
         amount=Decimal(tax.net_monthly),
         due_date=pay_d,
         status="unhandled",
-        released_at=released_at,
+        released_at=mail_released_at,
     )
     s.add(mail)
 
@@ -136,7 +147,7 @@ def _create_salary_for(
         normalized_merchant=sender_label,
         hash=_tx_hash(student_scope, year_month, tx_kind),
         user_verified=True,
-        released_at=released_at,
+        released_at=tx_released_at,
     )
     s.add(tx)
     s.flush()
