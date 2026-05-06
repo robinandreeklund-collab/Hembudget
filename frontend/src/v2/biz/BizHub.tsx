@@ -15,11 +15,13 @@ import { Link } from "react-router-dom";
 import { V2Topbar } from "../V2Topbar";
 import {
   bizApi,
+  type BizAxis,
   type BizPentagon,
   type Company,
   type CompanyInvoice,
 } from "./api";
 import { BizPentagon as BizPentagonChart } from "./BizPentagon";
+import { BizPentagonFlipCard } from "./BizPentagonFlipCard";
 import "./biz.css";
 
 
@@ -73,6 +75,7 @@ export function BizHub() {
     unbookkept_count: 0,
   });
   const [latestInvoice, setLatestInvoice] = useState<CompanyInvoice | null>(null);
+  const [activeAxis, setActiveAxis] = useState<BizAxis | null>(null);
 
   useEffect(() => {
     bizApi
@@ -188,8 +191,19 @@ export function BizHub() {
         <BizCharCard company={company} pentagon={pentagon} stats={stats} />
       </div>
 
-      {/* === 2. PENTAGON-STAGE === */}
-      {pentagon && <BizPentagonChart data={pentagon} />}
+      {/* === 2. PENTAGON-STAGE · klickbara axlar → flip-kort === */}
+      {pentagon && (
+        <BizPentagonFlipCard
+          activeAxis={activeAxis}
+          onClose={() => setActiveAxis(null)}
+          front={
+            <BizPentagonChart
+              data={pentagon}
+              onAxisClick={(ax) => setActiveAxis(ax)}
+            />
+          }
+        />
+      )}
 
       {/* === 3. EVENT-CARD · senaste händelse === */}
       {latestInvoice && (

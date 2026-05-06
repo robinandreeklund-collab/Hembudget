@@ -312,6 +312,39 @@ def test_biz_bank_overview_shape(app_with_student):
     assert "own_salary_this_month" in data
 
 
+def test_biz_pentagon_axis_detail_returns_factors_and_events(app_with_student):
+    """Flip-kortets baksida · /v2/foretag/pentagon/axis/{axis} ska
+    returnera score + faktorer + events + summary för varje av de 5
+    axlarna. Speglar privat-pentagonens flip-kort.
+    """
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+
+    # Utan bolag → 400
+    r = client.get("/v2/foretag/pentagon/axis/omsattning", headers=H)
+    assert r.status_code == 400, r.text
+
+    # Skapa bolag
+    client.post(
+        "/v2/foretag", headers=H,
+        json={"name": "Pentagon AB", "form": "ab", "industry_label": "konsult"},
+    )
+
+    # Alla 5 axlar ska ge en giltig BizAxisDetail
+    for axis in ["omsattning", "kundbas", "likviditet", "tidsatgang", "vinst"]:
+        r = client.get(f"/v2/foretag/pentagon/axis/{axis}", headers=H)
+        assert r.status_code == 200, f"{axis}: {r.text}"
+        data = r.json()
+        assert data["axis"] == axis
+        assert data["axis_label"]  # icke-tom
+        assert data["axis_number"] in {"01", "02", "03", "04", "05"}
+        assert isinstance(data["score"], int)
+        assert 0 <= data["score"] <= 100
+        assert isinstance(data["factors"], list)
+        assert isinstance(data["events"], list)
+        assert data["summary_text"]
+
+
 def test_biz_pentagon_includes_axes_prev(app_with_student):
     """compute_business_pentagon ska returnera axes_prev när det finns
     historisk data (4-12 v sedan). Direkt efter create finns ingen,

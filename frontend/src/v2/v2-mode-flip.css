@@ -1,0 +1,68 @@
+/**
+ * v2-mode-flip · 3D-flip-animation när användaren byter mellan privat
+ * och företag i topbaren. Matchar prototyp vol-7 rad 1944-1957.
+ *
+ * Hela <main>-elementet (id="v2-flip-target") roteras runt Y-axeln
+ * medan body[data-mode] byts:
+ *   1. flip-out · 0.5s · rotateY 0 → 85deg + opacity 1 → 0
+ *   2. byt mode + navigera (sker i toggleMode-handlern)
+ *   3. flip-in · 0.5s · rotateY -85deg → 0deg + opacity 0 → 1
+ *
+ * Perspective sätts på parent-wrappern så barnet kan rotera korrekt
+ * (utan perspective skulle rotateY se platt ut).
+ *
+ * Importeras från V2Topbar så CSS är tillgängligt på BÅDA sidor av
+ * mode-bytet (annars finns klassen bara på den ena sidan och
+ * animationen syns inte för halva flippen).
+ */
+
+.v2-flip-perspective {
+  perspective: 2400px;
+}
+
+.v2-flip-target {
+  transform-style: preserve-3d;
+}
+
+.v2-flip-target.flip-out {
+  animation: v2-flip-out 0.5s cubic-bezier(0.7, 0, 0.8, 0.3) forwards;
+}
+
+.v2-flip-target.flip-in {
+  animation: v2-flip-in 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes v2-flip-out {
+  from {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: rotateY(85deg) scale(0.96);
+    opacity: 0;
+  }
+}
+
+@keyframes v2-flip-in {
+  from {
+    transform: rotateY(-85deg) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Reduced-motion: respektera användarens preferens · skippa rotation */
+@media (prefers-reduced-motion: reduce) {
+  .v2-flip-target.flip-out,
+  .v2-flip-target.flip-in {
+    animation: v2-flip-fade 0.25s ease forwards;
+  }
+  @keyframes v2-flip-fade {
+    from { opacity: 1; }
+    50%  { opacity: 0; }
+    to   { opacity: 1; }
+  }
+}

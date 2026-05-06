@@ -320,9 +320,9 @@ export default function App() {
           isSuperAdmin={!!v2Status?.is_super_admin}
         />
       )}
-      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0 v2-flip-perspective">
       {!isV2Path && <Sidebar />}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto v2-flip-target" id="v2-flip-target">
         {!isV2Path && <MobileTopBar />}
         {role === "teacher" && asStudent && <ImpersonationBanner />}
         <Routes>

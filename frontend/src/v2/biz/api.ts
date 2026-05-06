@@ -164,6 +164,34 @@ export type BizBankTx = {
   is_owner_salary: boolean;
 };
 
+// === Pentagon axis-detail (för flip-kortet) ===
+export type BizAxis = "omsattning" | "kundbas" | "likviditet" | "tidsatgang" | "vinst";
+
+export type BizAxisFactor = {
+  explanation: string;
+  points: number;
+  delta_label: string;
+};
+
+export type BizAxisEvent = {
+  occurred_at: string | null;
+  date_label: string;
+  title: string;
+  detail: string | null;
+  delta: number | null;
+  delta_label: string;
+};
+
+export type BizAxisDetail = {
+  axis: BizAxis;
+  axis_label: string;
+  axis_number: string;
+  score: number;
+  factors: BizAxisFactor[];
+  events: BizAxisEvent[];
+  summary_text: string;
+};
+
 export type BizBankOverview = {
   accounts: BizBankAccount[];
   transactions: BizBankTx[];
@@ -243,6 +271,10 @@ export const bizApi = {
 
   // BizBank overview (prototyp p-biz-bank)
   bankOverview: () => call<BizBankOverview>("/v2/foretag/bank-overview"),
+
+  // Pentagon axis-detail (flip-kortets baksida)
+  pentagonAxisDetail: (axis: BizAxis) =>
+    call<BizAxisDetail>(`/v2/foretag/pentagon/axis/${axis}`),
 
   // VAT
   listVatPeriods: () => call<VatPeriod[]>("/v2/foretag/vat/periods"),

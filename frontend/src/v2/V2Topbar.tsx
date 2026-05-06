@@ -25,6 +25,7 @@ import { GuideDropdown } from "./guides/GuideDropdown";
 import { NotifBell } from "./NotifBell";
 import { ClassPicker } from "./ClassPicker";
 import "./topbar.css";
+import "./v2-mode-flip.css";
 
 type Status = { role: string; is_super_admin: boolean };
 
@@ -214,12 +215,33 @@ export function V2Topbar({ status }: { status: Status }) {
 
   function toggleMode() {
     const next: Mode = mode === "private" ? "business" : "private";
-    writeMode(next);
-    setMode(next);
-    // Bug 12 · navigera till hubben så aktörsmenyerna växlar
-    if (location.pathname !== "/v2/hub") {
-      navigate("/v2/hub");
+    const target = document.getElementById("v2-flip-target");
+
+    // Reduced-motion-användare slipper rotation. Vi byter ändå
+    // mode + navigerar.
+    const reducedMotion = window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // Steg 1 · flip-out (hela main-areen roterar bort)
+    if (target && !reducedMotion) {
+      target.classList.add("flip-out");
     }
+
+    // Steg 2 · efter flip-out: byt mode + navigera till hub
+    setTimeout(() => {
+      writeMode(next);
+      setMode(next);
+      if (location.pathname !== "/v2/hub") {
+        navigate("/v2/hub");
+      }
+
+      // Steg 3 · flip-in (hela main-areen roterar in)
+      if (target && !reducedMotion) {
+        target.classList.remove("flip-out");
+        target.classList.add("flip-in");
+        setTimeout(() => target.classList.remove("flip-in"), 550);
+      }
+    }, reducedMotion ? 0 : 460);
   }
 
   function handleEcho() {

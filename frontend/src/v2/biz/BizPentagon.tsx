@@ -19,8 +19,7 @@
  * Axel-labels positioneras med absolute via CSS-klasserna ax-eko/rel/har/fri/kar
  * (matchar prototypen rad 381-385). Labels är klickbara där relevant.
  */
-import { Link } from "react-router-dom";
-import type { BizPentagon as BizPentagonData } from "./api";
+import type { BizPentagon as BizPentagonData, BizAxis } from "./api";
 
 
 const SEK = (n: number) =>
@@ -58,7 +57,13 @@ function dataPolygonPoints(
 }
 
 
-export function BizPentagon({ data }: { data: BizPentagonData }) {
+export function BizPentagon({
+  data,
+  onAxisClick,
+}: {
+  data: BizPentagonData;
+  onAxisClick?: (axis: BizAxis) => void;
+}) {
   const { axes, axes_prev, total_score, metrics } = data;
 
   const axesArr = [
@@ -120,9 +125,13 @@ export function BizPentagon({ data }: { data: BizPentagonData }) {
         </g>
       </svg>
 
-      {/* Axel 01 · Omsättning · klickbar → bokföring */}
-      <Link
-        to="/v2/foretag/bokforing"
+      {/* Axel 01 · Omsättning · klick → flip-kort med detalj */}
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onAxisClick?.("omsattning");
+        }}
         className="biz-axis-label ax-eko"
       >
         <div className="biz-axis-label-eye">Axel 01</div>
@@ -144,11 +153,15 @@ export function BizPentagon({ data }: { data: BizPentagonData }) {
             ? `↓ ${oms_trend} mot v-4`
             : "— stabil"}
         </div>
-      </Link>
+      </a>
 
-      {/* Axel 02 · Kundbas · klickbar → kunder/fakturor */}
-      <Link
-        to="/v2/foretag/fakturor"
+      {/* Axel 02 · Kundbas · klick → flip-kort */}
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onAxisClick?.("kundbas");
+        }}
         className="biz-axis-label ax-rel"
       >
         <div className="biz-axis-label-eye">Axel 02</div>
@@ -156,11 +169,15 @@ export function BizPentagon({ data }: { data: BizPentagonData }) {
         <div className="biz-axis-label-meta">
           {metrics.n_invoices_active} aktiva fakturor
         </div>
-      </Link>
+      </a>
 
-      {/* Axel 03 · Likviditet · klickbar → bank */}
-      <Link
-        to="/v2/foretag/bank"
+      {/* Axel 03 · Likviditet · klick → flip-kort */}
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onAxisClick?.("likviditet");
+        }}
         className="biz-axis-label ax-har"
       >
         <div className="biz-axis-label-eye">Axel 03</div>
@@ -176,10 +193,17 @@ export function BizPentagon({ data }: { data: BizPentagonData }) {
             ⚠ tunn marginal
           </div>
         )}
-      </Link>
+      </a>
 
-      {/* Axel 04 · Tidsåtgång · ej klickbar (förenklat) */}
-      <a className="biz-axis-label ax-fri" href="#" onClick={(e) => e.preventDefault()}>
+      {/* Axel 04 · Tidsåtgång · klick → flip-kort */}
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onAxisClick?.("tidsatgang");
+        }}
+        className="biz-axis-label ax-fri"
+      >
         <div className="biz-axis-label-eye">Axel 04</div>
         <div className="biz-axis-label-name">Tidsåtgång</div>
         <div className="biz-axis-label-meta">
@@ -193,9 +217,13 @@ export function BizPentagon({ data }: { data: BizPentagonData }) {
         </div>
       </a>
 
-      {/* Axel 05 · Vinst · klickbar → bokföring */}
-      <Link
-        to="/v2/foretag/bokforing"
+      {/* Axel 05 · Vinst · klick → flip-kort */}
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onAxisClick?.("vinst");
+        }}
         className="biz-axis-label ax-kar"
       >
         <div className="biz-axis-label-eye">Axel 05</div>
@@ -218,7 +246,7 @@ export function BizPentagon({ data }: { data: BizPentagonData }) {
             ? `↓ ${vinst_trend} mot v-4`
             : "— stabil"}
         </div>
-      </Link>
+      </a>
 
       {/* Center-card */}
       <div className="center-card">

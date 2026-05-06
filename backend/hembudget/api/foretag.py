@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -813,6 +813,364 @@ class BusinessPentagonOut(BaseModel):
     axes_prev: Optional[dict] = None
     total_score: int
     metrics: dict
+
+
+BizAxis = Literal[
+    "omsattning", "kundbas", "likviditet", "tidsatgang", "vinst",
+]
+
+
+class BizAxisFactor(BaseModel):
+    explanation: str
+    points: int          # +/- bidrag
+    delta_label: str     # "+5", "-3", "±0"
+
+
+class BizAxisEvent(BaseModel):
+    occurred_at: Optional[date]
+    date_label: str
+    title: str
+    detail: Optional[str] = None
+    delta: Optional[int] = None
+    delta_label: str
+
+
+class BizAxisDetailOut(BaseModel):
+    axis: BizAxis
+    axis_label: str
+    axis_number: str
+    score: int
+    factors: list[BizAxisFactor]
+    events: list[BizAxisEvent]
+    summary_text: str
+
+
+_BIZ_AXIS_LABELS: dict[str, tuple[str, str]] = {
+    "omsattning": ("Omsättning", "01"),
+    "kundbas":    ("Kundbas",    "02"),
+    "likviditet": ("Likviditet", "03"),
+    "tidsatgang": ("Tidsåtgång", "04"),
+    "vinst":      ("Vinst",      "05"),
+}
+
+
+def _short_iso_label(d: Optional[date]) -> str:
+    if d is None:
+        return "—"
+    return d.isoformat()
+
+
+def _delta_lbl(n: int) -> str:
+    if n > 0:
+        return f"+{n}"
+    if n < 0:
+        return str(n)
+    return "±0"
+
+
+def _build_biz_axis_detail(
+    s, *, company: Company, axis: BizAxis,
+) -> BizAxisDetailOut:
+    """Räkna fram axel-detaljer för flip-kortets baksida.
+
+    Speglar privat-flip-kortets struktur: faktorer (live-bidrag) +
+    events (konkreta händelser) + summary_text (en mening).
+    """
+    from ..business.service import compute_business_pentagon
+    pent = compute_business_pentagon(s, company=company)
+    score = int(pent["axes"].get(axis, 50))
+    metrics = pent["metrics"]
+    label, number = _BIZ_AXIS_LABELS[axis]
+
+    factors: list[BizAxisFactor] = []
+    events: list[BizAxisEvent] = []
+
+    cutoff = date.today() - __import__("datetime").timedelta(days=42)
+
+    if axis == "omsattning":
+        income_4w = float(metrics.get("income_4w", 0))
+        if income_4w > 0:
+            factors.append(BizAxisFactor(
+                explanation=f"Intäkter senaste 4 v: {int(income_4w):,} kr".replace(",", " "),
+                points=min(40, int(income_4w / 1000)),
+                delta_label=_delta_lbl(min(40, int(income_4w / 1000))),
+            ))
+        else:
+            factors.append(BizAxisFactor(
+                explanation="Inga intäkter senaste 4 v.",
+                points=-10,
+                delta_label="−10",
+            ))
+        # Senaste betalda fakturor
+        invs = (
+            s.query(CompanyInvoice)
+            .filter(
+                CompanyInvoice.company_id == company.id,
+                CompanyInvoice.paid_on.isnot(None),
+                CompanyInvoice.paid_on >= cutoff,
+            )
+            .order_by(CompanyInvoice.paid_on.desc())
+            .limit(6)
+            .all()
+        )
+        for inv in invs:
+            events.append(BizAxisEvent(
+                occurred_at=inv.paid_on,
+                date_label=_short_iso_label(inv.paid_on),
+                title=f"{inv.customer_name or '—'} betald · F{inv.invoice_number or ''}",
+                detail=f"{int(inv.total_incl_vat or 0):,} kr inkl moms".replace(",", " "),
+                delta=int(min(8, max(1, (inv.amount_excl_vat or 0) / 1000))),
+                delta_label=_delta_lbl(int(min(8, max(1, (inv.amount_excl_vat or 0) / 1000)))),
+            ))
+        summary = (
+            f"Omsättningen är {int(income_4w):,} kr/4v"
+            .replace(",", " ")
+            + f" · marginal {metrics.get('margin_4w_pct', 0):.0f}%."
+        )
+
+    elif axis == "kundbas":
+        n_active = int(metrics.get("n_invoices_active", 0))
+        factors.append(BizAxisFactor(
+            explanation=f"{n_active} aktiva fakturor senaste 4 v.",
+            points=n_active * 8,
+            delta_label=_delta_lbl(n_active * 8),
+        ))
+        # Senaste offert-aktivitet (CompanyOpportunity om den finns)
+        try:
+            from ..business.models import CompanyOpportunity, CompanyQuote
+            opps = (
+                s.query(CompanyOpportunity)
+                .filter(
+                    CompanyOpportunity.company_id == company.id,
+                    CompanyOpportunity.received_on >= cutoff,
+                )
+                .order_by(CompanyOpportunity.received_on.desc())
+                .limit(5)
+                .all()
+            )
+            for o in opps:
+                delta = (
+                    3 if o.status == "won"
+                    else -2 if o.status == "lost"
+                    else 0
+                )
+                events.append(BizAxisEvent(
+                    occurred_at=o.received_on,
+                    date_label=_short_iso_label(o.received_on),
+                    title=f"{o.customer_name} · {o.title}",
+                    detail=f"Status: {o.status}",
+                    delta=delta,
+                    delta_label=_delta_lbl(delta),
+                ))
+            _ = CompanyQuote  # imported för framtid
+        except Exception:
+            pass
+        summary = (
+            f"Kundbasen står på {n_active} aktiva fakturor "
+            "senaste perioden — ryktet driver pipeline-vikten."
+        )
+
+    elif axis == "likviditet":
+        kassa = float(metrics.get("kassa", 0))
+        if kassa < 0:
+            factors.append(BizAxisFactor(
+                explanation=f"Företagskontot ligger på {int(kassa):,} kr — minus räknas hårt.".replace(",", " "),
+                points=-25,
+                delta_label="−25",
+            ))
+        elif kassa < 5000:
+            factors.append(BizAxisFactor(
+                explanation=f"Kassa under 5 000 kr ({int(kassa):,} kr) — tunn marginal.".replace(",", " "),
+                points=-10,
+                delta_label="−10",
+            ))
+        else:
+            factors.append(BizAxisFactor(
+                explanation=f"Kassa {int(kassa):,} kr · stabil likviditet.".replace(",", " "),
+                points=10,
+                delta_label="+10",
+            ))
+        # Nästa moms-due
+        from ..business.models import CompanyVatPeriod
+        nv = (
+            s.query(CompanyVatPeriod)
+            .filter(
+                CompanyVatPeriod.company_id == company.id,
+                CompanyVatPeriod.status == "open",
+            )
+            .order_by(CompanyVatPeriod.due_date.asc())
+            .first()
+        )
+        if nv:
+            events.append(BizAxisEvent(
+                occurred_at=nv.due_date,
+                date_label=_short_iso_label(nv.due_date),
+                title=f"Moms-period {nv.period_label} · förfaller",
+                detail=f"Att betala: {int(nv.net_vat or 0):,} kr".replace(",", " "),
+                delta=-3 if (nv.net_vat or 0) > kassa else -1,
+                delta_label=_delta_lbl(-3 if (nv.net_vat or 0) > kassa else -1),
+            ))
+        # Senaste in/ut-rörelser
+        recent = (
+            s.query(CompanyTransaction)
+            .filter(
+                CompanyTransaction.company_id == company.id,
+                CompanyTransaction.occurred_on >= cutoff,
+            )
+            .order_by(CompanyTransaction.occurred_on.desc())
+            .limit(5)
+            .all()
+        )
+        for t in recent:
+            is_income = t.kind == "income"
+            d = 2 if is_income else -1
+            events.append(BizAxisEvent(
+                occurred_at=t.occurred_on,
+                date_label=_short_iso_label(t.occurred_on),
+                title=t.description or t.category or t.kind,
+                detail=f"{int(t.amount_excl_vat):,} kr · {t.kind}".replace(",", " "),
+                delta=d,
+                delta_label=_delta_lbl(d),
+            ))
+        summary = (
+            f"Likviditet · {int(kassa):,} kr på företagskontot.".replace(",", " ")
+            + (f" Moms {nv.due_date} kommer dra {int(nv.net_vat or 0):,} kr.".replace(",", " ") if nv else "")
+        )
+
+    elif axis == "tidsatgang":
+        income_4w = float(metrics.get("income_4w", 0))
+        factors.append(BizAxisFactor(
+            explanation=(
+                "Aktivt företag · debiterbar tid genererar omsättning."
+                if income_4w > 0
+                else "Inaktivt — ingen debiterbar tid registrerad."
+            ),
+            points=20 if income_4w > 0 else -10,
+            delta_label=_delta_lbl(20 if income_4w > 0 else -10),
+        ))
+        # Pågående jobb om det finns Job-data
+        try:
+            from ..business.models import CompanyJob
+            jobs = (
+                s.query(CompanyJob)
+                .filter(
+                    CompanyJob.company_id == company.id,
+                    CompanyJob.status.in_(("in_progress", "delivered")),
+                )
+                .order_by(CompanyJob.created_at.desc())
+                .limit(5)
+                .all()
+            )
+            for j in jobs:
+                events.append(BizAxisEvent(
+                    occurred_at=getattr(j, "delivered_on", None) or getattr(j, "created_at", None),
+                    date_label=_short_iso_label(
+                        getattr(j, "delivered_on", None) or (
+                            getattr(j, "created_at", None).date()
+                            if getattr(j, "created_at", None)
+                            else None
+                        ),
+                    ),
+                    title=f"{j.customer_name} · {j.title}",
+                    detail=f"Status: {j.status}",
+                    delta=1,
+                    delta_label="+1",
+                ))
+        except Exception:
+            pass
+        summary = (
+            "Tidsåtgång räknas förenklat 60/40 (debiterbar / admin) just nu. "
+            "Pentagon-axeln stiger när du levererar jobb och hanterar fakturor "
+            "snabbare än de strömmar in."
+        )
+
+    elif axis == "vinst":
+        margin = float(metrics.get("margin_4w_pct", 0))
+        profit = float(metrics.get("profit_4w", 0))
+        if margin >= 30:
+            factors.append(BizAxisFactor(
+                explanation=f"Stark vinstmarginal {margin:.0f}% senaste 4 v.",
+                points=40,
+                delta_label="+40",
+            ))
+        elif margin >= 15:
+            factors.append(BizAxisFactor(
+                explanation=f"OK vinstmarginal {margin:.0f}% senaste 4 v.",
+                points=20,
+                delta_label="+20",
+            ))
+        elif margin >= 0:
+            factors.append(BizAxisFactor(
+                explanation=f"Marginalen är tunn ({margin:.0f}%) — överväg pris eller kostnader.",
+                points=-5,
+                delta_label="−5",
+            ))
+        else:
+            factors.append(BizAxisFactor(
+                explanation=f"Förlust {margin:.0f}% — företaget går back.",
+                points=-25,
+                delta_label="−25",
+            ))
+        # Senaste kostnads-tunga utgifter
+        big_expenses = (
+            s.query(CompanyTransaction)
+            .filter(
+                CompanyTransaction.company_id == company.id,
+                CompanyTransaction.kind.in_(("expense", "salary")),
+                CompanyTransaction.occurred_on >= cutoff,
+            )
+            .order_by(CompanyTransaction.amount_excl_vat.desc())
+            .limit(5)
+            .all()
+        )
+        for t in big_expenses:
+            events.append(BizAxisEvent(
+                occurred_at=t.occurred_on,
+                date_label=_short_iso_label(t.occurred_on),
+                title=t.description or t.category or "Utgift",
+                detail=f"−{int(t.amount_excl_vat):,} kr · {t.kind}".replace(",", " "),
+                delta=-1,
+                delta_label="−1",
+            ))
+        summary = (
+            f"Vinst {int(profit):,} kr/4v".replace(",", " ")
+            + f" · marginal {margin:.0f}%."
+        )
+
+    else:
+        summary = "Okänd axel."
+
+    return BizAxisDetailOut(
+        axis=axis,
+        axis_label=label,
+        axis_number=number,
+        score=score,
+        factors=factors,
+        events=events,
+        summary_text=summary,
+    )
+
+
+@router.get(
+    "/pentagon/axis/{axis}",
+    response_model=BizAxisDetailOut,
+)
+def biz_pentagon_axis_detail(
+    axis: BizAxis,
+    info: TokenInfo = Depends(require_token),
+):
+    """Detalj-vy för ett pentagon-axel (för flip-kortets baksida).
+
+    Returnerar score + faktorer (live-bidrag) + senaste events
+    (riktiga händelser från företagets transaktioner / fakturor /
+    offerter) + en kort summary_text.
+    """
+    _require_student(info)
+    with session_scope() as s:
+        c = _get_active_company(s)
+        if c is None:
+            raise HTTPException(400, "Skapa bolag först")
+        return _build_biz_axis_detail(s, company=c, axis=axis)
 
 
 @router.get("/pentagon", response_model=BusinessPentagonOut)
