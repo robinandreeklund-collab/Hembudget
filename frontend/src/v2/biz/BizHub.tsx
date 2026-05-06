@@ -613,6 +613,7 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showCapitalDialog, setShowCapitalDialog] = useState(false);
+  const [capitalDialogReason, setCapitalDialogReason] = useState<string | null>(null);
 
   useEffect(() => {
     bizApi
@@ -638,8 +639,11 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
       onCreated(c);
     } catch (e) {
       const msg = String((e as Error).message || e);
-      // 402 = privatkonto saknar pengar → visa dialog
-      if (msg.includes("Otillräckligt på privatkontot") || msg.includes("HTTP 402")) {
+      // 402 = privatkonto saknar pengar / saknar buffert → visa dialog
+      if (msg.includes("HTTP 402")) {
+        // Plocka ut backend-detaljen (efter "HTTP 402: ... — <detail>")
+        const m = msg.match(/—\s*(.+)$/);
+        setCapitalDialogReason(m ? m[1] : msg);
         setShowCapitalDialog(true);
         setBusy(false);
         return;
@@ -659,6 +663,7 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
     return (
       <BizHubShell>
         <StartupCapitalDialog
+          reason={capitalDialogReason}
           onPick={(funding) => {
             setShowCapitalDialog(false);
             tryCreate(funding);
@@ -976,12 +981,17 @@ function weekOfYear(d: Date): number {
 
 
 function StartupCapitalDialog({
+  reason,
   onPick,
   onCancel,
 }: {
+  reason?: string | null;
   onPick: (funding: "private_loan" | "business_loan_pg") => void;
   onCancel: () => void;
 }) {
+  // Skilj på två fall: helt utan pengar vs. har pengar men ingen buffert kvar
+  const isBufferCase = !!(reason && reason.includes("trygghets-bufferten"));
+  const eye = isBufferCase ? "⚠ FÖR LITEN BUFFERT" : "⚠ AKTIEKAPITAL SAKNAS";
   return (
     <div style={{
       maxWidth: 720,
@@ -992,15 +1002,34 @@ function StartupCapitalDialog({
       borderRadius: 12,
     }}>
       <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#fbbf24", letterSpacing: 1.6, fontWeight: 700 }}>
-        ⚠ AKTIEKAPITAL SAKNAS
+        {eye}
       </div>
       <h1 style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 26, color: "#fff", fontWeight: 700, margin: "8px 0 16px" }}>
-        Du saknar 25 000 kr <em style={{ color: "#fbbf24" }}>i aktiekapital</em>.
+        {isBufferCase ? (
+          <>Du har precis ihop pengarna · <em style={{ color: "#fbbf24" }}>men ingen buffert</em>.</>
+        ) : (
+          <>Du saknar 25 000 kr <em style={{ color: "#fbbf24" }}>i aktiekapital</em>.</>
+        )}
       </h1>
+      {reason && (
+        <div style={{
+          padding: "12px 14px",
+          marginBottom: 14,
+          background: "rgba(220,76,43,0.06)",
+          borderLeft: "2px solid #fda594",
+          borderRadius: 4,
+          fontFamily: "Source Serif 4, Georgia, serif",
+          fontSize: 13.5,
+          color: "rgba(255,255,255,0.85)",
+          lineHeight: 1.55,
+        }}>
+          {reason}
+        </div>
+      )}
       <p style={{ color: "rgba(255,255,255,0.78)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 15, lineHeight: 1.6 }}>
-        För att starta aktiebolag krävs minst 25 000 kr som du satsar i bolaget.
-        Det är pengar som tillhör bolaget — du får inte ut dem som lön. Två vägar
-        att lösa det:
+        {isBufferCase
+          ? "Att tömma kassan på första dagen är en klassisk nybörjar-fälla. Mat, hyra och Spotify dras dagarna efter och tar dig minus innan första kunden hunnit betala. Bättre att lämna bufferten orörd och låna istället:"
+          : "För att starta aktiebolag krävs minst 25 000 kr som du satsar i bolaget. Det är pengar som tillhör bolaget — du får inte ut dem som lön. Två vägar att lösa det:"}
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 22 }}>

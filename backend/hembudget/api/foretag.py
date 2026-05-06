@@ -463,7 +463,14 @@ def create_company(
                 "Aktiebolag kräver minst 25 000 kr i aktiekapital.",
             )
         if body.funding_method == "cash":
-            # Kontrollera privatkonto-saldo
+            # Kontrollera privatkonto-saldo · OCH kräv en kvarvarande
+            # buffert. Att sätta in HELA sin privatkassa som aktiekapital
+            # är pedagogiskt fel: löpande utgifter (Spotify, mat, hyra)
+            # tickar in dagarna efter och driver kontot minus → eleven
+            # får inkasso-varning innan första kunden ens betalt en
+            # faktura. Buffer-tröskeln tvingar pedagogiskt fram diskussion
+            # om "ska jag verkligen tömma min kassa?".
+            PRIVATE_BUFFER_AFTER_SHARE_CAPITAL = 5000
             from ..db.base import session_scope as _ps_check
             with _ps_check() as private_s:
                 from ..db.models import Account, Transaction
@@ -477,15 +484,14 @@ def create_company(
                         400,
                         "Privat-konto saknas · kontakta lärare",
                     )
-                # Beräkna saldo · alla transaktioner på kontot
                 bal = sum(
                     float(t.amount or 0)
                     for t in private_s.query(Transaction).filter(
                         Transaction.account_id == acc.id
                     ).all()
                 )
+                # Hård spärr · saknar pengarna helt
                 if bal < needed_capital:
-                    # Returnera särskild felkod 402 (payment required)
                     raise HTTPException(
                         402,
                         f"Otillräckligt på privatkontot. Du har "
@@ -493,6 +499,21 @@ def create_company(
                         "aktiekapital. Välj 'private_loan' för privat lån "
                         "eller 'business_loan_pg' för företagslån med "
                         "personlig borgen.",
+                    )
+                # Mjuk spärr · har pengarna men ingen buffert kvar
+                remaining = int(bal - needed_capital)
+                if remaining < PRIVATE_BUFFER_AFTER_SHARE_CAPITAL:
+                    raise HTTPException(
+                        402,
+                        f"Du har {int(bal)} kr på privatkontot. Lägger du "
+                        f"{needed_capital} kr i aktiekapital får du bara "
+                        f"{remaining} kr kvar — under tryggherts-bufferten "
+                        f"({PRIVATE_BUFFER_AFTER_SHARE_CAPITAL} kr). "
+                        "Löpande utgifter (mat, hyra, Spotify) tickar in "
+                        "dagarna efter och kan driva kontot minus innan "
+                        "bolaget hunnit fakturera. Ta hellre lån — då "
+                        "behåller du bufferten privat. Välj 'private_loan' "
+                        "eller 'business_loan_pg'.",
                     )
                 # Bokför uttag i privat-konto
                 from datetime import datetime as _dt
