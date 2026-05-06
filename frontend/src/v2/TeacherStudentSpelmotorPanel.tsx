@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from "react";
 import { v2Api } from "./api";
+import { getToken } from "@/api/client";
 
 const SHORT_DATE = (iso: string | null): string => {
   if (!iso) return "—";
@@ -518,11 +519,9 @@ async function advanceMonth(
   return r.json();
 }
 
-function getToken(): string {
-  // Auth-flödet sparar i sessionStorage("hembudget_token") · samma helper
-  // som @/api/client.ts. localStorage("hb_token") är legacy-bug.
-  return sessionStorage.getItem("hembudget_token") || "";
-}
+// getToken importeras från @/api/client (lokal version som läste
+// sessionStorage borttagen — token migrerades till localStorage och
+// den lokala kopian läste fel källa = "Missing bearer token"-fel).
 
 
 /** Knapp · trigga reseed för stuck failed runs.

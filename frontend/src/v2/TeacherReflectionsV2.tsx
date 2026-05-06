@@ -17,6 +17,7 @@ import {
   type V2ReflectionItem,
   type V2ReflectionFilter,
 } from "./api";
+import { getToken } from "@/api/client";
 import { V2Banner } from "./V2Banner";
 import "./larare.css";
 
@@ -111,7 +112,7 @@ export function TeacherReflectionsV2() {
                   ids.map((id) =>
                     fetch(`/v2/teacher/reflections/${id}/mark-read`, {
                       method: "POST",
-                      headers: { Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}` },
+                      headers: { Authorization: `Bearer ${getToken() || ""}` },
                     }).catch(() => undefined),
                   ),
                 );
@@ -127,7 +128,7 @@ export function TeacherReflectionsV2() {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
-                      Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
+                      Authorization: `Bearer ${getToken() || ""}`,
                     },
                     body: JSON.stringify({ filter, ids }),
                   });

@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { V2Banner } from "./V2Banner";
+import { getToken } from "@/api/client";
 
 type SchoolClass = {
   id: number;
@@ -21,7 +22,7 @@ type SchoolClass = {
   created_at: string;
 };
 
-const TOKEN = () => sessionStorage.getItem("hembudget_token") || "";
+const TOKEN = () => getToken() || "";
 
 async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(path, {

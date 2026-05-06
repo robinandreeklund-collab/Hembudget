@@ -1,9 +1,15 @@
 /**
  * API-klient för /v2/foretag/*-endpoints (Företagsläget · Bug #7-utbyggnad).
- * Använder raw fetch + localStorage-token (samma som övriga v2-vyer).
+ *
+ * Token läses via centrala getToken() från @/api/client — tidigare
+ * läste vi sessionStorage direkt här, vilket gick sönder när auth
+ * migrerades till localStorage (alla bizApi-anrop fick "Missing
+ * bearer token" → läraren såg fel state, eleven kunde inte lasta
+ * data).
  */
+import { getToken } from "@/api/client";
 
-const TOKEN = () => sessionStorage.getItem("hembudget_token") || "";
+const TOKEN = () => getToken() || "";
 
 async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(path, {

@@ -20,7 +20,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { api } from "@/api/client";
+import { api, clearRole, clearToken, getToken, setAsStudent } from "@/api/client";
 import { GuideDropdown } from "./guides/GuideDropdown";
 import { NotifBell } from "./NotifBell";
 import { ClassPicker } from "./ClassPicker";
@@ -438,13 +438,19 @@ async function handleLogout() {
     await fetch("/logout", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
+        Authorization: `Bearer ${getToken() || ""}`,
       },
     }).catch(() => undefined);
   } finally {
-    sessionStorage.removeItem("hembudget_token");
-    sessionStorage.removeItem("hembudget_role");
-    sessionStorage.removeItem("hembudget_as_student");
+    // KRITISKT: rensa via centrala helpers så BÅDE localStorage och
+    // legacy sessionStorage töms. Tidigare rensade vi bara sessionStorage
+    // direkt → efter token-migrationen till localStorage stannade token
+    // kvar och nästa "logga in" hittade gammal token = direktinlog utan
+    // kod. Det förklarar bug-rapporten "logga ut → logga in → kommer
+    // direkt in på eleven".
+    clearToken();
+    clearRole();
+    setAsStudent(null);
     window.location.href = "/";
   }
 }

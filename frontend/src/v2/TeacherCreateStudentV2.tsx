@@ -23,6 +23,7 @@ import {
 import { V2Banner } from "./V2Banner";
 import { LoginQrModal } from "./LoginQrModal";
 import { printAllLoginQrs } from "./printAllLoginQrs";
+import { getToken } from "@/api/client";
 import "./larare.css";
 
 const ARCHETYPE_LABEL: Record<V2CharacterArchetype, string> = {
@@ -627,7 +628,7 @@ function CreateForm({
   // Bug #1 · hämta lärarens klasser för dropdown
   useEffect(() => {
     fetch("/v2/teacher/classes", {
-      headers: { Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}` },
+      headers: { Authorization: `Bearer ${getToken() || ""}` },
     })
       .then((r) => (r.ok ? r.json() : []))
       .then(setClasses)
