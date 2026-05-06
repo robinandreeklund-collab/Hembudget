@@ -451,6 +451,26 @@ class StudentProfile(MasterBase):
     # Backstory som visas i onboardingen
     backstory: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # === Sprint 8 · företag-vs-jobb-balans ===
+    # Veckotid på det vanliga jobbet · default 40h heltid. Eleven kan
+    # gå ner till 50% (20h) eller säga upp helt (0h) som beslut när
+    # företaget växer. Lön justeras proportionerligt nästa månadstick.
+    weekly_hours_employed: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=40, server_default="40",
+    ))
+    # Anställnings-status: "employed" (heltid/deltid · lön kommer)
+    # | "unemployed" (uppsagd) | "freelance_only" (egen företagare som
+    # sagt upp jobbet helt). Driver lönespec-generation.
+    employment_status: Mapped[str] = deferred(mapped_column(
+        String(20), nullable=False, default="employed",
+        server_default="employed",
+    ))
+    # Konsekutiva veckor över 50h totalt (anställd+biz). Spåras av
+    # combined_weekly_tick · driver Maria-säg-upp-prompt vid 4+.
+    consecutive_overload_weeks: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0, server_default="0",
+    ))
+
     # Lönesamtals-resultat: ny lön committas inte direkt — den lagras
     # här tills lönespec-generatorn körs för en månad >= effective_from,
     # då skrivs gross_salary_monthly om och pending-fälten nollas. Det

@@ -63,6 +63,16 @@ class Company(TenantMixin, Base):
     industry_label: Mapped[Optional[str]] = mapped_column(
         String(120), nullable=True,
     )
+    # Bransch-nyckel · en av de 10 fasta branscherna i industries.py.
+    # Driver pris-baseline, marginal, säsong, segmentmix m.m.
+    industry_key: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    # Stad · ärvs från karaktären vid create. Styr lokal-kostnad,
+    # pipeline-täthet och pris-multiplicator.
+    city_key: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
 
     # Status
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

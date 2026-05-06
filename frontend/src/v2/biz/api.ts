@@ -37,7 +37,26 @@ export type Company = {
   vat_period: string;
   sni_code: string | null;
   industry_label: string | null;
+  industry_key: string | null;
+  city_key: string | null;
+  city_display: string | null;
   active: boolean;
+};
+
+export type Industry = {
+  key: string;
+  label: string;
+  short_description: string;
+  sni_code: string;
+  hourly_rate_min: number;
+  hourly_rate_max: number;
+  margin_baseline_pct: number;
+  requires_lokal: boolean;
+  monthly_lokal_cost_baseline: number;
+  equipment_cost_init: number;
+  pipeline_per_week_baseline: number;
+  learning_focus: string;
+  available_in_my_city: boolean;
 };
 
 export type CompanyTransaction = {
@@ -205,8 +224,37 @@ export type BizBankOverview = {
 
 export const bizApi = {
   getCompany: () => call<Company | null>("/v2/foretag"),
-  createCompany: (b: Partial<Company> & { name: string }) =>
+  createCompany: (b: {
+    name: string;
+    form: CompanyForm;
+    industry_key: string;
+    vat_registered?: boolean;
+    vat_period?: string;
+    share_capital?: number | null;
+    org_number?: string | null;
+  }) =>
     call<Company>("/v2/foretag", { method: "POST", body: JSON.stringify(b) }),
+
+  // Lista de 10 fasta branscherna (med 'available_in_my_city'-flagga)
+  listIndustries: () => call<Industry[]>("/v2/foretag/industries"),
+
+  // Sammanfattning för privat-hub · visar bara om eleven har företag
+  privateSummary: () =>
+    call<{
+      has_company: boolean;
+      company_name: string | null;
+      industry_label: string | null;
+      city_display: string | null;
+      week_no: number;
+      income_4w: number;
+      profit_4w: number;
+      margin_pct: number;
+      kassa: number;
+      n_invoices_open: number;
+      n_invoices_overdue: number;
+      pentagon_score: number;
+      summary_text: string;
+    }>("/v2/foretag/private-summary"),
   patchCompany: (id: number, b: Partial<Company> & { name: string; form: string }) =>
     call<Company>(`/v2/foretag/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   closeCompany: (id: number) =>

@@ -1411,6 +1411,105 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: WellbeingEvent-summa misslyckades",
         )
 
+    # === FÖRETAGS-CROSS-FAKTORER (om eleven har biz-mode aktiverat) ===
+    # Asymmetrisk · stora negativa biz-händelser ger större privat-effekt
+    # än stora positiva. Tids-stress läggs separat eftersom det räknas
+    # från active jobs-timmar, inte pentagon-axlar.
+    try:
+        from ..business.models import Company as _BizCompany, Job as _BizJob
+        from ..business.cross_pentagon import (
+            biz_to_private_factors,
+            compute_time_stress_factors,
+            compute_weekly_business_hours,
+            TimeStressInput,
+        )
+        from ..business.service import compute_business_pentagon
+        # Hämta elevens aktiva bolag (om något) inom samma scope-DB
+        biz = (
+            session.query(_BizCompany)
+            .filter(_BizCompany.active.is_(True))
+            .first()
+        )
+        if biz is not None:
+            biz_pent = compute_business_pentagon(session, company=biz)
+            cross_factors = biz_to_private_factors(biz_pent["axes"])
+            for cf in cross_factors:
+                if cf.axis == "economy":
+                    economy += cf.points
+                elif cf.axis == "health":
+                    health += cf.points
+                elif cf.axis == "social":
+                    social += cf.points
+                elif cf.axis == "leisure":
+                    leisure += cf.points
+                elif cf.axis == "safety":
+                    safety += cf.points
+                factors.append(WellbeingFactor(
+                    cf.axis, cf.points,
+                    f"Företag: {cf.explanation}",
+                ))
+            # Tids-stress · räkna timmar/vecka från active jobs
+            in_progress = (
+                session.query(_BizJob)
+                .filter(
+                    _BizJob.company_id == biz.id,
+                    _BizJob.status == "in_progress",
+                )
+                .all()
+            )
+            biz_hours = compute_weekly_business_hours(
+                in_progress, industry_key=biz.industry_key,
+            )
+            # Hämta anställd-h från StudentProfile (default 40h heltid)
+            employed_h = 40
+            try:
+                from ..school.engines import (
+                    master_session as _ms_emp,
+                    get_current_actor_student as _gcas_emp,
+                )
+                from ..school.models import StudentProfile as _SP_emp
+                actor_id = _gcas_emp()
+                if actor_id is not None:
+                    with _ms_emp() as _msdb_emp:
+                        _prof_emp = (
+                            _msdb_emp.query(_SP_emp)
+                            .filter(_SP_emp.student_id == actor_id)
+                            .first()
+                        )
+                        if _prof_emp is not None and hasattr(
+                            _prof_emp, "weekly_hours_employed",
+                        ):
+                            v = getattr(_prof_emp, "weekly_hours_employed", None)
+                            if v is not None:
+                                employed_h = int(v)
+            except Exception:
+                pass
+            time_stress = compute_time_stress_factors(TimeStressInput(
+                weekly_hours_employed=employed_h,
+                weekly_hours_business=biz_hours,
+                consecutive_weeks_overload=0,   # TODO Fas 3: spåra
+            ))
+            for cf in time_stress:
+                if cf.axis == "economy":
+                    economy += cf.points
+                elif cf.axis == "health":
+                    health += cf.points
+                elif cf.axis == "social":
+                    social += cf.points
+                elif cf.axis == "leisure":
+                    leisure += cf.points
+                elif cf.axis == "safety":
+                    safety += cf.points
+                factors.append(WellbeingFactor(
+                    cf.axis, cf.points,
+                    f"Tidsstress: {cf.explanation}",
+                ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: biz-cross-factors misslyckades",
+        )
+
     # --- KLAMP + TOTAL ---
     economy = max(0, min(100, economy))
     health = max(0, min(100, health))

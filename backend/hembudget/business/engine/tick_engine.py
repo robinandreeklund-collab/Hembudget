@@ -71,6 +71,42 @@ class TickSummary:
     reputation_after: int = 50
 
 
+def _pick_customer_with_segment_mix(
+    rng,
+    customers,
+    segment_mix: tuple[float, float, float] | None,
+):
+    """Välj en kund från `customers` med segment-vikter från branschen.
+
+    `segment_mix` = (privat, foretag, kommun) som summerar till 1.0.
+    Om None ges → uniform random.choice.
+
+    Branschen styr KUND-typen mest — t.ex. snickare har 65 % privat-
+    kunder (ROT-avdrag), IT-konsult 65 % företag, catering 55 % företag.
+    """
+    if segment_mix is None or not customers:
+        return rng.choice(customers)
+
+    # Gruppera kunder per segment
+    grouped: dict[str, list] = {"privat": [], "foretag": [], "kommun": []}
+    for c in customers:
+        seg = getattr(c, "segment", "privat")
+        grouped.setdefault(seg, []).append(c)
+
+    # Sannolikhetsval mot bransch-mix
+    p_priv, p_for, p_kom = segment_mix
+    roll = rng.random()
+    if roll < p_priv and grouped["privat"]:
+        return rng.choice(grouped["privat"])
+    if roll < p_priv + p_for and grouped["foretag"]:
+        return rng.choice(grouped["foretag"])
+    if grouped["kommun"]:
+        return rng.choice(grouped["kommun"])
+
+    # Fallback om bransch-mix-segment saknas i pool
+    return rng.choice(customers)
+
+
 def _tick_seed(company_id: int, week_no: int, suffix: int = 0) -> int:
     """Deterministisk seed för en (company, week, faslokal-suffix)."""
     return company_id * 100000 + week_no * 100 + suffix
@@ -265,12 +301,57 @@ def _phase_c_generate_opportunities(
 
     customers, jobs = industry_pool(company.industry_label)
 
+    # === Stad-multipliers · pris + pipeline-täthet ===
+    # Stockholm-IT 1200 kr/h, Umeå-IT 850 kr/h. Storstad → fler offerter.
+    city_price_mult = 1.0
+    if company.city_key:
+        try:
+            from ...game_engine.pools.stadspool import STAD_BY_KEY
+            stad = STAD_BY_KEY.get(company.city_key)
+            if stad is not None:
+                # Större stad = högre priser (cost_multiplier_housing
+                # är en bra proxy för lokal-prissättning + lönenivå)
+                city_price_mult = float(stad.cost_multiplier_housing)
+        except Exception:
+            pass
+
+    # === Bransch-baseline · Industry.hourly_rate × Industry.time ===
+    industry_rate_mid = None
+    industry_segment_mix: tuple[float, float, float] | None = None
+    if company.industry_key:
+        try:
+            from ..industries import get_industry as _get_ind
+            ind = _get_ind(company.industry_key)
+            industry_rate_mid = (
+                ind.hourly_rate_min + ind.hourly_rate_max
+            ) / 2.0
+            industry_segment_mix = (
+                ind.segment_mix_privat,
+                ind.segment_mix_foretag,
+                ind.segment_mix_kommun,
+            )
+        except Exception:
+            pass
+
     import random as _random
     rng = _random.Random(_tick_seed(company.id, company.week_no, suffix=31))
     for k in range(out.n_opportunities):
-        cust = rng.choice(customers)
+        # Vikta kund-segment efter bransch om vi har mix-data
+        cust = _pick_customer_with_segment_mix(
+            rng, customers, industry_segment_mix,
+        )
         tmpl = rng.choice(jobs)
-        market_price = market_price_for(tmpl, cust)
+
+        # Pris-baseline · försök bransch-baserat · annars fallback
+        if industry_rate_mid is not None:
+            est_hours = (tmpl.delivery_days or 1) * 6
+            market_price = int(industry_rate_mid * est_hours)
+        else:
+            market_price = market_price_for(tmpl, cust)
+
+        # Stad-multiplier
+        market_price = int(market_price * city_price_mult)
+
         # Volatilitet ±X% av riktpriset
         vol = profile.market_price_volatility
         adj = 1.0 + rng.uniform(-vol, vol)
@@ -446,6 +527,12 @@ def run_business_week(
         _phase_f_charge_subscriptions(
             s, company=company, today=today, summary=summary,
         )
+        _phase_g_employment_decision_check(
+            s, company=company, summary=summary,
+        )
+        _phase_h_milestone_mails(
+            s, company=company, summary=summary,
+        )
 
         s.flush()
         tick_row.status = "done"
@@ -472,6 +559,203 @@ def run_business_week(
         raise
 
     return summary
+
+
+# ===== Cross-engine: tids-stress + Maria-prompt (Sprint 8) =====
+
+def _phase_g_employment_decision_check(
+    s: Session, *, company: Company, summary: TickSummary,
+) -> None:
+    """Spåra tids-stress · skicka Maria-mail vid 4+ veckor överbelastning.
+
+    Logiken:
+    1. Räkna totala timmar (anställd + biz active jobs)
+    2. Om total > 50: öka consecutive_overload_weeks
+    3. Om consecutive >= 4 OCH biz_h >= 25 OCH employed: skicka mail
+    4. Annars · reset overload-counter om timmarna är OK
+
+    Mail skickas en gång; vi triggar inte igen så länge eleven inte
+    har valt eller om eleven valt 'keep_fulltime' (där vi resetar
+    counter).
+    """
+    from ..cross_pentagon import compute_weekly_business_hours
+    from ..employment_decision import (
+        evaluate_employment_decision, maria_prompt_text,
+    )
+    from ...school.engines import (
+        master_session, get_current_actor_student,
+    )
+    from ...school.models import StudentProfile, Student
+
+    actor_id = get_current_actor_student()
+    if actor_id is None:
+        return
+
+    # Räkna biz-timmar
+    in_progress = (
+        s.query(Job)
+        .filter(Job.company_id == company.id, Job.status == "in_progress")
+        .all()
+    )
+    biz_h = compute_weekly_business_hours(
+        in_progress, industry_key=company.industry_key,
+    )
+
+    # Hämta + uppdatera StudentProfile
+    student_first_name = "du"
+    with master_session() as ms:
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == actor_id)
+            .first()
+        )
+        stu = ms.get(Student, actor_id)
+        if stu is not None and stu.display_name:
+            student_first_name = stu.display_name.split(" ")[0]
+        if prof is None:
+            return
+        emp_h = int(getattr(prof, "weekly_hours_employed", 40) or 40)
+        emp_status = getattr(prof, "employment_status", "employed")
+        overload = int(getattr(prof, "consecutive_overload_weeks", 0) or 0)
+        total_h = emp_h + biz_h
+
+        if total_h > 50:
+            overload += 1
+        else:
+            overload = 0
+
+        prof.consecutive_overload_weeks = overload
+        ms.commit()
+
+        trigger = evaluate_employment_decision(
+            weekly_hours_business=biz_h,
+            consecutive_overload_weeks=overload,
+            employment_status=emp_status,
+        )
+
+    if not trigger.should_trigger:
+        summary.notes.append(
+            f"tidsstress · {biz_h}h biz · overload-veckor={overload}",
+        )
+        return
+
+    # Kolla om vi redan skickat ett Maria-mail med samma trigger
+    # (för att inte spamma varje vecka). Använd subject-prefix som idmark.
+    from ...db.models import MailItem
+    existing = (
+        s.query(MailItem)
+        .filter(
+            MailItem.subject.like("Hej %· vi behöver prata om din arbetstid"),
+            MailItem.status.in_({"unhandled", "viewed"}),
+        )
+        .first()
+    )
+    if existing is not None:
+        summary.notes.append(
+            "Maria-prompt redan skickad och oavslutad · skippar",
+        )
+        return
+
+    subj, meta, body = maria_prompt_text(
+        student_first_name=student_first_name,
+        weekly_hours_business=biz_h,
+        weeks=overload,
+    )
+    s.add(MailItem(
+        sender="Maria · din chef",
+        sender_short="MAR",
+        sender_kind="work",
+        sender_meta="tidskonflikt · 3 val att besvara",
+        mail_type="info",
+        subject=subj,
+        body_meta=meta,
+        body=body,
+        amount=None,
+        due_date=None,
+        received_at=datetime.utcnow(),
+        status="unhandled",
+    ))
+    summary.notes.append(
+        f"Maria-säg-upp-prompt skickad ({biz_h}h biz · {overload}v "
+        "överbelastning)",
+    )
+
+
+def _phase_h_milestone_mails(
+    s: Session, *, company: Company, summary: TickSummary,
+) -> None:
+    """Pedagogiska milstolpe-mail · skickas vid specifika veckor.
+
+    v4 · 'Du har drivit företaget i 4 veckor — reflektera om
+           prissättning och kund-mix.'
+    v8 · 'Du har drivit företaget i 8 veckor — börjar du se mönster
+           i vilka kund-typer som betalar bäst?'
+    v12 · 'Vad har du lärt dig om kassaflöde under första kvartalet?'
+    v24 · 'Halv-årsuppdatering — pentagon-jämförelse mot start.'
+
+    Idempotent: kolla att mail med samma subject inte redan finns.
+    """
+    from ...db.models import MailItem
+
+    milestones = {
+        4:  ("Reflektera · 4 veckor i drift",
+             "Vad har du lärt dig om prissättning?",
+             "Du har drivit företaget i en månad. Innan du går vidare — "
+             "stanna upp och fundera. Ligger dina priser i mitten av "
+             "Konsumentverkets schablon? Är dina kunder främst privat, "
+             "företag eller kommun? Vad ger bäst marginal? Skriv ner i "
+             "en reflektion för Anders Lind."),
+        8:  ("Reflektera · 8 veckor i drift",
+             "Mönster i kunder och betalning?",
+             "8 veckor in. Vilka kunder betalar i tid? Vilka släpar? "
+             "Finns det en bransch-trend i din kund-mix? Marginalen "
+             "skiljer sig ofta 20+ % mellan privat och företag — har "
+             "du sett det? Reflektion till Anders."),
+        12: ("Reflektera · 12 veckor · första kvartalet",
+             "Kassaflöde · vad lärde du dig?",
+             "Första kvartalet klart. Hur har kassan rört sig? Var det "
+             "en månad där du nästan inte kunde ta ut egen lön? Hur "
+             "skiljer sig moms-due från det du faktiskt har på "
+             "företagskontot? Skriv en lärande-reflektion."),
+        24: ("Halv-årsuppdatering",
+             "Pentagon-jämförelse mot start",
+             "26 veckor i drift. Pentagon-axlarna har rört sig — vilken "
+             "har stigit mest, vilken har dippat? Privat-pentagonen har "
+             "också reagerat på företaget. Är det värt det?"),
+    }
+
+    if company.week_no not in milestones:
+        return
+
+    subject_short, meta, body = milestones[company.week_no]
+    full_subject = f"v{company.week_no} · {subject_short}"
+
+    # Idempotens · kolla om mail redan finns
+    existing = (
+        s.query(MailItem)
+        .filter(MailItem.subject == full_subject)
+        .first()
+    )
+    if existing is not None:
+        return
+
+    s.add(MailItem(
+        sender="Anders Lind · klassansvarig",
+        sender_short="LÄR",
+        sender_kind="other",
+        sender_meta=f"milstolpe · v{company.week_no}",
+        mail_type="info",
+        subject=full_subject,
+        body_meta=meta,
+        body=body,
+        amount=None,
+        due_date=None,
+        received_at=datetime.utcnow(),
+        status="unhandled",
+    ))
+    summary.notes.append(
+        f"Milstolpe-mail v{company.week_no} skickat",
+    )
 
 
 # ===== Leverera-jobb (separat funktion · kallas från endpoint) =====

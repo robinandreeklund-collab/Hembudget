@@ -533,6 +533,24 @@ def _run_master_migrations(engine: Engine) -> None:
     if sn_cols and "opening_message" not in sn_cols:
         _add("salary_negotiations", "opening_message TEXT")
 
+    # Sprint 8 · företag-vs-jobb-balans-fält på student_profiles
+    sp_cols = _cols("student_profiles")
+    if sp_cols and "weekly_hours_employed" not in sp_cols:
+        _add(
+            "student_profiles",
+            "weekly_hours_employed INTEGER NOT NULL DEFAULT 40",
+        )
+    if sp_cols and "employment_status" not in sp_cols:
+        _add(
+            "student_profiles",
+            "employment_status VARCHAR(20) NOT NULL DEFAULT 'employed'",
+        )
+    if sp_cols and "consecutive_overload_weeks" not in sp_cols:
+        _add(
+            "student_profiles",
+            "consecutive_overload_weeks INTEGER NOT NULL DEFAULT 0",
+        )
+
     # === FK · v2_onboarding_events.student_id → students.id ON DELETE CASCADE.
     # Tabellen skapades utan ondelete=CASCADE, så befintlig FK-constraint
     # i Postgres blockerar DELETE på Student när det finns onboarding-events

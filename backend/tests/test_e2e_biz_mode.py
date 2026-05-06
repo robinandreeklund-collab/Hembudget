@@ -121,7 +121,7 @@ def test_biz_mode_full_flow(app_with_student):
         json={
             "name": "Sara A. AB",
             "form": "ab",
-            "industry_label": "hantverk",
+            "industry_key": "snickare",
             "share_capital": 25000,
         },
     )
@@ -223,7 +223,7 @@ def test_biz_class_overview_shows_company(app_with_student):
     # Skapa bolag
     client.post(
         "/v2/foretag", headers=H_S,
-        json={"name": "Test AB", "form": "ab", "industry_label": "konsult"},
+        json={"name": "Test AB", "form": "ab", "industry_key": "it_konsult"},
     )
 
     # Lärare hämtar klass-aggregat
@@ -248,7 +248,7 @@ def test_biz_supplier_invoice_mass_send(app_with_student):
     client.post(
         "/v2/foretag", headers=H_S,
         json={"name": "Bygg AB", "form": "enskild_firma",
-              "industry_label": "hantverk"},
+              "industry_key": "snickare"},
     )
 
     # Lärare skickar leverantörsfaktura
@@ -293,7 +293,7 @@ def test_biz_bank_overview_shape(app_with_student):
         "/v2/foretag", headers=H,
         json={
             "name": "Test AB", "form": "ab",
-            "industry_label": "konsult", "share_capital": 25000,
+            "industry_key": "it_konsult", "share_capital": 25000,
         },
     )
 
@@ -312,6 +312,133 @@ def test_biz_bank_overview_shape(app_with_student):
     assert "own_salary_this_month" in data
 
 
+def test_biz_industries_endpoint_returns_10_industries(app_with_student):
+    """GET /v2/foretag/industries returnerar 10 fasta branscher med
+    metadata och 'available_in_my_city'-flagga per bransch."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    r = client.get("/v2/foretag/industries", headers=H)
+    assert r.status_code == 200, r.text
+    industries = r.json()
+    assert len(industries) == 10
+    keys = {i["key"] for i in industries}
+    assert "it_konsult" in keys
+    assert "rormokare" in keys
+    assert "frisor" in keys
+    # Varje bransch har metadata
+    for ind in industries:
+        assert ind["sni_code"]
+        assert ind["hourly_rate_min"] > 0
+        assert ind["hourly_rate_max"] > ind["hourly_rate_min"]
+        assert "available_in_my_city" in ind
+
+
+def test_biz_create_company_validates_industry_key(app_with_student):
+    """create_company måste få giltig industry_key. Fri text → 400."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    # Okänd bransch
+    r = client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test AB", "form": "ab",
+            "industry_key": "fri_text_blah",
+        },
+    )
+    assert r.status_code == 400, r.text
+    assert "Okänd bransch" in r.json()["detail"]
+
+
+def test_biz_create_company_inherits_city_from_character(app_with_student):
+    """Stad ärvs från karaktärens StudentProfile.city — kan ej ändras."""
+    client, _teacher_token, student_token, _tid, sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+
+    # Sätt karaktärens stad explicit till Stockholm
+    from hembudget.school.models import StudentProfile
+    with master_session() as ms:
+        prof = ms.query(StudentProfile).filter_by(student_id=sid).first()
+        if prof is not None:
+            prof.city = "Stockholm"
+            ms.commit()
+
+    r = client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test", "form": "enskild_firma",
+            "industry_key": "it_konsult",
+        },
+    )
+    assert r.status_code == 200, r.text
+    company = r.json()
+    # city_key borde vara satt, även om vi inte skickade det
+    assert company["city_key"] is not None
+
+
+def test_biz_employment_decision_status_no_pending_at_start(app_with_student):
+    """Säg-upp-prompten ska INTE trigga direkt efter företagsstart
+    (0 timmar biz · 0 v överbelastning)."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test", "form": "ab",
+            "industry_key": "it_konsult", "share_capital": 25000,
+        },
+    )
+    r = client.get("/v2/foretag/employment-decision/status", headers=H)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["pending"] is False
+    assert data["employment_status"] == "employed"
+    assert data["weekly_hours_employed"] == 40
+
+
+def test_biz_employment_decision_apply_parttime(app_with_student):
+    """POST /employment-decision · go_parttime halverar lön och sätter 20h."""
+    client, _teacher_token, student_token, _tid, sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test", "form": "enskild_firma",
+            "industry_key": "it_konsult",
+        },
+    )
+    # Spara löne-baseline för jämförelse
+    from hembudget.school.models import StudentProfile
+    with master_session() as ms:
+        prof = ms.query(StudentProfile).filter_by(student_id=sid).first()
+        baseline_gross = int(prof.gross_salary_monthly)
+
+    r = client.post(
+        "/v2/foretag/employment-decision",
+        headers=H,
+        json={"choice": "go_parttime"},
+    )
+    assert r.status_code == 200, r.text
+    result = r.json()
+    assert result["choice"] == "go_parttime"
+    assert result["weekly_hours_employed"] == 20
+    assert result["salary_change_pct"] == -50
+
+    # Verifiera att gross-salary halverades
+    with master_session() as ms:
+        prof = ms.query(StudentProfile).filter_by(student_id=sid).first()
+        assert int(prof.gross_salary_monthly) == baseline_gross // 2
+
+
+def test_biz_private_summary_returns_no_company_at_first(app_with_student):
+    """privateSummary returnerar has_company=false innan eleven skapat
+    bolag — så BizSummaryCard renderar ingenting."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    r = client.get("/v2/foretag/private-summary", headers=H)
+    assert r.status_code == 200, r.text
+    assert r.json()["has_company"] is False
+
+
 def test_biz_pentagon_axis_detail_returns_factors_and_events(app_with_student):
     """Flip-kortets baksida · /v2/foretag/pentagon/axis/{axis} ska
     returnera score + faktorer + events + summary för varje av de 5
@@ -327,7 +454,7 @@ def test_biz_pentagon_axis_detail_returns_factors_and_events(app_with_student):
     # Skapa bolag
     client.post(
         "/v2/foretag", headers=H,
-        json={"name": "Pentagon AB", "form": "ab", "industry_label": "konsult"},
+        json={"name": "Pentagon AB", "form": "ab", "industry_key": "it_konsult"},
     )
 
     # Alla 5 axlar ska ge en giltig BizAxisDetail
@@ -353,7 +480,7 @@ def test_biz_pentagon_includes_axes_prev(app_with_student):
     H = {"Authorization": f"Bearer {student_token}"}
     client.post(
         "/v2/foretag", headers=H,
-        json={"name": "TT", "form": "ab", "industry_label": "tjänster"},
+        json={"name": "TT", "form": "ab", "industry_key": "it_konsult"},
     )
     r = client.get("/v2/foretag/pentagon", headers=H)
     assert r.status_code == 200, r.text
@@ -371,7 +498,7 @@ def test_biz_owner_salary_credits_private_account(app_with_student):
     # Skapa AB
     client.post(
         "/v2/foretag", headers=H_S,
-        json={"name": "AB", "form": "ab", "industry_label": "konsult"},
+        json={"name": "AB", "form": "ab", "industry_key": "it_konsult"},
     )
 
     # Hämta privat-konto saldo INNAN

@@ -717,6 +717,9 @@ def run_migrations(engine: Engine) -> list[str]:
                 "delivery_capacity",
                 "delivery_capacity INTEGER NOT NULL DEFAULT 1",
             ),
+            # Sprint 8 · industry_key + city_key för 10-bransch-väljaren
+            ("industry_key", "industry_key VARCHAR(40)"),
+            ("city_key", "city_key VARCHAR(40)"),
         ]
         for col_name, col_sql in biz_company_columns:
             if col_name not in cols:

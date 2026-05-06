@@ -681,23 +681,37 @@ function BusinessNotAllowed() {
 
 
 /* ======================================================================
- * CompanyOnboarding · oförändrat (skapa bolag)
+ * CompanyOnboarding · 3-stegsflöde för att starta bolag
+ *   1. Välj bransch (10 kort med stad-tillgänglighet)
+ *   2. Välj form (enskild firma / AB) + namn
+ *   3. Bekräfta + skapa
  * ====================================================================== */
 function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [industries, setIndustries] = useState<import("./api").Industry[]>([]);
+  const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [form, setForm] = useState<"enskild_firma" | "ab">("enskild_firma");
   const [vatReg, setVatReg] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    bizApi
+      .listIndustries()
+      .then(setIndustries)
+      .catch(() => undefined);
+  }, []);
+
   const create = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !selectedIndustry) return;
     setBusy(true);
     setErr(null);
     try {
       const c = await bizApi.createCompany({
         name: name.trim(),
         form,
+        industry_key: selectedIndustry,
         vat_registered: vatReg,
         vat_period: "kvartal",
         share_capital: form === "ab" ? 25000 : null,
@@ -710,80 +724,300 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
     }
   };
 
+  const selected = industries.find((i) => i.key === selectedIndustry);
+
   return (
     <BizHubShell>
-      <div
+      <div className="biz-eye">Företagsläge · STARTA BOLAG</div>
+      <h1 className="biz-h1" style={{ marginTop: 14 }}>
+        Driv ditt eget <em>bolag</em>.
+      </h1>
+      <p
         style={{
-          padding: "60px 40px",
-          maxWidth: 720,
-          margin: "0 auto",
-          background:
-            "linear-gradient(135deg, rgba(99,102,241,0.05), rgba(168,85,247,0.05))",
-          border: "1px solid rgba(99, 102, 241, 0.25)",
-          borderRadius: 16,
+          color: "rgba(255,255,255,0.55)",
+          fontSize: "1rem",
+          marginBottom: 28,
+          marginTop: 12,
+          fontFamily: "Source Serif 4, Georgia, serif",
         }}
       >
-        <div className="biz-eye">Företagsläge · STARTA BOLAG</div>
-        <h1 className="biz-h1" style={{ marginTop: 14 }}>
-          Driv ditt eget <em>bolag</em>.
-        </h1>
-        <p
-          style={{
-            color: "rgba(255,255,255,0.7)",
-            fontSize: "1rem",
-            marginBottom: 28,
-            marginTop: 12,
-          }}
-        >
-          Skapa en enskild firma eller aktiebolag. Du behåller din
-          privatekonomi parallellt — växla mellan med toggle-knappen i topbar.
-        </p>
+        Steg {step} av 3 · {step === 1 ? "Välj bransch"
+          : step === 2 ? "Bolagsform & namn"
+          : "Bekräfta"}
+      </p>
 
-        <label className="biz-field">
-          <span className="biz-field-label">Bolagsnamn:</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="ex: Sara A. Konsult AB"
-            className="biz-input"
-          />
-        </label>
-
-        <label className="biz-field">
-          <span className="biz-field-label">Bolagsform:</span>
-          <select
-            value={form}
-            onChange={(e) => setForm(e.target.value as typeof form)}
-            className="biz-select"
+      {step === 1 && (
+        <>
+          <p
+            style={{
+              fontFamily: "Source Serif 4, Georgia, serif",
+              color: "rgba(255,255,255,0.85)",
+              fontSize: 14.5,
+              lineHeight: 1.55,
+              marginBottom: 22,
+            }}
           >
-            <option value="enskild_firma">Enskild firma (lättast)</option>
-            <option value="ab">Aktiebolag (kräver 25 000 kr aktiekapital)</option>
-          </select>
-        </label>
+            Välj en av de 10 fasta branscherna. Branschen styr pris-baseline,
+            kund-mix, säsong och pipeline-täthet i din stad. Vissa branscher
+            kräver minst medelstor stad — markeras med 🔒 om din karaktär
+            bor i för liten ort.
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: 12,
+              marginBottom: 24,
+            }}
+          >
+            {industries.map((ind) => {
+              const isSel = selectedIndustry === ind.key;
+              const blocked = !ind.available_in_my_city;
+              return (
+                <button
+                  type="button"
+                  key={ind.key}
+                  onClick={() => {
+                    if (blocked) return;
+                    setSelectedIndustry(ind.key);
+                  }}
+                  disabled={blocked}
+                  className="biz-card"
+                  style={{
+                    textAlign: "left",
+                    cursor: blocked ? "not-allowed" : "pointer",
+                    borderTopColor: isSel ? "#6366f1" : "#818cf8",
+                    background: isSel
+                      ? "rgba(99,102,241,0.18)"
+                      : "rgba(15,21,37,0.7)",
+                    opacity: blocked ? 0.4 : 1,
+                    padding: 18,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 8,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "Source Serif 4, Georgia, serif",
+                        fontSize: 17,
+                        fontWeight: 700,
+                        color: "#fff",
+                      }}
+                    >
+                      {ind.label} {blocked && "🔒"}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 9,
+                        color: "rgba(255,255,255,0.4)",
+                        letterSpacing: 1.2,
+                      }}
+                    >
+                      SNI {ind.sni_code}
+                    </span>
+                  </div>
+                  <p
+                    style={{
+                      fontFamily: "Source Serif 4, Georgia, serif",
+                      fontSize: 13,
+                      color: "rgba(255,255,255,0.7)",
+                      lineHeight: 1.45,
+                      margin: "8px 0 12px",
+                    }}
+                  >
+                    {ind.short_description}
+                  </p>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 6,
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 9.5,
+                      color: "rgba(255,255,255,0.6)",
+                    }}
+                  >
+                    <span>
+                      Pris: {ind.hourly_rate_min}–{ind.hourly_rate_max} kr/h
+                    </span>
+                    <span>Marginal ~{ind.margin_baseline_pct} %</span>
+                    <span>
+                      {ind.requires_lokal
+                        ? `Lokal ${ind.monthly_lokal_cost_baseline} kr/m`
+                        : "Hemmabas"}
+                    </span>
+                    <span>
+                      Utrustning {ind.equipment_cost_init.toLocaleString("sv-SE")} kr
+                    </span>
+                  </div>
+                  {blocked && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 9,
+                        color: "#fbbf24",
+                        letterSpacing: 0.6,
+                      }}
+                    >
+                      Kräver minst medelstor stad
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setStep(2)}
+            disabled={!selectedIndustry}
+            className="biz-btn solid"
+            style={{ padding: "12px 24px" }}
+          >
+            Nästa · bolagsform →
+          </button>
+        </>
+      )}
 
-        <label
-          className="biz-field"
-          style={{ display: "flex", alignItems: "center", gap: 10 }}
-        >
-          <input
-            type="checkbox"
-            checked={vatReg}
-            onChange={(e) => setVatReg(e.target.checked)}
-          />
-          <span>Momsregistrera (krävs vid omsättning &gt; 80 000 kr/år)</span>
-        </label>
+      {step === 2 && selected && (
+        <>
+          <div className="biz-card" style={{ marginBottom: 22 }}>
+            <div className="biz-card-eye">Vald bransch</div>
+            <div className="biz-card-h">{selected.label}</div>
+            <p
+              style={{
+                fontFamily: "Source Serif 4, Georgia, serif",
+                color: "rgba(255,255,255,0.75)",
+                fontSize: 13.5,
+                marginTop: 8,
+              }}
+            >
+              {selected.learning_focus}
+            </p>
+          </div>
 
-        {err && <div className="biz-error">{err}</div>}
+          <label className="biz-field">
+            <span className="biz-field-label">Bolagsnamn:</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={`ex: ${selected.label} ${form === "ab" ? "AB" : ""}`}
+              className="biz-input"
+            />
+          </label>
 
-        <button
-          onClick={create}
-          disabled={busy || !name.trim()}
-          className="biz-btn solid"
-          style={{ marginTop: 20, padding: "14px 28px", fontSize: "1rem" }}
-        >
-          {busy ? "Skapar…" : "Starta bolaget →"}
-        </button>
-      </div>
+          <label className="biz-field">
+            <span className="biz-field-label">Bolagsform:</span>
+            <select
+              value={form}
+              onChange={(e) => setForm(e.target.value as typeof form)}
+              className="biz-select"
+            >
+              <option value="enskild_firma">Enskild firma (lättast)</option>
+              <option value="ab">
+                Aktiebolag (kräver 25 000 kr aktiekapital)
+              </option>
+            </select>
+          </label>
+
+          <label
+            className="biz-field"
+            style={{ display: "flex", alignItems: "center", gap: 10 }}
+          >
+            <input
+              type="checkbox"
+              checked={vatReg}
+              onChange={(e) => setVatReg(e.target.checked)}
+            />
+            <span>Momsregistrera (krävs vid omsättning &gt; 80 000 kr/år)</span>
+          </label>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+            <button
+              onClick={() => setStep(1)}
+              className="biz-btn"
+            >
+              ← Byt bransch
+            </button>
+            <button
+              onClick={() => setStep(3)}
+              disabled={!name.trim()}
+              className="biz-btn solid"
+            >
+              Nästa · bekräfta →
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 3 && selected && (
+        <>
+          <div className="biz-card" style={{ marginBottom: 16 }}>
+            <div className="biz-card-eye">Bekräfta</div>
+            <div className="biz-card-h">{name.trim()}</div>
+            <ul
+              style={{
+                marginTop: 16,
+                padding: 0,
+                listStyle: "none",
+                fontFamily: "Source Serif 4, Georgia, serif",
+                fontSize: 14,
+                color: "rgba(255,255,255,0.85)",
+                lineHeight: 1.7,
+              }}
+            >
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Bransch:</strong>{" "}
+                {selected.label} (SNI {selected.sni_code})
+              </li>
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Bolagsform:</strong>{" "}
+                {form === "ab" ? "Aktiebolag" : "Enskild firma"}
+              </li>
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Stad:</strong>{" "}
+                ärvs från karaktären (kan ej ändras)
+              </li>
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Moms:</strong>{" "}
+                {vatReg ? "registrerad" : "ej registrerad"}
+              </li>
+              {form === "ab" && (
+                <li>
+                  <strong style={{ color: "#c7d2fe" }}>Aktiekapital:</strong>{" "}
+                  25 000 kr (skjuts in vid create)
+                </li>
+              )}
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Utrustning init:</strong>{" "}
+                {selected.equipment_cost_init.toLocaleString("sv-SE")} kr
+              </li>
+            </ul>
+          </div>
+
+          {err && <div className="biz-error">{err}</div>}
+
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button onClick={() => setStep(2)} className="biz-btn">
+              ← Tillbaka
+            </button>
+            <button
+              onClick={create}
+              disabled={busy}
+              className="biz-btn solid"
+              style={{ padding: "14px 28px", fontSize: "1rem" }}
+            >
+              {busy ? "Skapar…" : "Starta bolaget ✓"}
+            </button>
+          </div>
+        </>
+      )}
     </BizHubShell>
   );
 }

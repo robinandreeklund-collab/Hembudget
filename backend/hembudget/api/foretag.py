@@ -71,16 +71,27 @@ class CompanyOut(BaseModel):
     vat_period: str
     sni_code: Optional[str]
     industry_label: Optional[str]
+    industry_key: Optional[str]
+    city_key: Optional[str]
+    city_display: Optional[str]
     active: bool
 
 
 class CompanyIn(BaseModel):
+    """Skapa-bolag-payload.
+
+    `industry_key` är obligatoriskt (en av de 10 fasta branscherna).
+    `city_key` skickas INTE från klienten — det ärvs alltid från
+    karaktärens StudentProfile.city. Om eleven försöker skicka
+    custom city → ignoreras."""
     name: str = Field(min_length=2, max_length=160)
     form: str = Field(default="enskild_firma")
     org_number: Optional[str] = None
-    sni_code: Optional[str] = None
-    industry_label: Optional[str] = None
-    vat_registered: bool = False
+    industry_key: str = Field(
+        min_length=2, max_length=40,
+        description="En av de 10 fasta branscherna i industries.py",
+    )
+    vat_registered: bool = True       # Default på · pedagogiskt viktigt
     vat_period: str = "kvartal"
     share_capital: Optional[int] = None
 
@@ -222,6 +233,16 @@ def _get_active_company(s) -> Optional[Company]:
 
 
 def _to_company_out(c: Company) -> CompanyOut:
+    # City-display från stadspool (Sthlm/Göteborg/Umeå-display-namn)
+    city_display: Optional[str] = None
+    try:
+        from ..game_engine.pools.stadspool import STAD_BY_KEY
+        if c.city_key:
+            stad = STAD_BY_KEY.get(c.city_key)
+            if stad is not None:
+                city_display = stad.display
+    except Exception:
+        pass
     return CompanyOut(
         id=c.id,
         name=c.name,
@@ -233,6 +254,9 @@ def _to_company_out(c: Company) -> CompanyOut:
         vat_period=c.vat_period,
         sni_code=c.sni_code,
         industry_label=c.industry_label,
+        industry_key=c.industry_key,
+        city_key=c.city_key,
+        city_display=city_display,
         active=c.active,
     )
 
@@ -253,6 +277,77 @@ def _to_tx_out(t: CompanyTransaction) -> TransactionOut:
     )
 
 
+# === Endpoints: Industries (10 fasta branscher) ===
+
+
+class IndustryOut(BaseModel):
+    key: str
+    label: str
+    short_description: str
+    sni_code: str
+    hourly_rate_min: int
+    hourly_rate_max: int
+    margin_baseline_pct: int
+    requires_lokal: bool
+    monthly_lokal_cost_baseline: int
+    equipment_cost_init: int
+    pipeline_per_week_baseline: float
+    learning_focus: str
+    available_in_my_city: bool
+
+
+@router.get("/industries", response_model=list[IndustryOut])
+def list_industries_endpoint(info: TokenInfo = Depends(require_token)):
+    """Lista de 10 fasta branscherna · markera vilka som funkar i
+    elevens stad. Frontend renderar branscherna som klickbara kort i
+    företagsstart-flödet."""
+    student_id = _require_student(info)
+    from ..business.industries import (
+        list_industries, industry_available_in_city,
+    )
+    from ..school.engines import master_session
+    from ..school.models import StudentProfile
+
+    # Hämta elevens stad
+    city_key: Optional[str] = None
+    with master_session() as ms:
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        if prof is not None and prof.city:
+            from ..game_engine.pools.stadspool import STADSPOOL
+            display = prof.city.strip().lower()
+            for stad in STADSPOOL:
+                if stad.key == display or stad.display.lower() == display:
+                    city_key = stad.key
+                    break
+
+    rows: list[IndustryOut] = []
+    for ind in list_industries():
+        avail = (
+            industry_available_in_city(ind.key, city_key)
+            if city_key else True
+        )
+        rows.append(IndustryOut(
+            key=ind.key,
+            label=ind.label,
+            short_description=ind.short_description,
+            sni_code=ind.sni_code,
+            hourly_rate_min=ind.hourly_rate_min,
+            hourly_rate_max=ind.hourly_rate_max,
+            margin_baseline_pct=ind.margin_baseline_pct,
+            requires_lokal=ind.requires_lokal,
+            monthly_lokal_cost_baseline=ind.monthly_lokal_cost_baseline,
+            equipment_cost_init=ind.equipment_cost_init,
+            pipeline_per_week_baseline=ind.pipeline_per_week_baseline,
+            learning_focus=ind.learning_focus,
+            available_in_my_city=avail,
+        ))
+    return rows
+
+
 # === Endpoints: Company ===
 
 
@@ -269,7 +364,65 @@ def create_company(
     body: CompanyIn,
     info: TokenInfo = Depends(require_token),
 ):
-    _require_student(info)
+    """Skapa elevens bolag.
+
+    Reglerar:
+    - industry_key måste vara en av de 10 fasta branscherna
+    - city_key ärvs från karaktärens StudentProfile.city (kan ej
+      ändras av eleven)
+    - Om branschen kräver minst medel-stad och eleven bor i en
+      mindre stad → 400 med pedagogiskt fel
+    - sni_code + industry_label fylls automatiskt från industry_key
+    """
+    student_id = _require_student(info)
+
+    # 1. Valider bransch
+    from ..business.industries import (
+        get_industry, industry_available_in_city,
+    )
+    try:
+        industry = get_industry(body.industry_key)
+    except ValueError as e:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Okänd bransch · {e}",
+        )
+
+    # 2. Hämta karaktärens stad
+    from ..school.engines import master_session
+    from ..school.models import StudentProfile
+    city_key: Optional[str] = None
+    with master_session() as ms:
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        if prof is not None:
+            # StudentProfile.city är display-namn ("Stockholm"); vi
+            # mappar till key via stadspool
+            city_display = (prof.city or "").strip().lower()
+            if city_display:
+                from ..game_engine.pools.stadspool import (
+                    STAD_BY_KEY, STADSPOOL,
+                )
+                # Försök matcha mot key direkt eller mot display
+                for stad in STADSPOOL:
+                    if stad.key == city_display or stad.display.lower() == city_display:
+                        city_key = stad.key
+                        break
+                if city_key is None and city_display in STAD_BY_KEY:
+                    city_key = city_display
+
+    # 3. Valider att branschen är meningsfull i karaktärens stad
+    if city_key and not industry_available_in_city(industry.key, city_key):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Branschen '{industry.label}' kräver minst medel-stad. "
+            f"Din karaktär bor i {city_key} — välj en annan bransch "
+            "eller starta i en bransch som funkar lokalt.",
+        )
+
     with session_scope() as s:
         existing = _get_active_company(s)
         if existing is not None:
@@ -285,8 +438,10 @@ def create_company(
             share_capital=body.share_capital,
             vat_registered=body.vat_registered,
             vat_period=body.vat_period,
-            sni_code=body.sni_code,
-            industry_label=body.industry_label,
+            sni_code=industry.sni_code,
+            industry_label=industry.label,
+            industry_key=industry.key,
+            city_key=city_key,
         )
         s.add(c)
         s.flush()
@@ -1173,6 +1328,234 @@ def biz_pentagon_axis_detail(
         return _build_biz_axis_detail(s, company=c, axis=axis)
 
 
+class EmploymentDecisionStatusOut(BaseModel):
+    pending: bool
+    weekly_hours_business: int
+    weekly_hours_employed: int
+    consecutive_overload_weeks: int
+    employment_status: str          # "employed"|"freelance_only"
+    options: list[str]
+    summary: str
+
+
+class EmploymentDecisionIn(BaseModel):
+    choice: Literal["keep_fulltime", "go_parttime", "resign"]
+
+
+class EmploymentDecisionResultOut(BaseModel):
+    choice: str
+    summary: str
+    weekly_hours_employed: int
+    salary_change_pct: int
+    salary_ends_in_months: Optional[int] = None
+
+
+@router.get(
+    "/employment-decision/status",
+    response_model=EmploymentDecisionStatusOut,
+)
+def biz_employment_decision_status(info: TokenInfo = Depends(require_token)):
+    """Status för säg-upp-prompten.
+
+    Triggar 'pending=True' när företaget tar ≥ 25 h/v i 4 veckor i rad.
+    Frontend kollar denna periodvis (eller efter combined-tick) och
+    visar Maria-modalen om pending.
+    """
+    student_id = _require_student(info)
+    from ..business.cross_pentagon import compute_weekly_business_hours
+    from ..business.employment_decision import (
+        evaluate_employment_decision,
+    )
+    from ..school.engines import master_session
+    from ..school.models import StudentProfile
+
+    weekly_h = 0
+    with session_scope() as s:
+        c = _get_active_company(s)
+        if c is not None:
+            in_progress = (
+                s.query(__import__(
+                    "hembudget.business.models", fromlist=["Job"],
+                ).Job)
+                .filter_by(company_id=c.id, status="in_progress")
+                .all()
+            )
+            weekly_h = compute_weekly_business_hours(
+                in_progress, industry_key=c.industry_key,
+            )
+
+    with master_session() as ms:
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        emp_status = (
+            getattr(prof, "employment_status", "employed")
+            if prof else "employed"
+        )
+        emp_hours = (
+            int(getattr(prof, "weekly_hours_employed", 40) or 40)
+            if prof else 40
+        )
+        overload_weeks = (
+            int(getattr(prof, "consecutive_overload_weeks", 0) or 0)
+            if prof else 0
+        )
+
+    trigger = evaluate_employment_decision(
+        weekly_hours_business=weekly_h,
+        consecutive_overload_weeks=overload_weeks,
+        employment_status=emp_status,
+    )
+
+    return EmploymentDecisionStatusOut(
+        pending=trigger.should_trigger,
+        weekly_hours_business=weekly_h,
+        weekly_hours_employed=emp_hours,
+        consecutive_overload_weeks=overload_weeks,
+        employment_status=emp_status,
+        options=trigger.options,
+        summary=trigger.reason,
+    )
+
+
+@router.post(
+    "/employment-decision",
+    response_model=EmploymentDecisionResultOut,
+)
+def biz_employment_decision(
+    body: EmploymentDecisionIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Eleven väljer · keep_fulltime / go_parttime / resign.
+
+    Uppdaterar StudentProfile direkt. Lön-effekt syns nästa månadstick.
+    """
+    student_id = _require_student(info)
+    from ..business.employment_decision import apply_employment_decision
+    from ..school.engines import master_session
+    from ..school.models import StudentProfile
+
+    with master_session() as ms:
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        if prof is None:
+            raise HTTPException(404, "StudentProfile saknas")
+        result = apply_employment_decision(prof, body.choice)
+        ms.commit()
+
+    return EmploymentDecisionResultOut(
+        choice=result["choice"],
+        summary=result["summary"],
+        weekly_hours_employed=result.get("weekly_hours_employed", 0),
+        salary_change_pct=result.get("salary_change_pct", 0),
+        salary_ends_in_months=result.get("salary_ends_in_months"),
+    )
+
+
+class BizPrivateSummaryOut(BaseModel):
+    """Sammanfattning för privat-hubben · visar att eleven driver
+    företag + status nu (vinst, omsättning, kassa). Asymmetrisk
+    aggregation: positiva tal är dämpade, negativa förstärkta för
+    pedagogisk effekt."""
+    has_company: bool
+    company_name: Optional[str] = None
+    industry_label: Optional[str] = None
+    city_display: Optional[str] = None
+    week_no: int = 0
+    income_4w: float = 0
+    profit_4w: float = 0
+    margin_pct: float = 0
+    kassa: float = 0
+    n_invoices_open: int = 0
+    n_invoices_overdue: int = 0
+    pentagon_score: int = 0
+    # En kort copy som privat-hubben renderar
+    summary_text: str = ""
+
+
+@router.get(
+    "/private-summary",
+    response_model=BizPrivateSummaryOut,
+)
+def biz_private_summary(info: TokenInfo = Depends(require_token)):
+    """Aggregat-endpoint för privat-hub:s `<BizSummaryCard>`.
+
+    Returnerar en kompakt sammanfattning av elevens företag · namn,
+    bransch, omsättning, vinst, kassa, antal öppna fakturor + en
+    pedagogisk one-liner ('Företaget går bra · vinst 34 %').
+    """
+    _require_student(info)
+    with session_scope() as s:
+        c = _get_active_company(s)
+        if c is None:
+            return BizPrivateSummaryOut(has_company=False)
+        pent = compute_business_pentagon(s, company=c)
+        metrics = pent["metrics"]
+        # Räkna fakturor
+        from datetime import date as _d
+        today = _d.today()
+        invs = (
+            s.query(CompanyInvoice)
+            .filter(CompanyInvoice.company_id == c.id)
+            .all()
+        )
+        n_open = sum(1 for i in invs if i.status == "sent")
+        n_overdue = sum(
+            1 for i in invs
+            if i.status == "sent" and i.due_on < today
+        )
+        # City-display
+        city_display: Optional[str] = None
+        if c.city_key:
+            try:
+                from ..game_engine.pools.stadspool import STAD_BY_KEY
+                stad = STAD_BY_KEY.get(c.city_key)
+                if stad is not None:
+                    city_display = stad.display
+            except Exception:
+                pass
+
+        # Pedagogisk one-liner
+        margin = float(metrics.get("margin_4w_pct", 0))
+        income = float(metrics.get("income_4w", 0))
+        if income == 0:
+            summary = "Företaget är just startat — ingen omsättning än."
+        elif margin >= 30 and n_overdue == 0:
+            summary = f"Företaget går bra · vinst {margin:.0f}% senaste 4 v."
+        elif margin >= 15:
+            summary = f"OK marginal {margin:.0f}% — håller kassan stadig."
+        elif margin >= 0:
+            summary = f"Tunn marginal ({margin:.0f}%) — håll koll på kostnader."
+        else:
+            summary = (
+                f"Förlust ({margin:.0f}%) — företaget drar ner "
+                "din ekonomiska trygghet."
+            )
+        if n_overdue > 0:
+            summary += f" {n_overdue} kundfaktura förfaller idag."
+
+        return BizPrivateSummaryOut(
+            has_company=True,
+            company_name=c.name,
+            industry_label=c.industry_label,
+            city_display=city_display,
+            week_no=int(c.week_no or 0),
+            income_4w=income,
+            profit_4w=float(metrics.get("profit_4w", 0)),
+            margin_pct=margin,
+            kassa=float(metrics.get("kassa", 0)),
+            n_invoices_open=n_open,
+            n_invoices_overdue=n_overdue,
+            pentagon_score=int(pent["total_score"]),
+            summary_text=summary,
+        )
+
+
 @router.get("/pentagon", response_model=BusinessPentagonOut)
 def business_pentagon(info: TokenInfo = Depends(require_token)):
     """Företagets pentagon (5 axlar). Räknas live från CompanyTransactions."""
@@ -1414,21 +1797,133 @@ def teacher_toggle_business_mode(
     body: TeacherToggleIn,
     info: TokenInfo = Depends(require_token),
 ):
-    """Läraren aktiverar/avaktiverar företagsläget för en elev."""
+    """Läraren aktiverar/avaktiverar företagsläget för en elev.
+
+    Vid aktivering · skicka onboarding-mail till elevens postlåda så
+    eleven får en pedagogisk inramning innan hen klickar på företag-
+    toggle:n. Mail:et beskriver branschmarknaden i elevens stad och
+    förklarar att mode-toggle dyker upp i topbaren.
+    """
     if info.role != "teacher" or info.teacher_id is None:
         raise HTTPException(403, "Endast lärare")
-    from ..school.engines import master_session
-    from ..school.models import Student
+    from ..school.engines import (
+        master_session, scope_context, scope_for_student,
+    )
+    from ..school.models import Student, StudentProfile
     with master_session() as ms:
         stu = ms.get(Student, student_id)
         if stu is None or stu.teacher_id != info.teacher_id:
             raise HTTPException(404, "Elev saknas")
+        previously_enabled = bool(getattr(stu, "business_mode_enabled", False))
         stu.business_mode_enabled = body.enabled
         ms.commit()
+
+        # Hämta elev-namn + stad för mail-content
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        student_first = (stu.display_name or "").split(" ")[0] or "Eleven"
+        city_display = (prof.city if prof else None) or "din stad"
+        scope_key = scope_for_student(stu)
+
+    # Skicka onboarding-mail · bara vid första aktivering (inte vid re-toggle)
+    if body.enabled and not previously_enabled:
+        try:
+            _send_business_onboarding_mail(
+                scope_key=scope_key,
+                student_first_name=student_first,
+                city_display=city_display,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "teacher_toggle_business_mode: kunde inte skicka "
+                "onboarding-mail för %s", student_id,
+            )
+
     return BusinessModeStatusOut(
         enabled=body.enabled,
         has_active_company=False,
     )
+
+
+def _send_business_onboarding_mail(
+    *,
+    scope_key: str,
+    student_first_name: str,
+    city_display: str,
+) -> None:
+    """Skapa ett MailItem i elevens postlåda som introducerar
+    företagsläget. Mail:et är pedagogiskt och förklarar att eleven
+    ska tänka på bransch-val + tidsåtgång + skatt + buffert."""
+    from ..db.models import MailItem
+    from ..school.engines import scope_context, get_scope_session
+    from datetime import datetime as _dt
+
+    body_text = (
+        f"Hej {student_first_name},\n\n"
+        f"Din lärare har aktiverat företagsläget för dig. Det betyder "
+        f"att du kan starta en enskild firma eller AB parallellt med "
+        f"ditt vanliga jobb.\n\n"
+        f"OBS · innan du klickar på 'Företag' i topbaren — läs detta "
+        f"så du startar med rätt förutsättningar.\n\n"
+        f"=== STAD-MARKNADEN · {city_display} ===\n\n"
+        f"Du bor i {city_display} och företaget startar därifrån. Olika "
+        f"branscher har olika täthet i olika städer. I storstad finns "
+        f"t.ex. mer IT-konsult-uppdrag, i mindre stad är hantverk och "
+        f"VVS oftare bra val.\n\n"
+        f"När du klickar 'Starta bolag' får du välja mellan 10 fasta "
+        f"branscher som passar svenska marknaden 2026:\n"
+        f" · IT-konsult\n"
+        f" · Webb- & grafisk designer\n"
+        f" · Snickare / hantverkare\n"
+        f" · Rörmokare / VVS\n"
+        f" · Elektriker\n"
+        f" · Frisör / barberare\n"
+        f" · Coach / livsstilsexpert\n"
+        f" · Personal Trainer / friskvård\n"
+        f" · Fotograf\n"
+        f" · Catering / kokerska\n\n"
+        f"=== TÄNK PÅ ===\n\n"
+        f"1. TID. Företaget tar timmar varje vecka. När det växer kan "
+        f"du behöva gå ner i tid på det vanliga jobbet — eller säga "
+        f"upp. Pentagon-axlarna 'fritid' och 'social' kan dippa när "
+        f"du jobbar 60+ timmar.\n\n"
+        f"2. KASSAFLÖDE. Företagets pengar är inte dina. Du tar ut "
+        f"egen lön — och måste lämna kvar tillräckligt för moms + "
+        f"F-skatt + leverantörs-fakturor.\n\n"
+        f"3. PRIVAT vs FÖRETAG. Två separata bokföringar. När det går "
+        f"bra — privatkontot får mer (egen lön upp). När det går "
+        f"dåligt — privat-pentagon påverkas av oro/stress (men inte "
+        f"1:1, det är en faktor).\n\n"
+        f"När du är redo · klicka 'Byt till företag' i topbaren.\n\n"
+        f"Lycka till.\n"
+        f"— Anders Lind, klassansvarig"
+    )
+
+    with scope_context(scope_key):
+        with get_scope_session(scope_key)() as s:
+            mail = MailItem(
+                sender="Anders Lind · klassansvarig",
+                sender_short="LÄR",
+                sender_kind="other",
+                sender_meta="pedagogisk inramning · företagsläget",
+                mail_type="info",
+                subject=f"Du kan nu driva eget · {city_display}-marknaden",
+                body_meta=(
+                    "Företagsläget är aktiverat. Läs innan du startar — "
+                    "10 branscher att välja på, tid är begränsad."
+                ),
+                body=body_text,
+                amount=None,
+                due_date=None,
+                received_at=_dt.utcnow(),
+                status="unhandled",
+            )
+            s.add(mail)
+            s.commit()
 
 
 # === Lärar-overview: full insyn i en elevs företag ===

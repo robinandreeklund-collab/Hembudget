@@ -14,6 +14,7 @@ import {
 import { V2Banner } from "./V2Banner";
 import { useAutoStartIntroGuide } from "./guides/GuideContext";
 import { PentagonFlipCard } from "./PentagonFlipCard";
+import { BizSummaryCard } from "./biz/BizSummaryCard";
 import "./hub.css";
 
 const SEK = (n: number) =>
@@ -311,6 +312,10 @@ export function HubV2() {
             </div>
           </article>
         </header>
+
+        {/* === Företags-summary · visas BARA om eleven har aktiverat
+             mode och skapat bolag. Renderar ingenting annars. === */}
+        <BizSummaryCard />
 
         {/* RECAP-STRIPE · 4 nyckeltal */}
         <div className="hub-recap">

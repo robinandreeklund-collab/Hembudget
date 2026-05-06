@@ -198,16 +198,25 @@ export function V2Topbar({ status }: { status: Status }) {
       setStudentInfo(null);
       return;
     }
-    api<{
-      v2_level: number;
-      v2_spend_profile: string;
-    }>("/v2/status")
-      .then((r) =>
+    Promise.all([
+      api<{
+        v2_level: number;
+        v2_spend_profile: string;
+      }>("/v2/status"),
+      // Biz-summary · null om eleven inte har företag (fail-soft)
+      api<{
+        has_company: boolean;
+        company_name: string | null;
+        industry_label: string | null;
+      }>("/v2/foretag/private-summary").catch(() => null),
+    ])
+      .then(([r, biz]) =>
         setStudentInfo({
           name: "",
           level: r.v2_level,
           spend: r.v2_spend_profile,
-          biz_company_name: null,
+          biz_company_name:
+            biz && biz.has_company ? biz.company_name : null,
         }),
       )
       .catch(() => setStudentInfo(null));
@@ -272,8 +281,27 @@ export function V2Topbar({ status }: { status: Status }) {
       {/* Privat / Företag badge — visas exklusivt baserat på data-mode */}
       {!isTeacher && (
         <>
-          <span className="priv-badge">Privatekonomi</span>
-          <span className="biz-badge">Företag</span>
+          <span className="priv-badge">
+            Privatekonomi
+            {studentInfo?.biz_company_name && (
+              <em
+                style={{
+                  marginLeft: 8,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontStyle: "normal",
+                  fontSize: 9,
+                  color: "#c7d2fe",
+                  letterSpacing: 0.6,
+                }}
+                title={`Driver också ${studentInfo.biz_company_name}`}
+              >
+                · ▦ biz aktivt
+              </em>
+            )}
+          </span>
+          <span className="biz-badge">
+            {studentInfo?.biz_company_name || "Företag"}
+          </span>
           {/* Level-badge — fast nivå-meta för eleven */}
           {studentInfo && (
             <span
