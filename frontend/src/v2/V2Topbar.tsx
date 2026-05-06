@@ -308,27 +308,12 @@ export function V2Topbar({ status }: { status: Status }) {
         </span>
       </Link>
 
-      {/* Privat / Företag badge — visas exklusivt baserat på data-mode */}
+      {/* Privat / Företag badge — visas exklusivt baserat på data-mode.
+       * Vi håller dem korta för att inte trycka ut topbaren · biz-mode-
+       * badge:n visar bara företagets namn (eller 'Företag' fallback). */}
       {!isTeacher && (
         <>
-          <span className="priv-badge">
-            Privatekonomi
-            {studentInfo?.biz_company_name && (
-              <em
-                style={{
-                  marginLeft: 8,
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontStyle: "normal",
-                  fontSize: 9,
-                  color: "#c7d2fe",
-                  letterSpacing: 0.6,
-                }}
-                title={`Driver också ${studentInfo.biz_company_name}`}
-              >
-                · ▦ biz aktivt
-              </em>
-            )}
-          </span>
+          <span className="priv-badge">Privatekonomi</span>
           <span className="biz-badge">
             {studentInfo?.biz_company_name || "Företag"}
           </span>

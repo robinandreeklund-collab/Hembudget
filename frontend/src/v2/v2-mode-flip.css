@@ -17,6 +17,15 @@
 /* === Persistent backdrop · alltid på body, aldrig flippad === */
 
 /* Privat-tema · orange/warm */
+html, body {
+  /* Förhindra horisontell scrollbar som annars kan skjuta ut topbaren
+   * när content överskrider viewport-bredd. */
+  overflow-x: hidden;
+  /* Stabil scrollbar-gutter så topbar inte hoppar när scrollbar
+   * dyker upp/försvinner. */
+  scrollbar-gutter: stable;
+}
+
 body {
   background: linear-gradient(180deg, #0a0e1a 0%, #0f1525 60%, #0a0e1a 100%);
 }
