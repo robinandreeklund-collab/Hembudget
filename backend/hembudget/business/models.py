@@ -624,3 +624,72 @@ class BusinessTickJob(TenantMixin, Base):
     reputation_after: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True,
     )
+
+
+class CompanyAnnualReport(TenantMixin, Base):
+    """Årsbokslut + deklaration som AI Bolagsverket granskar.
+
+    Spec: dev/feature-allabolag.md (Fas B)
+
+    Flow:
+      1. Eleven samlar transaktioner under året
+      2. Klickar "Skicka in årsredovisning" → status=submitted
+      3. AI läser auto-genererat bokslut (intäkter, kostnader,
+         resultat, eget kapital) + ev. lärar-prompt anpassning
+      4. AI returnerar approved (med kommentarer) eller rejected
+         (med vilken rättning som krävs)
+      5. Approved → ClassCompanyShare.annual_report_status = "approved"
+         → syns på Allabolag
+
+    Vi sparar både input (snapshot vid submit) och AI:s svar för audit.
+    """
+    __tablename__ = "biz_annual_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    # Bokslutsår (kalenderår) — t.ex. 2025
+    fiscal_year: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Status: draft | submitted | reviewing | approved | rejected
+    status: Mapped[str] = mapped_column(
+        String(20), default="draft", nullable=False,
+    )
+
+    # Snapshot vid submit (immutable efter submit)
+    revenue_total: Mapped[int] = mapped_column(Integer, default=0)
+    expense_total: Mapped[int] = mapped_column(Integer, default=0)
+    salary_total: Mapped[int] = mapped_column(Integer, default=0)
+    profit_before_tax: Mapped[int] = mapped_column(Integer, default=0)
+    corporate_tax: Mapped[int] = mapped_column(Integer, default=0)
+    profit_after_tax: Mapped[int] = mapped_column(Integer, default=0)
+    equity_end: Mapped[int] = mapped_column(Integer, default=0)
+    n_invoices_paid: Mapped[int] = mapped_column(Integer, default=0)
+    n_invoices_unpaid: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Elevens kommentar (frivillig) som följer med deklarationen
+    student_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # AI-svar
+    ai_decision: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True,
+    )  # approved | rejected
+    ai_feedback_md: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )  # markdown-text · pedagogisk feedback från AI
+    ai_issues: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True,
+    )  # lista av issues vid rejected (kategori + förklaring)
+
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )

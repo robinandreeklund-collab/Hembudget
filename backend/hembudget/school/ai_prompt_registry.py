@@ -90,6 +90,7 @@ def _load_defaults() -> dict[str, str]:
         "biz_pitch": _biz_ai._PITCH_SYSTEM,
         "biz_marketing": _biz_ai._MARKETING_SYSTEM,
         "biz_job_desc": _biz_ai._JOB_DESC_SYSTEM,
+        "bolagsverket_review": _biz_ai._BOLAGSVERKET_SYSTEM,
         # Teacher grading
         "teacher_feedback": _school_ai.FEEDBACK_SYSTEM_PROMPT,
         "rubric_grading": _school_ai.RUBRIC_SYSTEM_PROMPT,
@@ -242,6 +243,26 @@ _SPECS_META: list[dict] = [
         "model": "haiku",
         "preview_input": (
             "Jobb: Måla rum · Bransch: snickare · Kund: Familjen Lindqvist"
+        ),
+    },
+    {
+        "key": "bolagsverket_review",
+        "label": "AI Bolagsverket · granskar årsredovisning",
+        "category": "biz_eval",
+        "description": (
+            "Granskar elevens inskickade årsredovisning. Returnerar "
+            "godkänt eller återsändning med konkreta rättningskrav. "
+            "Justera om du vill att Bolagsverket ska vara strängare/snällare "
+            "på aritmetik, eget kapital, fakturasituation, etc."
+        ),
+        "variables": [],
+        "used_at": "/v2/foretag/arsredovisning",
+        "model": "sonnet",
+        "preview_input": (
+            "Bokslutsår 2025\n"
+            "Intäkter 480 000, Kostnader 320 000, Lön 80 000\n"
+            "Vinst före skatt 80 000, Skatt 16 480, Vinst efter 63 520\n"
+            "Eget kapital 88 520, Fakturor betalda 18, obetalda 4"
         ),
     },
 

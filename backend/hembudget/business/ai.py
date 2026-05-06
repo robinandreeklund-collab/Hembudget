@@ -364,3 +364,114 @@ def _extract_json_string(text: str, *, key: str) -> Optional[str]:
         return str(v).strip() if v is not None else None
     except Exception:
         return None
+
+
+# === Bolagsverket · AI granskar elevens årsredovisning (Fas B) ===
+
+_BOLAGSVERKET_SYSTEM = """Du är AI-handläggare på Bolagsverket. En elev
+har skickat in årsredovisning för sitt simulerade bolag och du ska
+granska den pedagogiskt — både realistiskt och hjälpsamt.
+
+Kontrollera:
+1. Är resultaträkningen aritmetiskt korrekt? (intäkter − kostnader −
+   skatt = vinst-efter-skatt)
+2. Är bolagsskatten rimlig? (~20.6% av vinst-före-skatt vid +;
+   0 vid förlust)
+3. Är eget kapital rimligt? (start-aktiekapital + ackumulerad vinst)
+4. Finns några varningstecken? (massa obetalda fakturor, väldigt liten
+   omsättning vs antal månader, etc.)
+
+Returnera ENDAST JSON i formatet:
+{
+  "decision": "approved" | "rejected",
+  "feedback_md": "pedagogisk markdown-text till eleven (max 600 tecken)",
+  "issues": [{"category": "<kategori>", "explanation": "<förklaring>"}]
+}
+
+Vid `approved`: feedback_md är beröm + ev. förbättrings-tips för nästa år.
+Vid `rejected`: feedback_md förklarar tydligt VAD som behöver rättas
+och issues[]-arrayen har konkreta items.
+
+Var pedagogisk men inte för snäll — eleven lär sig av tydlig kritik.
+Rejekta automatiskt om resultatet inte stämmer aritmetiskt."""
+
+
+def review_annual_report(
+    *,
+    fiscal_year: int,
+    revenue_total: int,
+    expense_total: int,
+    salary_total: int,
+    profit_before_tax: int,
+    corporate_tax: int,
+    profit_after_tax: int,
+    equity_end: int,
+    n_invoices_paid: int,
+    n_invoices_unpaid: int,
+    student_note: Optional[str] = None,
+    teacher_id: Optional[int] = None,
+) -> Optional[dict]:
+    """Returnera dict med {'decision', 'feedback_md', 'issues'}.
+
+    None om AI är otillgänglig — anroparen skapar då en deterministisk
+    fallback (auto-approve om aritmetiken stämmer).
+    """
+    try:
+        from ..school.ai import (
+            MODEL_SONNET, _call_claude, is_available, resolve_prompt,
+        )
+        if not is_available():
+            return None
+
+        user = (
+            f"## Årsredovisning {fiscal_year}\n"
+            f"Intäkter (omsättning): {revenue_total} kr\n"
+            f"Kostnader (rörliga + fasta): {expense_total} kr\n"
+            f"Lön (egen): {salary_total} kr\n"
+            f"Vinst före skatt: {profit_before_tax} kr\n"
+            f"Bolagsskatt 20.6%: {corporate_tax} kr\n"
+            f"Vinst efter skatt: {profit_after_tax} kr\n"
+            f"Eget kapital, utgående: {equity_end} kr\n"
+            f"Fakturor betalda: {n_invoices_paid}\n"
+            f"Fakturor obetalda: {n_invoices_unpaid}\n"
+        )
+        if student_note:
+            user += f"\n## Elevens kommentar\n{student_note}\n"
+        user += "\nGranska och returnera JSON enligt formatet."
+
+        result = _call_claude(
+            model=MODEL_SONNET,
+            system=resolve_prompt(
+                "bolagsverket_review",
+                teacher_id=teacher_id,
+                default=_BOLAGSVERKET_SYSTEM,
+            ),
+            user_prompt=user,
+            max_tokens=900,
+            teacher_id=teacher_id,
+        )
+        if result is None:
+            return None
+
+        # Försök parsa JSON
+        try:
+            m = re.search(r"\{.*\}", result.text, re.DOTALL)
+            if not m:
+                return None
+            obj = json.loads(m.group(0))
+            decision = obj.get("decision", "approved")
+            if decision not in ("approved", "rejected"):
+                decision = "approved"
+            return {
+                "decision": decision,
+                "feedback_md": str(obj.get("feedback_md", ""))[:1500],
+                "issues": obj.get("issues", []) if isinstance(
+                    obj.get("issues"), list,
+                ) else [],
+            }
+        except Exception:
+            log.exception("review_annual_report: kunde inte parsa AI-svar")
+            return None
+    except Exception:
+        log.exception("review_annual_report failed")
+        return None

@@ -67,6 +67,7 @@ import {
   BizBokforing, BizFakturor, BizLon, BizMoms,
   BizBolagsskatt, BizInstallningar,
 } from "./v2/biz/BizPages";
+import { BizArsredovisning } from "./v2/biz/BizArsredovisning";
 import {
   BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
 } from "./v2/biz/BizGameMotorPages";
@@ -415,6 +416,8 @@ export default function App() {
           {/* Bug #7-utbyggnad · Företagsläget · 6 vyer */}
           {/* Allabolag · klass-skopig scoreboard */}
           <Route path="/v2/allabolag" element={<AllabolagV2 />} />
+          {/* Årsredovisning · AI Bolagsverket */}
+          <Route path="/v2/foretag/arsredovisning" element={<BizArsredovisning />} />
           <Route path="/v2/foretag/bokforing" element={<BizBokforing />} />
           <Route path="/v2/foretag/fakturor" element={<BizFakturor />} />
           <Route path="/v2/foretag/lon" element={<BizLon />} />

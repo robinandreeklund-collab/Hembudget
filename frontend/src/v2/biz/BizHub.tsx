@@ -264,6 +264,13 @@ export function BizHub() {
                 : "Allt fört"}
             </div>
           </Link>
+          <Link to="/v2/foretag/arsredovisning" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Verktyg · biz</div>
+            <div className="biz-compass-node-name">Årsredovisning</div>
+            <div className="biz-compass-node-val">
+              AI Bolagsverket granskar
+            </div>
+          </Link>
           <Link
             to="/v2/foretag/moms"
             className={`biz-compass-node${stats.next_vat_due ? " warn" : ""}`}
