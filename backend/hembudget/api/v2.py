@@ -16271,15 +16271,21 @@ class V2ReseedResponse(BaseModel):
 )
 def v2_delete_student(
     student_id: int,
+    background_tasks: BackgroundTasks,
     info: TokenInfo = Depends(require_token),
 ) -> Response:
     """Radera en elev permanent · scope-DB + master-rader + cascade.
 
-    Endast lärarens egna elever. Raderar:
-    - Student-raden (cascade tar StudentProfile, BankIDSession,
-      WeekTickRun, EmployerSatisfaction etc. via FK ON DELETE)
-    - Scope-DB:n (sqlite-fil) raderas i fil-läge; i postgres-läge
-      tas bara raderna eftersom databasen är delad
+    Flöde (Cloud Run --max-instances=1):
+    1. Sync · markera Student.active=False så eleven försvinner från
+       lärarens lista omedelbart (UI känns responsiv).
+    2. Async · bakgrundstask gör scope-DB-wipe, master-FK-cleanup,
+       file-removal och s.delete(st).
+
+    Tidigare körde hela raderingen synkront. För en fully-seedad
+    elev kunde det ta 30-60 s eftersom scope-DB har 50+ tabeller +
+    master har 25+ FK:s. Cloud Run med --max-instances=1 blev då
+    blockerad och nästa request fick 'Failed to fetch' i browser.
     """
     teacher_id = _require_teacher(info)
     with master_session() as s:
@@ -16288,151 +16294,180 @@ def v2_delete_student(
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, "Eleven hittades inte",
             )
-        # Radera scope-DB-data INNAN master-raden tas bort så vi
-        # fortfarande kan resolva scope_key
-        from ..school.engines import (
-            scope_for_student as _sfs_d, scope_context as _sctx_d,
-            get_scope_session as _gss_d,
-        )
-        scope_key = _sfs_d(st)
-        # SÄKERHETSCHECK: scope_key måste finnas. Utan den nedan-
-        # körda DELETE skulle träffa ALLA tenant-rader (auto-filter
-        # i db/base.py applied bara på SELECT, inte DELETE → utan
-        # explicit WHERE tenant_id raderas hela tabellen).
-        if not scope_key or not isinstance(scope_key, str):
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                "Saknar scope_key — radering avbruten av säkerhetsskäl",
-            )
-        try:
-            with _sctx_d(scope_key):
-                with _gss_d(scope_key)() as ss:
-                    # Postgres: tenant-isolerade rader. Loopa alla
-                    # TenantMixin-tabeller och radera tenant_id-matched.
-                    #
-                    # KRITISKT: explicit `filter(cls.tenant_id == scope_key)`.
-                    # Auto-filter-event-listenern (`_scope_select_filter` i
-                    # db/base.py) applied bara på SELECT — DELETE går
-                    # förbi den. Utan denna filter raderar query.delete()
-                    # ALLA rader i tabellen, inte bara aktuell tenant.
-                    from ..db.base import Base, TenantMixin
-                    for table in reversed(Base.metadata.sorted_tables):
-                        cls = next(
-                            (
-                                c.class_ for c in Base.registry.mappers
-                                if c.local_table is table
-                            ),
-                            None,
-                        )
-                        if cls is None or not issubclass(cls, TenantMixin):
-                            continue
-                        try:
-                            ss.query(cls).filter(
-                                cls.tenant_id == scope_key,
-                            ).delete(synchronize_session=False)
-                        except Exception:
-                            import logging
-                            logging.getLogger(__name__).exception(
-                                "v2_delete_student: delete %s för "
-                                "tenant %s failade — fortsätter",
-                                cls.__name__, scope_key,
-                            )
-                    ss.commit()
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception(
-                "v2_delete_student: scope-cleanup failed för %s",
-                student_id,
-            )
-        # SQLite-fil-läge: radera filen från disk så det inte
-        # ligger kvar gammal data om eleven återskapas senare.
-        try:
-            import os as _os_d
-            from ..school.engines import _scope_db_path
-            path = _scope_db_path(scope_key)
-            if path and _os_d.path.exists(path):
-                _os_d.remove(path)
-        except Exception:
-            pass
+        # Sync · soft-delete så eleven försvinner direkt från listan.
+        # Den fulla raderingen (scope + master-FK:s) körs i bakgrunden.
+        st.active = False
+        s.commit()
 
-        # Master-radering · CASCADE tar bort StudentProfile,
-        # BankIDSession, WeekTickRun, etc. via FK ON DELETE.
-        #
-        # SÄKERHETSNÄT: Flera tabeller skapades historiskt UTAN
-        # ondelete=CASCADE i Postgres. `Base.metadata.create_all()`
-        # ändrar ALDRIG en existerande FK-constraint, så instanser
-        # som var live FÖRE vi lade till CASCADE i modellen har kvar
-        # blocking-FK:s. Resultatet är IntegrityError → 500 i UI när
-        # läraren trycker "Radera" — utan att eleven syns försvinna.
-        #
-        # I stället för att försöka migrera FK:n vid uppstart för
-        # varje tabell (sårbart, kan failas i prod om Cloud SQL har
-        # låst tabellen) raderar vi rader explicit från alla
-        # master-DB-tabeller som har en FK till students.id.
-        # Vi loopar metadata och hittar dem dynamiskt så vi inte
-        # missar någon framtida tabell.
-        from ..school.models import MasterBase
-        try:
-            tables_with_student_fk = []
-            for table in MasterBase.metadata.sorted_tables:
-                for fk in table.foreign_keys:
-                    if (
-                        fk.column.table.name == "students"
-                        and fk.column.name == "id"
-                    ):
-                        tables_with_student_fk.append(
-                            (table, fk.parent.name),
-                        )
-                        break
-            # Radera child-rows först (sorted_tables ger parent→child;
-            # vi vill child→parent).
-            for table, fk_col in reversed(tables_with_student_fk):
-                if table.name == "students":
-                    continue
-                try:
-                    s.execute(
-                        table.delete().where(
-                            table.c[fk_col] == student_id,
-                        ),
-                    )
-                except Exception:
-                    import logging
-                    logging.getLogger(__name__).exception(
-                        "v2_delete_student: pre-cleanup av %s "
-                        "(FK %s) failade — fortsätter ändå",
-                        table.name, fk_col,
-                    )
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception(
-                "v2_delete_student: kunde inte enumerera "
-                "student-FK:s — fortsätter med s.delete(st)",
+    # Async · queue bakgrundstask som gör hela cleanup-jobbet.
+    background_tasks.add_task(
+        _hard_delete_student_worker, student_id, teacher_id,
+    )
+    return Response(status_code=204)
+
+
+def _hard_delete_student_worker(
+    student_id: int, teacher_id: int,
+) -> None:
+    """Bakgrunds-worker · gör den fulla student-raderingen.
+
+    Kör i en egen task så Cloud Run-instansen kan svara på nya
+    requests medan denna pågår. Best-effort: fel loggas men sväljs
+    eftersom UI redan har sett soft-delete:n.
+    """
+    import logging as _log_d
+    log = _log_d.getLogger(__name__)
+    try:
+        with master_session() as s:
+            st = s.get(Student, student_id)
+            if st is None:
+                log.info(
+                    "_hard_delete_student_worker: %s redan borttagen",
+                    student_id,
+                )
+                return
+            if st.teacher_id != teacher_id:
+                log.warning(
+                    "_hard_delete_student_worker: teacher-id mismatch "
+                    "för %s — skippar",
+                    student_id,
+                )
+                return
+
+            from ..school.engines import (
+                scope_for_student as _sfs_d, scope_context as _sctx_d,
+                get_scope_session as _gss_d,
             )
-        try:
-            s.delete(st)
-            s.commit()
-        except Exception as e:
-            # Sista raderingen failade trots pre-cleanup — vanligtvis
-            # IntegrityError från en FK vi missade att enumerera.
-            # Returnera ett begripligt felmeddelande till frontend
-            # istället för en tyst 500.
-            import logging
-            logging.getLogger(__name__).exception(
-                "v2_delete_student: master-radering failade för %s",
-                student_id,
-            )
+            scope_key = _sfs_d(st)
+            if not scope_key or not isinstance(scope_key, str):
+                log.error(
+                    "_hard_delete_student_worker: saknar scope_key "
+                    "för %s — avbryter",
+                    student_id,
+                )
+                return
+
+            # Scope-DB-wipe (samma logik som tidigare synkront)
             try:
-                s.rollback()
+                with _sctx_d(scope_key):
+                    with _gss_d(scope_key)() as ss:
+                        from ..db.base import Base, TenantMixin
+                        for table in reversed(Base.metadata.sorted_tables):
+                            cls = next(
+                                (
+                                    c.class_ for c in Base.registry.mappers
+                                    if c.local_table is table
+                                ),
+                                None,
+                            )
+                            if cls is None or not issubclass(cls, TenantMixin):
+                                continue
+                            try:
+                                ss.query(cls).filter(
+                                    cls.tenant_id == scope_key,
+                                ).delete(synchronize_session=False)
+                            except Exception:
+                                log.exception(
+                                    "_hard_delete_student_worker: "
+                                    "delete %s för tenant %s failade",
+                                    cls.__name__, scope_key,
+                                )
+                        ss.commit()
+            except Exception:
+                log.exception(
+                    "_hard_delete_student_worker: scope-cleanup "
+                    "failed för %s", student_id,
+                )
+
+            # SQLite-fil-läge: radera filen från disk
+            try:
+                import os as _os_d
+                from ..school.engines import _scope_db_path
+                path = _scope_db_path(scope_key)
+                if path and _os_d.path.exists(path):
+                    _os_d.remove(path)
             except Exception:
                 pass
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                f"Kunde inte radera elev {student_id}: "
-                f"{type(e).__name__}. Kontakta admin om det "
-                "fortsätter — backloggar har detaljerna.",
-            ) from e
 
-    return Response(status_code=204)
+            # Master · prova snabbvägen (CASCADE) först. Om den failar
+            # på FK-violation, kör explicit pre-cleanup på alla
+            # master-tabeller med FK till students.id.
+            from sqlalchemy.exc import IntegrityError as _IE_d
+            try:
+                s.delete(st)
+                s.commit()
+                log.info(
+                    "_hard_delete_student_worker: %s raderad "
+                    "(CASCADE-snabbväg)",
+                    student_id,
+                )
+                return
+            except _IE_d:
+                log.warning(
+                    "_hard_delete_student_worker: CASCADE failade "
+                    "för %s — kör fallback-cleanup",
+                    student_id,
+                )
+                try:
+                    s.rollback()
+                except Exception:
+                    pass
+
+            # Fallback · enumerera alla master-tabeller med FK till
+            # students.id och rensa dem child→parent.
+            from ..school.models import MasterBase
+            try:
+                tables_with_student_fk = []
+                for table in MasterBase.metadata.sorted_tables:
+                    for fk in table.foreign_keys:
+                        if (
+                            fk.column.table.name == "students"
+                            and fk.column.name == "id"
+                        ):
+                            tables_with_student_fk.append(
+                                (table, fk.parent.name),
+                            )
+                            break
+                for table, fk_col in reversed(tables_with_student_fk):
+                    if table.name == "students":
+                        continue
+                    try:
+                        s.execute(
+                            table.delete().where(
+                                table.c[fk_col] == student_id,
+                            ),
+                        )
+                    except Exception:
+                        log.exception(
+                            "_hard_delete_student_worker: cleanup "
+                            "av %s (FK %s) failade",
+                            table.name, fk_col,
+                        )
+                st_retry = s.get(Student, student_id)
+                if st_retry is not None:
+                    s.delete(st_retry)
+                s.commit()
+                log.info(
+                    "_hard_delete_student_worker: %s raderad "
+                    "(fallback-cleanup)",
+                    student_id,
+                )
+            except Exception:
+                log.exception(
+                    "_hard_delete_student_worker: även fallback "
+                    "failade för %s — eleven står kvar med "
+                    "active=False men inte raderad",
+                    student_id,
+                )
+                try:
+                    s.rollback()
+                except Exception:
+                    pass
+    except Exception:
+        log.exception(
+            "_hard_delete_student_worker: outer failure för %s",
+            student_id,
+        )
 
 
 class V2BulkDeleteResponse(BaseModel):
