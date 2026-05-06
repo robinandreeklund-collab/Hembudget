@@ -356,7 +356,21 @@ def get_company(info: TokenInfo = Depends(require_token)):
     _require_student(info)
     with session_scope() as s:
         c = _get_active_company(s)
-        return _to_company_out(c) if c else None
+        if c is None:
+            return None
+        # Auto-tick · drar fram veckor som passerat sedan senaste read.
+        # Trigger:as även här eftersom BizHub fetchar /v2/foretag direkt
+        # vid mount · innan opportunities-listan hämtas.
+        try:
+            from ..business.engine import auto_tick_if_due
+            auto_tick_if_due(s, company=c)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "get_company: auto_tick_if_due misslyckades · returnerar "
+                "ändå bolag (state hängar efter tills nästa endpoint).",
+            )
+        return _to_company_out(c)
 
 
 @router.post("", response_model=CompanyOut)

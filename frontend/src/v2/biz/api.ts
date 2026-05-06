@@ -471,6 +471,13 @@ export type Opportunity = {
   status: string;
   week_no: number;
   has_quote: boolean;
+  quote_offered_price: number | null;
+  quote_offered_delivery_days: number | null;
+  quote_pitch_text: string | null;
+  quote_pitch_quality: number | null;
+  quote_accept_probability: number | null;
+  quote_accepted: boolean | null;
+  quote_decision_explanation: string | null;
 };
 
 export type Quote = {

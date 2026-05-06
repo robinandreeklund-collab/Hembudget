@@ -720,6 +720,9 @@ def run_migrations(engine: Engine) -> list[str]:
             # Sprint 8 · industry_key + city_key för 10-bransch-väljaren
             ("industry_key", "industry_key VARCHAR(40)"),
             ("city_key", "city_key VARCHAR(40)"),
+            # Auto-tick · spelmotorn drar fram veckor automatiskt baserat
+            # på real-tid (inte manuell "Stega vecka"-knapp).
+            ("last_auto_tick_at", "last_auto_tick_at DATETIME"),
         ]
         for col_name, col_sql in biz_company_columns:
             if col_name not in cols:

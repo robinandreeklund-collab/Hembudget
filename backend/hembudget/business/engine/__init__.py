@@ -15,10 +15,11 @@ Moduler:
 Determinism: alla slumpgenerationer seedade på (company_id, week_no)
 så att läraren kan spela om en vecka och få samma utfall.
 """
-from .tick_engine import run_business_week
+from .tick_engine import auto_tick_if_due, run_business_week
 from .difficulty import BizDifficultyProfile, get_biz_difficulty
 
 __all__ = [
+    "auto_tick_if_due",
     "run_business_week",
     "BizDifficultyProfile",
     "get_biz_difficulty",

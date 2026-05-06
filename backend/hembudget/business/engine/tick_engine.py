@@ -358,6 +358,44 @@ def _phase_c_generate_opportunities(
         market_price = max(500, int(round(market_price * adj / 100) * 100))
 
         deadline = today + timedelta(days=tmpl.delivery_days * 2)
+
+        # AI-berikad jobbeskrivning · varierad text per offert i stället
+        # för identiska template-strängar. Faller tillbaka till
+        # tmpl.description om AI saknas/fail:ar (deterministisk fallback
+        # per CLAUDE.md-policy). Vi gör bara AI-anropet för 1 av 3 nya
+        # offerter för att inte spränga tokens när biz tickar autotick:t
+        # varje timme — räcker för att eleven ska se variation.
+        description = tmpl.description
+        if rng.random() < 0.33:
+            try:
+                from ..ai import generate_job_description as _gen_desc
+                from ...school.engines import master_session as _ms_ai
+                from ...school.models import (
+                    Student as _Stu_ai,
+                )
+                # Hitta lärare via tenant_id ("s_<id>" eller "f_<id>")
+                teacher_id_for_ai: Optional[int] = None
+                tenant = getattr(company, "tenant_id", None) or ""
+                if tenant.startswith("s_"):
+                    try:
+                        sid_ai = int(tenant[2:])
+                        with _ms_ai() as _msa:
+                            stu_ai = _msa.get(_Stu_ai, sid_ai)
+                            if stu_ai is not None:
+                                teacher_id_for_ai = stu_ai.teacher_id
+                    except (ValueError, Exception):
+                        pass
+                ai_desc = _gen_desc(
+                    job_title=tmpl.title,
+                    industry=company.industry_label or "Tjänst",
+                    customer_name=cust.name,
+                    teacher_id=teacher_id_for_ai,
+                )
+                if ai_desc:
+                    description = ai_desc
+            except Exception:
+                pass
+
         opp = JobOpportunity(
             company_id=company.id,
             customer_name=cust.name,
@@ -368,7 +406,7 @@ def _phase_c_generate_opportunities(
             quality_sensitivity=Decimal(str(round(cust.quality_sensitivity, 3))),
             payment_morality=Decimal(str(round(cust.payment_morality, 3))),
             title=tmpl.title,
-            description=tmpl.description,
+            description=description,
             industry_tag=tmpl.industry_tag,
             market_price=market_price,
             expected_delivery_days=tmpl.delivery_days,
@@ -559,6 +597,60 @@ def run_business_week(
         raise
 
     return summary
+
+
+# ===== Auto-tick · spelmotorn drar fram veckor baserat på real-tid =====
+#
+# Tidigare krävdes att läraren tryckte "Stega vecka" eller att privat-
+# tick rullade en månad framåt. Det gjorde biz-läget statiskt och döddt
+# mellan elev-besök · ingen ny offert dök upp förrän eleven själv
+# triggade. Nu körs run_business_week automatiskt när en biz-endpoint
+# läses, baserat på real-tid · 1 biz-vecka per AUTO_TICK_INTERVAL_HOURS
+# real-timme. Resultat: eleven loggar in och ser nya offertförfrågningar
+# rulla in över dagen, kunder besluter sig om gamla offerter, etc.
+#
+# Lazy-eval-mönstret är samma som /v2/postladan-realtidsprojektion: vi
+# slipper en konstant background-job men får ändå en levande spelvärld.
+
+AUTO_TICK_INTERVAL_HOURS = 1.0  # 1 biz-vecka per real-timme · justerbart
+AUTO_TICK_MAX_CATCHUP_WEEKS = 6  # tak per request så vi inte loopar
+
+def auto_tick_if_due(s: Session, *, company: Company) -> int:
+    """Kör så många run_business_week som behövs för att fånga upp
+    real-tid sedan senaste auto-tick. Idempotent · säker att anropa
+    från valfri biz-endpoint vid läsning. Returnerar antal körda
+    veckor (0 = ingen tick behövdes)."""
+    if not company.active:
+        return 0
+    now = datetime.utcnow()
+    last = company.last_auto_tick_at
+    if last is None:
+        # Första läsningen efter create_company · sätt baseline utan
+        # att tika (create_company gjorde redan 2 init-veckor).
+        company.last_auto_tick_at = now
+        return 0
+    elapsed_hours = (now - last).total_seconds() / 3600.0
+    n_due = int(elapsed_hours // AUTO_TICK_INTERVAL_HOURS)
+    if n_due <= 0:
+        return 0
+    n = min(n_due, AUTO_TICK_MAX_CATCHUP_WEEKS)
+    for _ in range(n):
+        try:
+            run_business_week(s, company=company)
+        except Exception:
+            log.exception(
+                "auto_tick: vecka %s misslyckades · fortsätter",
+                company.week_no + 1,
+            )
+            break
+    # Avancera tidsstämpeln med exakt n*intervall · inte "now". Då blir
+    # nästa läsning idempotent (om ingen ny timme passerat) och
+    # återstående delvis-timme räknas mot nästa intervall.
+    from datetime import timedelta as _td
+    company.last_auto_tick_at = last + _td(
+        hours=n * AUTO_TICK_INTERVAL_HOURS,
+    )
+    return n
 
 
 # ===== Cross-engine: tids-stress + Maria-prompt (Sprint 8) =====

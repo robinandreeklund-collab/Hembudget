@@ -108,6 +108,16 @@ class Company(TenantMixin, Base):
     )
     # Senaste tick-vecka (deterministisk seed)
     week_no: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Tidsstämpel för senaste auto-tick. Används av auto_tick_if_due-
+    # helpern: när en biz-endpoint anropas och `last_auto_tick_at` är
+    # äldre än AUTO_TICK_INTERVAL_HOURS körs så många run_business_week
+    # som behövs för att fånga upp. Ger en levande spelmotor utan att
+    # eleven ska klicka "Stega vecka". Default `created_at` så bolag
+    # som skapas precis nu inte tickar igen direkt (vi kör 2 init-tickar
+    # i create_company).
+    last_auto_tick_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
     # Leveranskapacitet (1 = själv, +1 per anställd)
     delivery_capacity: Mapped[int] = mapped_column(
         Integer, default=1, nullable=False,

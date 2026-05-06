@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from ..business.engine import run_business_week
+from ..business.engine import auto_tick_if_due, run_business_week
 from ..business.engine.tick_engine import deliver_job
 from ..business.models import (
     BusinessDecision,
@@ -84,6 +84,17 @@ class OpportunityOut(BaseModel):
     status: str
     week_no: int
     has_quote: bool
+    # Pedagogiska detaljer som visas vid "förlorad/vunnen". Eleven ska
+    # ALLTID kunna förstå varför kunden tackade ja/nej — inte bara se
+    # ett rött FÖRLORAD-pill utan förklaring. quote_* är None tills
+    # eleven lämnat offert; decision_* är None tills kunden bestämt.
+    quote_offered_price: Optional[int] = None
+    quote_offered_delivery_days: Optional[int] = None
+    quote_pitch_text: Optional[str] = None
+    quote_pitch_quality: Optional[float] = None
+    quote_accept_probability: Optional[float] = None
+    quote_accepted: Optional[bool] = None
+    quote_decision_explanation: Optional[str] = None
 
 
 class QuoteIn(BaseModel):
@@ -107,6 +118,7 @@ class QuoteOut(BaseModel):
 
 
 def _to_opportunity_out(opp: JobOpportunity) -> OpportunityOut:
+    q = opp.quote
     return OpportunityOut(
         id=opp.id,
         title=opp.title,
@@ -120,7 +132,19 @@ def _to_opportunity_out(opp: JobOpportunity) -> OpportunityOut:
         received_on=opp.received_on.isoformat(),
         status=opp.status,
         week_no=opp.week_no,
-        has_quote=opp.quote is not None,
+        has_quote=q is not None,
+        quote_offered_price=q.offered_price if q else None,
+        quote_offered_delivery_days=q.offered_delivery_days if q else None,
+        quote_pitch_text=q.pitch_text if q else None,
+        quote_pitch_quality=(
+            float(q.pitch_quality) if q and q.pitch_quality is not None else None
+        ),
+        quote_accept_probability=(
+            float(q.accept_probability)
+            if q and q.accept_probability is not None else None
+        ),
+        quote_accepted=q.accepted if q else None,
+        quote_decision_explanation=q.decision_explanation if q else None,
     )
 
 
@@ -156,6 +180,13 @@ def list_opportunities(
     _require_student(info)
     with session_scope() as s:
         co = _get_active_company(s)
+        if co is None:
+            return []
+        # Auto-tick · drar fram så många biz-veckor som passerat sedan
+        # senaste lasning så att eleven ser nya offertförfrågningar +
+        # accept-besked från tidigare offerter dyka upp över tid utan
+        # att klicka "Stega vecka". 1 biz-vecka per real-timme.
+        auto_tick_if_due(s, company=co)
         q = (
             s.query(JobOpportunity)
             .filter(JobOpportunity.company_id == co.id)

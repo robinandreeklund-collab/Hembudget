@@ -211,170 +211,285 @@ export function BizOfferter() {
                   : "nya offertförfrågningar"}{" "}
                 · väntar på din offert
               </div>
+              {/* Detaljerade offert-kort istället för en mager radlista —
+               * eleven måste se VAD jobbet gäller (jobbeskrivning,
+               * kundsegment, leveranstid) innan de kan skriva en
+               * meningsfull pitch. Tidigare visades bara "Större projekt"
+               * vilket var meningslöst. */}
               <div
-                className="biz-table-grid"
-                style={{ borderColor: "rgba(251,191,36,0.3)" }}
+                style={{
+                  display: "grid",
+                  gap: 12,
+                  borderTop: "1px solid rgba(251,191,36,0.3)",
+                  borderBottom: "1px solid rgba(251,191,36,0.3)",
+                  paddingTop: 12,
+                  paddingBottom: 12,
+                }}
               >
                 {nya.map((o) => (
                   <a
                     key={o.id}
-                    className="biz-table-grid-row"
                     href="#"
                     onClick={(e) => {
                       e.preventDefault();
                       setEditing(o);
                     }}
                     style={{
-                      gridTemplateColumns:
-                        "50px 1.6fr 1fr 110px 110px",
+                      display: "block",
+                      padding: 16,
+                      borderRadius: 8,
+                      background: "rgba(251,191,36,0.04)",
+                      border: "1px solid rgba(251,191,36,0.25)",
+                      textDecoration: "none",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(251,191,36,0.08)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(251,191,36,0.04)";
                     }}
                   >
-                    <span
+                    <div
                       style={{
-                        fontFamily: "JetBrains Mono, monospace",
-                        fontSize: 10,
-                        color: "#fbbf24",
-                        fontWeight: 700,
-                        letterSpacing: 1.2,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "baseline",
+                        gap: 12,
+                        marginBottom: 6,
                       }}
                     >
-                      NY
-                    </span>
-                    <div>
-                      <div
+                      <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+                        <span
+                          style={{
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontSize: 9.5,
+                            color: "#fbbf24",
+                            fontWeight: 700,
+                            letterSpacing: 1.4,
+                          }}
+                        >
+                          NY · {(o.customer_segment || "privat").toUpperCase()}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontSize: 9,
+                            color: "rgba(255,255,255,0.4)",
+                            letterSpacing: 1.2,
+                          }}
+                        >
+                          {o.industry_tag || "Tjänst"}
+                        </span>
+                      </div>
+                      <span
                         style={{
                           fontFamily: "Source Serif 4, Georgia, serif",
-                          fontSize: 14.5,
+                          fontStyle: "italic",
+                          color: "#fbbf24",
                           fontWeight: 700,
-                          color: "#fff",
+                          fontSize: 14,
                         }}
                       >
-                        {o.customer_name}
-                      </div>
+                        {SEK(Math.round(o.market_price * 0.85))}–
+                        {SEK(Math.round(o.market_price * 1.15))} kr
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "Source Serif 4, Georgia, serif",
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: "#fff",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {o.customer_name} <span style={{ color: "rgba(255,255,255,0.5)", fontWeight: 400 }}>· {o.title}</span>
+                    </div>
+                    {o.description && (
                       <div
                         style={{
-                          fontFamily: "JetBrains Mono, monospace",
-                          fontSize: 9.5,
-                          color: "rgba(255,255,255,0.4)",
-                          marginTop: 2,
-                          letterSpacing: 0.4,
+                          fontFamily: "Inter, sans-serif",
+                          fontSize: 13,
+                          color: "rgba(255,255,255,0.78)",
+                          lineHeight: 1.5,
+                          marginTop: 6,
+                          marginBottom: 8,
                         }}
                       >
-                        {o.title}
+                        {o.description}
                       </div>
-                    </div>
-                    <span
+                    )}
+                    <div
                       style={{
+                        display: "flex",
+                        gap: 18,
+                        marginTop: 8,
                         fontFamily: "JetBrains Mono, monospace",
                         fontSize: 10,
                         color: "rgba(255,255,255,0.55)",
+                        letterSpacing: 0.6,
                       }}
                     >
-                      {o.industry_tag || "Tjänst"}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "Source Serif 4, Georgia, serif",
-                        fontStyle: "italic",
-                        color: "#fbbf24",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {SEK(Math.round(o.market_price * 0.85))}–
-                      {SEK(Math.round(o.market_price * 1.15))} kr
-                    </span>
-                    <span className="biz-status open">Skapa offert</span>
+                      <span>📅 Leverans inom <strong style={{ color: "#fff" }}>{o.expected_delivery_days} dagar</strong></span>
+                      <span>⌛ Deadline {o.deadline_on}</span>
+                      <span style={{ marginLeft: "auto", color: "#fbbf24", fontWeight: 700 }}>SKAPA OFFERT →</span>
+                    </div>
                   </a>
                 ))}
               </div>
             </>
           )}
 
-          {/* === Levererat / avslutat === */}
+          {/* === Levererat / avslutat ===
+           * Pedagogiskt kort istället för enrad — vid förlorad offert SKA
+           * eleven se VARFÖR (decision_explanation från acceptance_model
+           * + sin egen pris/leveranstid jämfört med riktpriset). Rött
+           * "FÖRLORAD"-pill utan förklaring lärde inget. */}
           {klara.length > 0 && (
             <>
               <div className="section-eye" style={{ marginTop: 26 }}>
                 Senaste avslutade
               </div>
-              <div className="biz-table-grid">
-                {klara.slice(0, 5).map((o) => (
-                  <a
-                    key={o.id}
-                    className="biz-table-grid-row"
-                    href="#"
-                    onClick={(e) => e.preventDefault()}
-                    style={{
-                      gridTemplateColumns: "60px 1.6fr 100px 110px 100px",
-                    }}
-                  >
-                    <span
+              <div style={{ display: "grid", gap: 10 }}>
+                {klara.slice(0, 5).map((o) => {
+                  const isLost = o.status === "lost";
+                  const isExpired = o.status === "expired";
+                  return (
+                    <div
+                      key={o.id}
                       style={{
-                        fontFamily: "JetBrains Mono, monospace",
-                        fontSize: 10,
-                        color: "rgba(255,255,255,0.4)",
+                        padding: 14,
+                        borderRadius: 8,
+                        background: isLost
+                          ? "rgba(220,76,43,0.06)"
+                          : "rgba(255,255,255,0.02)",
+                        border: `1px solid ${isLost ? "rgba(220,76,43,0.25)" : "rgba(255,255,255,0.08)"}`,
                       }}
                     >
-                      v{o.week_no}
-                    </span>
-                    <div>
                       <div
                         style={{
-                          fontFamily: "Source Serif 4, Georgia, serif",
-                          fontSize: 13.5,
-                          color: "#fff",
+                          display: "flex",
+                          gap: 12,
+                          alignItems: "baseline",
+                          marginBottom: 4,
                         }}
                       >
-                        {o.customer_name}
+                        <span
+                          className={`biz-status ${isLost ? "overdue" : "draft"}`}
+                          style={{ flexShrink: 0 }}
+                        >
+                          {isLost ? "Förlorad" : isExpired ? "Förfallen" : o.status}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 14, fontWeight: 700, color: "#fff" }}>
+                            {o.customer_name}
+                            <span style={{ color: "rgba(255,255,255,0.5)", fontWeight: 400 }}> · {o.title}</span>
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontSize: 10,
+                            color: "rgba(255,255,255,0.5)",
+                          }}
+                        >
+                          v{o.week_no} · riktpris {SEK(o.market_price)} kr
+                        </span>
                       </div>
-                      <div
-                        style={{
-                          fontFamily: "JetBrains Mono, monospace",
-                          fontSize: 9,
-                          color: "rgba(255,255,255,0.4)",
-                          marginTop: 2,
-                          letterSpacing: 0.4,
-                        }}
-                      >
-                        {o.title}
-                      </div>
+
+                      {/* Visa elevens egen offert + förklaring vid förlust */}
+                      {isLost && o.has_quote && (
+                        <div style={{ marginTop: 10 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 18,
+                              fontFamily: "JetBrains Mono, monospace",
+                              fontSize: 10,
+                              color: "rgba(255,255,255,0.65)",
+                              letterSpacing: 0.5,
+                              marginBottom: 8,
+                            }}
+                          >
+                            <span>
+                              Ditt pris:{" "}
+                              <strong style={{ color: "#fda594" }}>
+                                {o.quote_offered_price !== null ? SEK(o.quote_offered_price) + " kr" : "—"}
+                              </strong>
+                            </span>
+                            <span>
+                              Leveranstid:{" "}
+                              <strong style={{ color: "#fff" }}>
+                                {o.quote_offered_delivery_days ?? "—"} dagar
+                              </strong>
+                              {o.quote_offered_delivery_days !== null && o.expected_delivery_days
+                                ? ` (kunden ville ${o.expected_delivery_days})`
+                                : ""}
+                            </span>
+                            {o.quote_pitch_quality !== null && (
+                              <span>
+                                Pitch-kvalitet:{" "}
+                                <strong style={{ color: "#fff" }}>
+                                  {Math.round(o.quote_pitch_quality * 100)}%
+                                </strong>
+                              </span>
+                            )}
+                            {o.quote_accept_probability !== null && (
+                              <span>
+                                Chans till ja:{" "}
+                                <strong style={{ color: "#fda594" }}>
+                                  {Math.round(o.quote_accept_probability * 100)}%
+                                </strong>
+                              </span>
+                            )}
+                          </div>
+                          {o.quote_decision_explanation && (
+                            <div
+                              style={{
+                                fontFamily: "Source Serif 4, Georgia, serif",
+                                fontSize: 13,
+                                fontStyle: "italic",
+                                color: "rgba(255,255,255,0.85)",
+                                lineHeight: 1.55,
+                                padding: "10px 12px",
+                                background: "rgba(0,0,0,0.18)",
+                                borderLeft: "2px solid #fda594",
+                                borderRadius: 4,
+                              }}
+                            >
+                              {o.quote_decision_explanation}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Förfallna har ingen quote · förklara att de aldrig
+                       * lämnade offert i tid. */}
+                      {isExpired && (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            fontFamily: "Source Serif 4, Georgia, serif",
+                            fontSize: 13,
+                            fontStyle: "italic",
+                            color: "rgba(255,255,255,0.6)",
+                          }}
+                        >
+                          Du hann aldrig lämna offert innan kunden tröttnade och valde någon annan.
+                        </div>
+                      )}
                     </div>
-                    <span
-                      style={{
-                        fontFamily: "Source Serif 4, Georgia, serif",
-                        fontStyle: "italic",
-                        color:
-                          o.status === "lost" ? "#fda594"
-                            : "rgba(255,255,255,0.55)",
-                      }}
-                    >
-                      {SEK(o.market_price)} kr
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "JetBrains Mono, monospace",
-                        fontSize: 10,
-                        color: "rgba(255,255,255,0.55)",
-                      }}
-                    >
-                      v{o.week_no}
-                    </span>
-                    <span
-                      className={`biz-status ${
-                        o.status === "lost" ? "overdue" : "draft"
-                      }`}
-                    >
-                      {o.status === "lost" ? "Förlorad" : "Förfallen"}
-                    </span>
-                  </a>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
 
           {opps.length === 0 && (
             <div className="biz-empty">
-              Inga offertförfrågningar än. Tryck på <strong>Stega vecka</strong> i
-              biz-hubben för att simulera fram nya kunder.
+              Inga offertförfrågningar än — pipeline-motorn drar in nya kunder
+              över tid. Tittar du senare har det dykt upp fler.
             </div>
           )}
         </div>
@@ -581,11 +696,60 @@ function QuoteModal({
         }}
       >
         <h2 style={{ color: "white", marginTop: 0 }}>
-          Lämna offert · {opp.title}
+          Lämna offert · {opp.customer_name}
         </h2>
-        <p style={{ color: "#aab", fontSize: "0.85rem" }}>
-          Riktpris {SEK(opp.market_price)} kr · förväntad leverans{" "}
-          {opp.expected_delivery_days} dagar
+        <div
+          style={{
+            background: "rgba(99,102,241,0.06)",
+            border: "1px solid rgba(99,102,241,0.2)",
+            borderRadius: 6,
+            padding: "12px 14px",
+            marginTop: 10,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 9.5,
+              color: "#818cf8",
+              fontWeight: 700,
+              letterSpacing: 1.4,
+              marginBottom: 4,
+            }}
+          >
+            UPPDRAGET · {(opp.customer_segment || "privat").toUpperCase()}
+            {opp.industry_tag ? ` · ${opp.industry_tag.toUpperCase()}` : ""}
+          </div>
+          <div
+            style={{
+              fontFamily: "Source Serif 4, Georgia, serif",
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#fff",
+              marginBottom: 4,
+            }}
+          >
+            {opp.title}
+          </div>
+          {opp.description && (
+            <div
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontSize: 13,
+                color: "rgba(255,255,255,0.85)",
+                lineHeight: 1.55,
+              }}
+            >
+              {opp.description}
+            </div>
+          )}
+        </div>
+        <p style={{ color: "#aab", fontSize: "0.85rem", marginTop: 14 }}>
+          Riktpris{" "}
+          <strong style={{ color: "#fbbf24" }}>{SEK(opp.market_price)} kr</strong>
+          {" · "}förväntad leverans{" "}
+          <strong style={{ color: "#fff" }}>{opp.expected_delivery_days} dagar</strong>
+          {" · "}deadline {opp.deadline_on}
         </p>
 
         {result === null ? (
