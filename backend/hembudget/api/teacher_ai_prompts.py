@@ -200,6 +200,135 @@ def delete_override(
             s.commit()
 
 
+# === Export / Import (Fas 4) ===
+#
+# Lärare kan dela hela sin uppsättning prompts med kollegor genom
+# JSON-export. Andra lärare importerar och får samma stil för Maria/
+# Mats osv. Bra för skol-vid samordning.
+
+
+class ExportPayload(BaseModel):
+    version: int = 1
+    exported_at: str
+    teacher_id: int
+    prompts: list[PromptOverrideOut]
+
+
+@router.get("/export/json", response_model=ExportPayload)
+def export_overrides(info: TokenInfo = Depends(require_token)):
+    """Exportera alla lärarens overrides som JSON. Frontend laddar
+    ner som .json-fil via Content-Disposition i klient-sidan."""
+    teacher_id = _require_teacher(info)
+    from datetime import datetime as _dt
+    from ..school.engines import master_session
+    from ..school.models import TeacherAiPrompt
+    with master_session() as s:
+        rows = (
+            s.query(TeacherAiPrompt)
+            .filter(TeacherAiPrompt.teacher_id == teacher_id)
+            .all()
+        )
+        prompts = [
+            PromptOverrideOut(
+                key=r.prompt_key,
+                custom_text=r.custom_text or "",
+                is_active=r.is_active,
+                updated_at=r.updated_at.isoformat() if r.updated_at else None,
+            )
+            for r in rows
+        ]
+    return ExportPayload(
+        version=1,
+        exported_at=_dt.utcnow().isoformat() + "Z",
+        teacher_id=teacher_id,
+        prompts=prompts,
+    )
+
+
+class ImportPromptIn(BaseModel):
+    key: str
+    custom_text: str = Field(..., max_length=8000)
+    is_active: bool = True
+
+
+class ImportPayloadIn(BaseModel):
+    version: int = 1
+    prompts: list[ImportPromptIn]
+    overwrite_existing: bool = True
+
+
+class ImportResultOut(BaseModel):
+    imported: int
+    skipped: int
+    rejected: list[dict]  # {key, reason}
+
+
+@router.post("/import/json", response_model=ImportResultOut)
+def import_overrides(
+    body: ImportPayloadIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Importera overrides från JSON. Validerar varje prompt:
+    - okänd key → reject (loggas i rejected[])
+    - saknar obligatorisk variabel → reject
+    - allt OK → upsert (skip om overwrite_existing=False och rad finns)
+    """
+    teacher_id = _require_teacher(info)
+    if body.version != 1:
+        raise HTTPException(
+            400, f"Okänd export-version: {body.version}. Förväntade 1.",
+        )
+    from ..school.engines import master_session
+    from ..school.models import TeacherAiPrompt
+
+    imported = 0
+    skipped = 0
+    rejected: list[dict] = []
+
+    with master_session() as s:
+        for p in body.prompts:
+            spec = get_spec(p.key)
+            if spec is None:
+                rejected.append({"key": p.key, "reason": "okänd prompt-key"})
+                continue
+            text = (p.custom_text or "").strip()
+            if text and spec.variables:
+                missing = [v for v in spec.variables if v not in text]
+                if missing:
+                    rejected.append({
+                        "key": p.key,
+                        "reason": f"saknar variabler: {', '.join(missing)}",
+                    })
+                    continue
+            existing = (
+                s.query(TeacherAiPrompt)
+                .filter(
+                    TeacherAiPrompt.teacher_id == teacher_id,
+                    TeacherAiPrompt.prompt_key == p.key,
+                )
+                .first()
+            )
+            if existing is not None and not body.overwrite_existing:
+                skipped += 1
+                continue
+            if existing is None:
+                s.add(TeacherAiPrompt(
+                    teacher_id=teacher_id,
+                    prompt_key=p.key,
+                    custom_text=text,
+                    is_active=p.is_active,
+                ))
+            else:
+                existing.custom_text = text
+                existing.is_active = p.is_active
+            imported += 1
+        s.commit()
+
+    return ImportResultOut(
+        imported=imported, skipped=skipped, rejected=rejected,
+    )
+
+
 @router.post("/{key}/preview", response_model=PromptPreviewOut)
 def preview_prompt(
     key: str,

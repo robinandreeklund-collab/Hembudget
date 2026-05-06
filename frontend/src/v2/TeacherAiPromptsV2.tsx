@@ -21,6 +21,12 @@ import { api } from "@/api/client";
 import { V2Banner } from "./V2Banner";
 
 
+type PromptTemplate = {
+  name: string;
+  description: string;
+  text: string;
+};
+
 type PromptSpec = {
   key: string;
   label: string;
@@ -31,6 +37,7 @@ type PromptSpec = {
   used_at: string;
   model: string;
   preview_input: string;
+  templates: PromptTemplate[];
 };
 
 type PromptOverride = {
@@ -111,6 +118,81 @@ export function TeacherAiPromptsV2() {
     }));
   }
 
+  async function exportJson() {
+    try {
+      const data = await api<{
+        version: number;
+        exported_at: string;
+        teacher_id: number;
+        prompts: PromptOverride[];
+      }>("/v2/teacher/ai-prompts/export/json");
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ai-promptar-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`Export-fel: ${(e as Error).message || e}`);
+    }
+  }
+
+  function triggerImport() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed.prompts)) {
+          throw new Error("Filen saknar prompts[]-array.");
+        }
+        if (
+          !confirm(
+            `Importera ${parsed.prompts.length} prompts? Befintliga "
+            "anpassningar skrivs över.`,
+          )
+        ) {
+          return;
+        }
+        const result = await api<{
+          imported: number;
+          skipped: number;
+          rejected: { key: string; reason: string }[];
+        }>("/v2/teacher/ai-prompts/import/json", {
+          method: "POST",
+          body: JSON.stringify({
+            version: 1,
+            prompts: parsed.prompts,
+            overwrite_existing: true,
+          }),
+        });
+        let msg = `Importerade ${result.imported}, hoppade över ${result.skipped}.`;
+        if (result.rejected.length > 0) {
+          msg += `\n\nAvvisade:\n` + result.rejected
+            .map((r) => `· ${r.key}: ${r.reason}`).join("\n");
+        }
+        alert(msg);
+        // Ladda om overrides
+        const refreshed = await api<PromptOverride[]>("/v2/teacher/ai-prompts");
+        const m: Record<string, PromptOverride> = {};
+        for (const r of refreshed) m[r.key] = r;
+        setOverrides(m);
+      } catch (e) {
+        alert(`Import-fel: ${(e as Error).message || e}`);
+      }
+    };
+    input.click();
+  }
+
   if (loading) {
     return (
       <div className="v2-shell">
@@ -136,10 +218,17 @@ export function TeacherAiPromptsV2() {
           {error && (
             <div style={errorBoxStyle}>{error}</div>
           )}
-          <div style={{ marginTop: 16, fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
-            <Link to="/teacher/v2" style={{ color: "#c7d2fe", textDecoration: "none" }}>
-              ← Tillbaka till lärar-hubben
+          <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <Link to="/teacher/v2" style={{ color: "#c7d2fe", textDecoration: "none", fontFamily: "JetBrains Mono, monospace", fontSize: 11 }}>
+              ← Tillbaka
             </Link>
+            <span style={{ flex: 1 }} />
+            <button onClick={exportJson} style={btnGhost}>
+              Exportera JSON
+            </button>
+            <button onClick={triggerImport} style={btnGhost}>
+              Importera JSON
+            </button>
           </div>
         </header>
 
@@ -348,7 +437,36 @@ function PromptCard({
 
             {/* Lärarens custom-text */}
             <div>
-              <div style={{ ...blockEyeStyle, color: "#fbbf24" }}>DIN ANPASSNING (frivillig)</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "space-between" }}>
+                <div style={{ ...blockEyeStyle, color: "#fbbf24" }}>DIN ANPASSNING (frivillig)</div>
+                {spec.templates.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      const idx = parseInt(e.target.value, 10);
+                      if (idx >= 0 && idx < spec.templates.length) {
+                        if (
+                          customText.trim() === ""
+                          || confirm("Skriv över din nuvarande anpassning?")
+                        ) {
+                          onLocalChange({
+                            custom_text: spec.templates[idx].text,
+                          });
+                        }
+                      }
+                      e.target.value = "-1";
+                    }}
+                    defaultValue="-1"
+                    style={selectStyle}
+                  >
+                    <option value="-1">Klistra in mall…</option>
+                    {spec.templates.map((t, i) => (
+                      <option key={i} value={i} title={t.description}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
               <textarea
                 value={customText}
                 onChange={(e) => onLocalChange({ custom_text: e.target.value })}
@@ -534,6 +652,20 @@ const varHintStyle: React.CSSProperties = {
   background: "rgba(99,102,241,0.06)",
   border: "1px solid rgba(99,102,241,0.25)",
   borderRadius: 6,
+};
+
+const selectStyle: React.CSSProperties = {
+  background: "rgba(99,102,241,0.10)",
+  border: "1px solid rgba(99,102,241,0.35)",
+  color: "#c7d2fe",
+  padding: "4px 8px",
+  borderRadius: 4,
+  fontFamily: "JetBrains Mono, monospace",
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: 0.8,
+  textTransform: "uppercase" as const,
+  cursor: "pointer",
 };
 
 const errorBoxStyle: React.CSSProperties = {
