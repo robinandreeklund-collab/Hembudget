@@ -8,7 +8,7 @@
  * visas ingenting (eleven har företagsläget aktiverat men inget bolag).
  */
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { bizApi } from "./api";
 
 
@@ -16,10 +16,77 @@ const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
 
 
+type BizActivity = {
+  kind: string;
+  title: string;
+  detail: string;
+  when_label: string;
+  tone: "positive" | "negative" | "neutral" | "warning";
+};
+
+
+function buildActivities(
+  data: Awaited<ReturnType<typeof bizApi.privateSummary>>,
+): BizActivity[] {
+  // Spegla siffrorna från privateSummary till en notis-feed.
+  // privateSummary returnerar redan aggregat (n_open_quotes, recent_*).
+  // Här bygger vi pedagogiska rader · t.ex. "3 nya offertförfrågningar
+  // väntar på svar". Backend kan utöka senare med riktiga timestamps.
+  const out: BizActivity[] = [];
+  if (data.n_new_opportunities && data.n_new_opportunities > 0) {
+    out.push({
+      kind: "new_opportunity",
+      title: `${data.n_new_opportunities} nya offertförfrågningar`,
+      detail: "Kunder väntar på din offert · skapa offert i Kunder-fliken.",
+      when_label: "denna vecka",
+      tone: "positive",
+    });
+  }
+  if (data.n_quotes_pending && data.n_quotes_pending > 0) {
+    out.push({
+      kind: "quotes_pending",
+      title: `${data.n_quotes_pending} offerter väntar på besked`,
+      detail: "Kunden bestämmer sig de närmaste timmarna.",
+      when_label: "pågår",
+      tone: "neutral",
+    });
+  }
+  if (data.n_quotes_won_recent && data.n_quotes_won_recent > 0) {
+    out.push({
+      kind: "quote_won",
+      title: `${data.n_quotes_won_recent} vunna offerter`,
+      detail: "Leverera klart för att fakturera.",
+      when_label: "senaste vecka",
+      tone: "positive",
+    });
+  }
+  if (data.n_quotes_lost_recent && data.n_quotes_lost_recent > 0) {
+    out.push({
+      kind: "quote_lost",
+      title: `${data.n_quotes_lost_recent} förlorade offerter`,
+      detail: "Klicka in i företaget för att läsa varför.",
+      when_label: "senaste vecka",
+      tone: "warning",
+    });
+  }
+  if (data.n_invoices_overdue && data.n_invoices_overdue > 0) {
+    out.push({
+      kind: "invoice_overdue",
+      title: `${data.n_invoices_overdue} förfallna fakturor`,
+      detail: "Kunder har inte betalat i tid · skicka påminnelse.",
+      when_label: "akut",
+      tone: "negative",
+    });
+  }
+  return out;
+}
+
+
 export function BizSummaryCard() {
   const [data, setData] = useState<
     Awaited<ReturnType<typeof bizApi.privateSummary>> | null
   >(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     bizApi
@@ -34,10 +101,50 @@ export function BizSummaryCard() {
 
   const isPositive = data.margin_pct >= 15;
   const isNegative = data.margin_pct < 0 || data.n_invoices_overdue > 0;
+  const activities = buildActivities(data);
+
+  function openBizHub(e: React.MouseEvent) {
+    e.preventDefault();
+    // Kortet ligger på privat-hubben (/v2/hub). Att navigera till
+    // /v2/foretag funkade inte (ingen route där) · sidan föll till
+    // catchall → V2RootRedirect → tillbaka till /v2/hub. Nu kör vi
+    // istället mode-flip-animationen genom att sätta body[data-mode]
+    // = "business" så CompanyModeWrapper växlar till BizHub-panelen.
+    // Pre-monterade panels (commit 097de4b) gör swappen smooth utan
+    // route-change.
+    const target = document.getElementById("v2-flip-target");
+    const reduced = window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (target && !reduced) {
+      target.classList.add("flip-out");
+    }
+    setTimeout(() => {
+      try {
+        localStorage.setItem("hb_company_mode", "business");
+      } catch {
+        // localStorage kan vara avstängd · ignorera
+      }
+      document.body.setAttribute("data-mode", "business");
+      window.dispatchEvent(
+        new CustomEvent("company-mode-changed", {
+          detail: { mode: "business" },
+        }),
+      );
+      if (window.location.pathname !== "/v2/hub") {
+        navigate("/v2/hub");
+      }
+      if (target && !reduced) {
+        target.classList.remove("flip-out");
+        target.classList.add("flip-in");
+        setTimeout(() => target.classList.remove("flip-in"), 550);
+      }
+    }, reduced ? 0 : 460);
+  }
 
   return (
-    <Link
-      to="/v2/foretag"
+    <a
+      href="#"
+      onClick={openBizHub}
       style={{
         display: "block",
         padding: "20px 22px",
@@ -53,6 +160,7 @@ export function BizSummaryCard() {
           isNegative ? "#fda594" : isPositive ? "#6ee7b7" : "#818cf8"
         }`,
         transition: "all 0.2s ease",
+        cursor: "pointer",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background =
@@ -198,6 +306,98 @@ export function BizSummaryCard() {
         </div>
       </div>
 
+      {/* Notis-feed · senaste händelser i företaget. Visas BARA om vi
+       * har relevanta aggregat — annars hoppar vi över så kortet inte
+       * blir tomt-snackigt för ett nystartat bolag. */}
+      {activities.length > 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            paddingTop: 14,
+            borderTop: "1px dashed rgba(99,102,241,0.25)",
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: 1.4,
+              color: "rgba(199,210,254,0.75)",
+              marginBottom: 2,
+            }}
+          >
+            ● NYTT FRÅN FÖRETAGET
+          </div>
+          {activities.slice(0, 4).map((a) => {
+            const dot =
+              a.tone === "positive" ? "#6ee7b7"
+                : a.tone === "negative" ? "#dc4c2b"
+                : a.tone === "warning" ? "#fbbf24"
+                : "#818cf8";
+            return (
+              <div
+                key={a.kind}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "10px 1fr auto",
+                  gap: 10,
+                  alignItems: "baseline",
+                }}
+              >
+                <span
+                  style={{
+                    color: dot,
+                    fontSize: 14,
+                    lineHeight: 1,
+                    transform: "translateY(2px)",
+                  }}
+                >
+                  ●
+                </span>
+                <div>
+                  <div
+                    style={{
+                      fontFamily: "Source Serif 4, Georgia, serif",
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      color: "#fff",
+                    }}
+                  >
+                    {a.title}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "Inter, sans-serif",
+                      fontSize: 12,
+                      color: "rgba(255,255,255,0.65)",
+                      lineHeight: 1.4,
+                      marginTop: 2,
+                    }}
+                  >
+                    {a.detail}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 9,
+                    color: "rgba(255,255,255,0.4)",
+                    letterSpacing: 0.8,
+                    textTransform: "uppercase",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {a.when_label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div
         style={{
           marginTop: 14,
@@ -209,6 +409,6 @@ export function BizSummaryCard() {
       >
         Öppna företaget →
       </div>
-    </Link>
+    </a>
   );
 }

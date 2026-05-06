@@ -254,6 +254,10 @@ export const bizApi = {
       n_invoices_overdue: number;
       pentagon_score: number;
       summary_text: string;
+      n_new_opportunities: number;
+      n_quotes_pending: number;
+      n_quotes_won_recent: number;
+      n_quotes_lost_recent: number;
     }>("/v2/foretag/private-summary"),
   patchCompany: (id: number, b: Partial<Company> & { name: string; form: string }) =>
     call<Company>(`/v2/foretag/${id}`, { method: "PATCH", body: JSON.stringify(b) }),

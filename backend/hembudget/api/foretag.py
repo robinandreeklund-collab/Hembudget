@@ -1619,6 +1619,13 @@ class BizPrivateSummaryOut(BaseModel):
     pentagon_score: int = 0
     # En kort copy som privat-hubben renderar
     summary_text: str = ""
+    # Aktivitets-feed · pedagogiska räknare för "Nytt från företaget"-
+    # sektionen på privat-hubbens BizSummaryCard. Räknar händelser från
+    # senaste 7 spel-veckor (≈ senaste real-vecka med 1 vecka/timme).
+    n_new_opportunities: int = 0
+    n_quotes_pending: int = 0
+    n_quotes_won_recent: int = 0
+    n_quotes_lost_recent: int = 0
 
 
 @router.get(
@@ -1637,6 +1644,14 @@ def biz_private_summary(info: TokenInfo = Depends(require_token)):
         c = _get_active_company(s)
         if c is None:
             return BizPrivateSummaryOut(has_company=False)
+        # Auto-tick · privat-hubben är ofta första vyn eleven öppnar,
+        # så biz-state ska hänga med i real-tid även om eleven aldrig
+        # går in i biz-läget direkt.
+        try:
+            from ..business.engine import auto_tick_if_due
+            auto_tick_if_due(s, company=c)
+        except Exception:
+            pass
         pent = compute_business_pentagon(s, company=c)
         metrics = pent["metrics"]
         # Räkna fakturor
@@ -1651,6 +1666,45 @@ def biz_private_summary(info: TokenInfo = Depends(require_token)):
         n_overdue = sum(
             1 for i in invs
             if i.status == "sent" and i.due_on < today
+        )
+
+        # Aktivitets-feed · senaste 7 spel-veckor.
+        from ..business.models import JobOpportunity as _JO, Quote as _Q
+        recent_week_threshold = max(0, int(c.week_no or 0) - 6)
+        n_new_opps = (
+            s.query(_JO)
+            .filter(
+                _JO.company_id == c.id,
+                _JO.status == "open",
+                _JO.week_no >= recent_week_threshold,
+            )
+            .count()
+        )
+        n_quotes_pending = (
+            s.query(_JO)
+            .filter(
+                _JO.company_id == c.id,
+                _JO.status == "quoted",
+            )
+            .count()
+        )
+        n_quotes_won_recent = (
+            s.query(_JO)
+            .filter(
+                _JO.company_id == c.id,
+                _JO.status == "won",
+                _JO.week_no >= recent_week_threshold,
+            )
+            .count()
+        )
+        n_quotes_lost_recent = (
+            s.query(_JO)
+            .filter(
+                _JO.company_id == c.id,
+                _JO.status == "lost",
+                _JO.week_no >= recent_week_threshold,
+            )
+            .count()
         )
         # City-display
         city_display: Optional[str] = None
@@ -1696,6 +1750,10 @@ def biz_private_summary(info: TokenInfo = Depends(require_token)):
             n_invoices_overdue=n_overdue,
             pentagon_score=int(pent["total_score"]),
             summary_text=summary,
+            n_new_opportunities=n_new_opps,
+            n_quotes_pending=n_quotes_pending,
+            n_quotes_won_recent=n_quotes_won_recent,
+            n_quotes_lost_recent=n_quotes_lost_recent,
         )
 
 
