@@ -8,8 +8,6 @@
  * BizLeverantorer  · /v2/foretag/leverantorer (inkommande fakturor)
  */
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { V2Banner } from "../V2Banner";
 import {
   bizEngineApi,
   type Decision,
@@ -19,6 +17,7 @@ import {
   type Quote,
   type SupplierInvoice,
 } from "./api";
+import { BizActorShell } from "./BizActorShell";
 import "./biz.css";
 
 
@@ -26,95 +25,501 @@ const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
 
 
-/** BizShell · gemensam layout för alla biz-pages med indigo-tema. */
-function BizShell({ title, eye, children }: {
-  title: string; eye: string; children: React.ReactNode;
-}) {
-  // Säkerställ att body[data-mode="business"] sätts på biz-pages
-  useEffect(() => {
-    const prev = document.body.getAttribute("data-mode");
-    document.body.setAttribute("data-mode", "business");
-    return () => {
-      // Återställ till föregående mode (eller private som default)
-      document.body.setAttribute("data-mode", prev || "private");
-    };
-  }, []);
-
-  return (
-    <div className="v2-biz-root">
-      <V2Banner status={{ role: "student", is_super_admin: false }} />
-      <div className="biz-shell">
-        <Link to="/v2/hub" className="biz-back">
-          ← Bolag · översikt
-        </Link>
-        <header style={{ marginBottom: 24 }}>
-          <div className="biz-eye">{eye}</div>
-          <h1 className="biz-h1">{title}</h1>
-        </header>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-
-// === BIZ OFFERTER ===
+// === BIZ OFFERTER (matchar prototyp p-biz-kunder) ===
 
 export function BizOfferter() {
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>("");
   const [editing, setEditing] = useState<Opportunity | null>(null);
 
   function refresh() {
-    bizEngineApi.listOpportunities(filter || undefined)
+    bizEngineApi.listOpportunities(undefined)
       .then(setOpps)
       .catch((e) => setErr(String((e as Error).message || e)));
   }
 
-  useEffect(() => { refresh(); /* eslint-disable-line */ }, [filter]);
+  useEffect(() => { refresh(); }, []);
+
+  // Pipelinen delas i tre sektioner enligt prototypen p-biz-kunder:
+  //   - Aktiva uppdrag = "quoted" eller "won" (vi har lagt offert / vunnit)
+  //   - Nya förfrågningar = "open" (väntar på offert)
+  //   - Levererat = "lost" eller "expired" (avslutat)
+  const activa = opps.filter((o) => o.status === "quoted" || o.status === "won");
+  const nya = opps.filter((o) => o.status === "open");
+  const klara = opps.filter((o) => o.status === "lost" || o.status === "expired");
+
+  // Kalkylera vunnen-andel
+  const totalDecided = opps.filter(
+    (o) => o.status === "won" || o.status === "lost",
+  ).length;
+  const wonCount = opps.filter((o) => o.status === "won").length;
+  const winPct = totalDecided > 0
+    ? Math.round((wonCount / totalDecided) * 100) : null;
 
   return (
-    <BizShell title="Offertförfrågningar" eye="Spelmotor · 01 / Pipeline">
-      {err && <div style={{ color: "#fda594" }}>{err}</div>}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-        {[
-          ["", "Alla"], ["open", "Öppna"], ["quoted", "Offererade"],
-          ["won", "Vunna"], ["lost", "Förlorade"],
-        ].map(([v, l]) => (
-          <button
-            key={v}
-            onClick={() => setFilter(v)}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 6,
-              border: "1px solid rgba(99,102,241,0.3)",
-              background: filter === v
-                ? "rgba(99,102,241,0.25)" : "transparent",
-              color: "#c7d2fe",
-              cursor: "pointer",
-              fontSize: "0.85rem",
-            }}
-          >{l}</button>
-        ))}
+    <BizActorShell
+      pillLabel="Aktör · biz · Kunder & offerter"
+      title={
+        <>
+          {nya.length > 0 ? (
+            <>
+              {opps.length === 0 ? "Inga" : activa.length} <em>kunder</em>,{" "}
+              {nya.length} förfråga{nya.length === 1 ? "n" : "ningar"}.
+            </>
+          ) : (
+            <>Pipelinen <em>just nu</em>.</>
+          )}
+        </>
+      }
+      subtitle="Pipelinen som driver omsättningen · ryktet ger fler offertförfrågningar"
+      meta={
+        <>
+          Aktiva uppdrag: <strong>{activa.length}</strong>
+          <br />
+          Förfrågningar i kö: <strong>{nya.length}</strong>
+          <br />
+          Vunnen-andel:{" "}
+          <strong>
+            {winPct !== null ? `${winPct} %` : "—"}
+          </strong>
+        </>
+      }
+    >
+      {err && <div className="biz-error">{err}</div>}
+
+      <div className="act-grid">
+        <div>
+          {/* === Aktiva kunder & pågående jobb === */}
+          <div className="section-eye" style={{ color: "#c7d2fe" }}>
+            Aktiva kunder &amp; pågående jobb
+          </div>
+          {activa.length === 0 ? (
+            <div className="biz-empty">
+              Inga pågående uppdrag — när du vinner en offert hamnar den här.
+            </div>
+          ) : (
+            <div className="biz-table-grid">
+              <div
+                className="biz-table-grid-row head"
+                style={{
+                  gridTemplateColumns:
+                    "50px 1.6fr 1fr 100px 110px 100px",
+                }}
+              >
+                <span>#</span>
+                <span>Kund / Jobb</span>
+                <span>Bransch</span>
+                <span>Pris</span>
+                <span>Deadline</span>
+                <span>Status</span>
+              </div>
+              {activa.map((o, i) => (
+                <a
+                  key={o.id}
+                  className="biz-table-grid-row"
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setEditing(o);
+                  }}
+                  style={{
+                    gridTemplateColumns:
+                      "50px 1.6fr 1fr 100px 110px 100px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.4)",
+                    }}
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "Source Serif 4, Georgia, serif",
+                        fontSize: 14.5,
+                        fontWeight: 700,
+                        color: "#fff",
+                      }}
+                    >
+                      {o.customer_name}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 9.5,
+                        color: "rgba(255,255,255,0.4)",
+                        marginTop: 2,
+                        letterSpacing: 0.4,
+                      }}
+                    >
+                      {o.title}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.55)",
+                    }}
+                  >
+                    {o.industry_tag || "Tjänst"}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "Source Serif 4, Georgia, serif",
+                      fontStyle: "italic",
+                      color: "#c7d2fe",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {SEK(o.market_price)} kr
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.55)",
+                    }}
+                  >
+                    {o.expected_delivery_days} dgr
+                  </span>
+                  <span
+                    className={`biz-status ${
+                      o.status === "won" ? "paid" : "sent"
+                    }`}
+                  >
+                    {o.status === "won" ? "Vunnen" : "Pågår"}
+                  </span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* === Nya offertförfrågningar === */}
+          {nya.length > 0 && (
+            <>
+              <div
+                className="section-eye"
+                style={{ color: "#fbbf24", marginTop: 26 }}
+              >
+                {nya.length} {nya.length === 1
+                  ? "ny offertförfrågan"
+                  : "nya offertförfrågningar"}{" "}
+                · väntar på din offert
+              </div>
+              <div
+                className="biz-table-grid"
+                style={{ borderColor: "rgba(251,191,36,0.3)" }}
+              >
+                {nya.map((o) => (
+                  <a
+                    key={o.id}
+                    className="biz-table-grid-row"
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setEditing(o);
+                    }}
+                    style={{
+                      gridTemplateColumns:
+                        "50px 1.6fr 1fr 110px 110px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 10,
+                        color: "#fbbf24",
+                        fontWeight: 700,
+                        letterSpacing: 1.2,
+                      }}
+                    >
+                      NY
+                    </span>
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: "Source Serif 4, Georgia, serif",
+                          fontSize: 14.5,
+                          fontWeight: 700,
+                          color: "#fff",
+                        }}
+                      >
+                        {o.customer_name}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "JetBrains Mono, monospace",
+                          fontSize: 9.5,
+                          color: "rgba(255,255,255,0.4)",
+                          marginTop: 2,
+                          letterSpacing: 0.4,
+                        }}
+                      >
+                        {o.title}
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 10,
+                        color: "rgba(255,255,255,0.55)",
+                      }}
+                    >
+                      {o.industry_tag || "Tjänst"}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "Source Serif 4, Georgia, serif",
+                        fontStyle: "italic",
+                        color: "#fbbf24",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {SEK(Math.round(o.market_price * 0.85))}–
+                      {SEK(Math.round(o.market_price * 1.15))} kr
+                    </span>
+                    <span className="biz-status open">Skapa offert</span>
+                  </a>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* === Levererat / avslutat === */}
+          {klara.length > 0 && (
+            <>
+              <div className="section-eye" style={{ marginTop: 26 }}>
+                Senaste avslutade
+              </div>
+              <div className="biz-table-grid">
+                {klara.slice(0, 5).map((o) => (
+                  <a
+                    key={o.id}
+                    className="biz-table-grid-row"
+                    href="#"
+                    onClick={(e) => e.preventDefault()}
+                    style={{
+                      gridTemplateColumns: "60px 1.6fr 100px 110px 100px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 10,
+                        color: "rgba(255,255,255,0.4)",
+                      }}
+                    >
+                      v{o.week_no}
+                    </span>
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: "Source Serif 4, Georgia, serif",
+                          fontSize: 13.5,
+                          color: "#fff",
+                        }}
+                      >
+                        {o.customer_name}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "JetBrains Mono, monospace",
+                          fontSize: 9,
+                          color: "rgba(255,255,255,0.4)",
+                          marginTop: 2,
+                          letterSpacing: 0.4,
+                        }}
+                      >
+                        {o.title}
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontFamily: "Source Serif 4, Georgia, serif",
+                        fontStyle: "italic",
+                        color:
+                          o.status === "lost" ? "#fda594"
+                            : "rgba(255,255,255,0.55)",
+                      }}
+                    >
+                      {SEK(o.market_price)} kr
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 10,
+                        color: "rgba(255,255,255,0.55)",
+                      }}
+                    >
+                      v{o.week_no}
+                    </span>
+                    <span
+                      className={`biz-status ${
+                        o.status === "lost" ? "overdue" : "draft"
+                      }`}
+                    >
+                      {o.status === "lost" ? "Förlorad" : "Förfallen"}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </>
+          )}
+
+          {opps.length === 0 && (
+            <div className="biz-empty">
+              Inga offertförfrågningar än. Tryck på <strong>Stega vecka</strong> i
+              biz-hubben för att simulera fram nya kunder.
+            </div>
+          )}
+        </div>
+
+        {/* === Aside · 4 side-cards (rykte / vunnen-andel / Echo / pipeline) === */}
+        <aside>
+          <div
+            className="side-card"
+            style={{ borderColor: "rgba(99,102,241,0.25)" }}
+          >
+            <div
+              className="side-card-eye"
+              style={{ color: "#c7d2fe" }}
+            >
+              Ryktet driver pipelinen
+            </div>
+            <div className="side-card-h">
+              {wonCount > 0 ? wonCount * 8 + 50 : 50}{" "}
+              <em style={{ color: "#c7d2fe" }}>av 100</em>
+            </div>
+            <div className="side-card-meta">
+              {wonCount > 0
+                ? `+ ${wonCount * 4} efter ${wonCount} vunna offerter. Ryktet ↑ → fler förfrågningar.`
+                : "Vinn din första offert för att börja bygga ryktet."}
+            </div>
+            <div
+              style={{
+                marginTop: 14,
+                height: 6,
+                background: "rgba(255,255,255,0.06)",
+                borderRadius: 100,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  background: "linear-gradient(90deg, #818cf8, #c7d2fe)",
+                  width: `${Math.min(100, (wonCount > 0 ? wonCount * 8 + 50 : 50))}%`,
+                  borderRadius: 100,
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="side-card">
+            <div className="side-card-eye">Vunnen-andel</div>
+            <div className="side-card-h">
+              {winPct !== null ? `${winPct} %` : "—"}{" "}
+              <em>
+                ({wonCount} av {totalDecided})
+              </em>
+            </div>
+            <div className="side-card-meta">
+              {winPct !== null && winPct >= 50
+                ? "Du ligger högt — kan höja priset något utan att förlora kunder."
+                : winPct !== null
+                ? "Branschen IT-tjänster har snitt 35 %. Sänkt pris eller bättre pitch."
+                : "Lämna offerter för att räkna vunnen-andel."}
+            </div>
+          </div>
+
+          {nya.length > 0 && (
+            <div
+              className="side-card"
+              style={{
+                background: "rgba(251,191,36,0.06)",
+                borderColor: "rgba(251,191,36,0.25)",
+              }}
+            >
+              <div
+                className="side-card-eye"
+                style={{ color: "#fbbf24" }}
+              >
+                Echo · taktiskt
+              </div>
+              <div className="side-card-h">
+                Lämna pris i <em>mitten</em> av spannet
+              </div>
+              <div className="side-card-meta">
+                Riktpris från Konsumentverkets schablon. Med {winPct ?? "—"} %
+                vunnen-andel kan du gå mot mitten — ej alltid lägsta. Pitch-
+                texten är minst lika viktig som priset.
+              </div>
+            </div>
+          )}
+
+          <div className="side-card">
+            <div className="side-card-eye">AI-avgör för pipelinen</div>
+            <div className="side-card-h">
+              Branschmix bygger på din historik
+            </div>
+            <div className="side-card-meta">
+              När du levererar tjänst med 4+ stjärnor → branschmix-vikt höjs.
+              Pipeline-modellen genererar fler liknande förfrågningar nästa
+              vecka.
+            </div>
+          </div>
+        </aside>
       </div>
 
-      {opps.length === 0 ? (
-        <p style={{ color: "rgba(255,255,255,0.5)" }}>
-          Inga offertförfrågningar än. Tryck på <strong>Stega vecka</strong> i
-          biz-hubben för att simulera fram nya kunder.
-        </p>
-      ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          {opps.map(o => (
-            <OpportunityCard
-              key={o.id}
-              opp={o}
-              onClick={() => setEditing(o)}
-            />
-          ))}
+      {/* === Pedagogik === */}
+      <div className="peda" style={{ marginTop: 26 }}>
+        <div className="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div className="peda-h">
+          Pris är <em>förhandling</em>, inte gissning.
         </div>
-      )}
+        <p className="peda-prose">
+          Riktpris från <strong>Konsumentverkets schablon</strong>. Du anpassar
+          efter <em>kvalitet</em> (din historik), <em>komplexitet</em>
+          (timmar du tror) och <em>marknad</em> (branschens vunnen-andel).
+          Acceptansmodellen i appen räknar deterministiskt — eleven kan alltid
+          få förklarat varför kunden tackat ja eller nej.
+        </p>
+        <ul className="peda-bullets">
+          <li>
+            <strong>Riktpris</strong>Konsumentverkets schablon per bransch + ort.
+          </li>
+          <li>
+            <strong>Pitch-faktor</strong>AI bedömer din offert-text som
+            matchningsfaktor (0-1).
+          </li>
+          <li>
+            <strong>Rykte</strong>Kvalitet av tidigare leveranser. Driver
+            pipeline.
+          </li>
+          <li>
+            <strong>Pipeline-vikt</strong>Branschmix bygger på din historik.
+            Levererar du IT → fler IT-jobb.
+          </li>
+        </ul>
+        <div className="peda-concepts">
+          <span className="peda-concept">Riktpris</span>
+          <span className="peda-concept">Vunnen-andel</span>
+          <span className="peda-concept">Konvertering</span>
+          <span className="peda-concept">Kundlivstidsvärde</span>
+          <span className="peda-concept">Pipeline-mix</span>
+        </div>
+        <div className="peda-tip">
+          Klicka "Skapa offert" på en NY-rad. Du får skriva en pitch (AI
+          bedömer 0-1) + sätta pris. Sen avgör programmets acceptansmodell —
+          inte LLM. Det är pedagogiskt avgörande: läraren kan alltid förklara
+          varför.
+        </div>
+      </div>
 
       {editing && (
         <QuoteModal
@@ -125,85 +530,7 @@ export function BizOfferter() {
           }}
         />
       )}
-    </BizShell>
-  );
-}
-
-
-function OpportunityCard({
-  opp, onClick,
-}: { opp: Opportunity; onClick: () => void }) {
-  const SEGMENT_LABEL: Record<string, string> = {
-    privat: "Privat",
-    foretag: "Företag",
-    kommun: "Kommun",
-  };
-  const STATUS_COLOR: Record<string, string> = {
-    open: "#fbbf24",
-    quoted: "#818cf8",
-    won: "#6ee7b7",
-    lost: "#fda594",
-    expired: "#aab",
-  };
-  const STATUS_LABEL: Record<string, string> = {
-    open: "Öppen",
-    quoted: "Offererad",
-    won: "Vunnen",
-    lost: "Förlorad",
-    expired: "Förfallen",
-  };
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        background: "rgba(15,21,37,0.6)",
-        border: "1px solid rgba(99,102,241,0.18)",
-        borderRadius: 10,
-        padding: 16,
-        cursor: opp.status === "open" ? "pointer" : "default",
-        opacity: opp.status === "open" ? 1 : 0.85,
-      }}
-    >
-      <div style={{
-        display: "flex", justifyContent: "space-between",
-        alignItems: "flex-start", marginBottom: 8,
-      }}>
-        <div>
-          <div style={{
-            color: STATUS_COLOR[opp.status] || "white",
-            fontSize: "0.7rem",
-            fontFamily: "JetBrains Mono, monospace",
-            letterSpacing: 1.2,
-            textTransform: "uppercase",
-          }}>
-            {STATUS_LABEL[opp.status] || opp.status} · v{opp.week_no}
-          </div>
-          <h3 style={{ color: "white", margin: "4px 0 0" }}>{opp.title}</h3>
-          <div style={{ color: "#aab", fontSize: "0.85rem" }}>
-            {opp.customer_name} · {SEGMENT_LABEL[opp.customer_segment]}
-          </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ color: "white", fontSize: "1.2rem", fontWeight: 700 }}>
-            {SEK(opp.market_price)} kr
-          </div>
-          <div style={{ color: "#aab", fontSize: "0.75rem" }}>
-            riktpris · ~{opp.expected_delivery_days} dgr
-          </div>
-        </div>
-      </div>
-      <p style={{ color: "rgba(255,255,255,0.7)", margin: 0, fontSize: "0.9rem" }}>
-        {opp.description}
-      </p>
-      {opp.status === "open" && (
-        <div style={{
-          marginTop: 10, color: "#6ee7b7",
-          fontSize: "0.8rem", fontWeight: 600,
-        }}>
-          → Klicka för att lämna offert
-        </div>
-      )}
-    </div>
+    </BizActorShell>
   );
 }
 
@@ -377,7 +704,7 @@ export function BizJobb() {
   };
 
   return (
-    <BizShell title="Pågående jobb" eye="Spelmotor · 02 / Leveranser">
+    <BizActorShell pillLabel="Aktör · biz · Pågående jobb" title={<>Leverera <em>med kvalitet</em>.</>} subtitle="Vunna offerter blir jobb · leverera och fakturera">
       {err && <div style={{ color: "#fda594" }}>{err}</div>}
       <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
         {[
@@ -457,7 +784,7 @@ export function BizJobb() {
           }}
         />
       )}
-    </BizShell>
+    </BizActorShell>
   );
 }
 
@@ -605,7 +932,7 @@ export function BizMarknad() {
   useEffect(() => { refresh(); }, []);
 
   return (
-    <BizShell title="Marknadsföring" eye="Spelmotor · 03 / Sälj">
+    <BizActorShell pillLabel="Aktör · biz · Marknadsföring" title={<>Synas är <em>säljbart</em>.</>} subtitle="Kampanjer som höjer pipeline-vikten · AI bedömer copy">
       {err && <div style={{ color: "#fda594" }}>{err}</div>}
       <button onClick={() => setShowAdd(true)} style={{ ...btnPrimary, marginBottom: 16 }}>
         + Skapa kampanj
@@ -692,7 +1019,7 @@ export function BizMarknad() {
           if (r) refresh();
         }} />
       )}
-    </BizShell>
+    </BizActorShell>
   );
 }
 
@@ -877,7 +1204,7 @@ export function BizBeslut() {
   useEffect(() => { refresh(); }, []);
 
   return (
-    <BizShell title="Beslut" eye="Spelmotor · 04 / Strategi">
+    <BizActorShell pillLabel="Verktyg · biz · Beslut" title={<>Strategiska <em>val</em>.</>} subtitle="Anställa · friskvård · leasing · försäkring">
       {err && <div style={{ color: "#fda594" }}>{err}</div>}
       <button onClick={() => setPicking(true)} style={{ ...btnPrimary, marginBottom: 16 }}>
         + Nytt beslut
@@ -911,7 +1238,7 @@ export function BizBeslut() {
           if (r) refresh();
         }} />
       )}
-    </BizShell>
+    </BizActorShell>
   );
 }
 
@@ -1054,15 +1381,14 @@ function DecisionPicker({ onClose }: { onClose: (refreshed: boolean) => void }) 
 export function BizLeverantorer() {
   const [invoices, setInvoices] = useState<SupplierInvoice[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
   const [paying, setPaying] = useState<number | null>(null);
 
   function refresh() {
-    bizEngineApi.listSupplierInvoices(filter || undefined)
+    bizEngineApi.listSupplierInvoices(undefined)
       .then(setInvoices)
       .catch((e) => setErr(String((e as Error).message || e)));
   }
-  useEffect(() => { refresh(); /* eslint-disable-line */ }, [filter]);
+  useEffect(() => { refresh(); }, []);
 
   async function pay(id: number) {
     setPaying(id);
@@ -1076,103 +1402,236 @@ export function BizLeverantorer() {
     }
   }
 
-  return (
-    <BizShell title="Leverantörsfakturor" eye="Spelmotor · 05 / Inköp">
-      {err && <div style={{ color: "#fda594" }}>{err}</div>}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-        {[
-          ["", "Alla"], ["open", "Obetalda"], ["paid", "Betalda"],
-        ].map(([v, l]) => (
-          <button
-            key={v}
-            onClick={() => setFilter(v)}
-            style={{
-              padding: "6px 12px", borderRadius: 6,
-              border: "1px solid rgba(99,102,241,0.3)",
-              background: filter === v
-                ? "rgba(99,102,241,0.25)" : "transparent",
-              color: "#c7d2fe", cursor: "pointer", fontSize: "0.85rem",
-            }}
-          >{l}</button>
-        ))}
-      </div>
+  // Föreslå BAS-konton baserat på leverantörens beskrivning. Pedagogiskt:
+  // ungefär samma kategoriserings-mönster som prototypen rad 5860-5910.
+  function basAccountsFor(si: SupplierInvoice): string {
+    const lower = `${si.sender_name} ${si.description}`.toLowerCase();
+    if (lower.includes("bolagsverket") || lower.includes("avgift") || lower.includes("anders lind"))
+      return "6991 Övriga avgifter";
+    if (lower.includes("möbler") || lower.includes("skrivbord") || lower.includes("dator"))
+      return "1220 Inventarier (avskr 5 år)";
+    if (lower.includes("hyra") || lower.includes("lokal"))
+      return "5010 Lokalhyra / 2641 Moms in";
+    if (lower.includes("loopia") || lower.includes("webb") || lower.includes("hosting"))
+      return "5610 Datakostn / 2641 Moms in";
+    if (lower.includes("adobe") || lower.includes("bokio") || lower.includes("software"))
+      return "5610 / 2641 (auto-bokad)";
+    return "5610 / 2641 (förslag)";
+  }
 
+  const today = new Date().toISOString().slice(0, 10);
+  const open = invoices.filter((i) => i.status === "open");
+  const paid = invoices.filter((i) => i.status === "paid");
+  const overdue = open.filter((i) => i.due_on < today);
+  const dueThisWeek = open
+    .reduce((acc, i) => acc + i.amount_excl_vat, 0);
+  const vatThisWeek = Math.round(dueThisWeek * 0.20); // 25 % moms av 1.25-multipel
+
+  return (
+    <BizActorShell
+      pillLabel="Aktör · biz · Leverantörer"
+      title={<>Inkommande <em>fakturor</em>.</>}
+      subtitle={
+        invoices.length === 0
+          ? "Inga leverantörsfakturor än"
+          : `${open.length} oöppnade · ${paid.length} bokförda${
+              overdue.length > 0 ? ` · ${overdue.length} förfallna` : ""
+            }`
+      }
+      meta={
+        <>
+          Att betala denna v: <strong>{SEK(dueThisWeek)} kr</strong>
+          <br />
+          Avdragsgill moms: <strong>{SEK(vatThisWeek)} kr</strong>
+          <br />
+          Ohanterade: <strong>{open.length}</strong>
+        </>
+      }
+    >
+      {err && <div className="biz-error">{err}</div>}
+
+      <div className="section-eye" style={{ color: "#c7d2fe" }}>
+        Leverantörsfakturor
+      </div>
       {invoices.length === 0 ? (
-        <p style={{ color: "rgba(255,255,255,0.5)" }}>
+        <div className="biz-empty">
           Inga leverantörsfakturor. Antingen är allt betalt, eller så har
-          läraren inte skickat ut några än.
-        </p>
+          läraren inte skickat ut några än. Tryck på <strong>Stega vecka</strong>{" "}
+          i biz-hubben för att simulera fram nya.
+        </div>
       ) : (
-        <table style={tableStyle}>
-          <thead>
-            <tr style={{ color: "#aab", textAlign: "left" }}>
-              <th style={{ padding: "8px 4px" }}>Avsändare / beskrivning</th>
-              <th style={{ padding: "8px 4px" }}>Förfaller</th>
-              <th style={{ padding: "8px 4px", textAlign: "right" }}>Belopp</th>
-              <th style={{ padding: "8px 4px" }}>Status</th>
-              <th style={{ padding: "8px 4px" }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map(si => {
-              const today = new Date().toISOString().slice(0, 10);
-              const overdue = si.status === "open" && si.due_on < today;
-              return (
-                <tr key={si.id} style={{
-                  borderBottom: "1px solid rgba(99,102,241,0.08)",
-                }}>
-                  <td style={{ padding: "10px 4px" }}>
-                    <div style={{ color: "white", fontWeight: 600 }}>
-                      {si.sender_name}
-                    </div>
-                    <div style={{ color: "#aab", fontSize: "0.8rem" }}>
-                      {si.description}
-                    </div>
-                    {si.source === "teacher" && (
-                      <div style={{
-                        color: "#a78bfa", fontSize: "0.75rem",
-                        fontFamily: "JetBrains Mono, monospace",
-                        letterSpacing: 1.1,
-                      }}>
-                        FRÅN LÄRARE
-                      </div>
-                    )}
-                  </td>
-                  <td style={{
-                    padding: "10px 4px",
-                    color: overdue ? "#fda594" : "white",
-                    fontWeight: overdue ? 700 : 400,
-                  }}>
-                    {si.due_on}{overdue && " ⚠"}
-                  </td>
-                  <td style={{ padding: "10px 4px", textAlign: "right", color: "white" }}>
-                    {SEK(si.amount_excl_vat)} kr
-                  </td>
-                  <td style={{
-                    padding: "10px 4px",
-                    color: si.status === "paid" ? "#6ee7b7"
-                      : overdue ? "#fda594" : "white",
-                  }}>
-                    {si.status === "paid" ? "Betald" : "Obetald"}
-                  </td>
-                  <td style={{ padding: "10px 4px", textAlign: "right" }}>
-                    {si.status === "open" && (
-                      <button
-                        onClick={() => pay(si.id)}
-                        disabled={paying === si.id}
-                        style={btnPrimary}
+        <div className="biz-table-grid">
+          <div
+            className="biz-table-grid-row head"
+            style={{
+              gridTemplateColumns:
+                "36px 60px 1.6fr 1.2fr 100px 100px 80px",
+            }}
+          >
+            <span></span>
+            <span>#</span>
+            <span>Leverantör / vad</span>
+            <span>Bokföringsförslag</span>
+            <span>Belopp</span>
+            <span>Status</span>
+            <span></span>
+          </div>
+          {invoices.map((si) => {
+            const isOverdue = si.status === "open" && si.due_on < today;
+            const isOpen = si.status === "open";
+            const fromTeacher = si.source === "teacher";
+            return (
+              <div
+                key={si.id}
+                className={`biz-table-grid-row${isOverdue || (isOpen && fromTeacher) ? " alert" : ""}`}
+                style={{
+                  gridTemplateColumns:
+                    "36px 60px 1.6fr 1.2fr 100px 100px 80px",
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: isOpen ? "#dc4c2b" : "transparent",
+                    margin: "0 auto",
+                  }}
+                />
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: isOpen ? "#dc4c2b" : "rgba(255,255,255,0.4)",
+                  }}
+                >
+                  L{String(si.id).padStart(3, "0")}
+                </span>
+                <div>
+                  <div
+                    style={{
+                      fontFamily: "Source Serif 4, Georgia, serif",
+                      fontSize: 14,
+                      color: "#fff",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {si.sender_name}
+                    {fromTeacher && (
+                      <em
+                        style={{
+                          color: "#fbbf24",
+                          fontSize: 10,
+                          marginLeft: 6,
+                          fontStyle: "italic",
+                        }}
                       >
-                        {paying === si.id ? "…" : "Betala"}
-                      </button>
+                        (LÄRARE)
+                      </em>
                     )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 9,
+                      color: "rgba(255,255,255,0.4)",
+                      marginTop: 2,
+                    }}
+                  >
+                    {si.description}
+                    {isOverdue && (
+                      <span style={{ color: "#dc4c2b", marginLeft: 6 }}>
+                        · förfallen {si.due_on}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.55)",
+                  }}
+                >
+                  {basAccountsFor(si)}
+                </span>
+                <span
+                  style={{
+                    fontFamily: "Source Serif 4, Georgia, serif",
+                    fontStyle: "italic",
+                    color: isOpen ? "#dc4c2b" : "#fff",
+                    fontWeight: 700,
+                  }}
+                >
+                  {SEK(si.amount_excl_vat)} kr
+                </span>
+                <span
+                  className={`biz-status ${
+                    si.status === "paid" ? "paid" : "overdue"
+                  }`}
+                >
+                  {si.status === "paid" ? "Bokförd" : "Ohanterad"}
+                </span>
+                {isOpen ? (
+                  <button
+                    onClick={() => pay(si.id)}
+                    disabled={paying === si.id}
+                    className="biz-btn solid"
+                    style={{ padding: "4px 10px", fontSize: 10 }}
+                  >
+                    {paying === si.id ? "…" : "Betala"}
+                  </button>
+                ) : (
+                  <span></span>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
-    </BizShell>
+
+      <div className="peda">
+        <div className="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div className="peda-h">
+          Avdragsgill <em>moms</em> är realpengar.
+        </div>
+        <p className="peda-prose">
+          Varje leverantörsfaktura har 25 % moms — den får du tillbaka från
+          Skatteverket nästa redovisningsperiod (eller dras från utgående
+          moms). Loopia 1 188 kr = 950 ex moms + 238 in. Du redovisar 238
+          som <em>ingående moms</em>. Att inte hantera fakturor → missar
+          avdrag → dyrare företag.
+        </p>
+        <ul className="peda-bullets">
+          <li>
+            <strong>Ingående moms</strong>Det du betalat. Får tillbaka.
+          </li>
+          <li>
+            <strong>Utgående moms</strong>Det du tagit på dina fakturor.
+            Betalar in.
+          </li>
+          <li>
+            <strong>Bokföringsförslag</strong>AI föreslår konto. Du kan
+            säga emot.
+          </li>
+          <li>
+            <strong>Avskrivning</strong>Inventarier &gt; 5 000 kr fördelas
+            på 5 år, inte direkt-bokat.
+          </li>
+        </ul>
+        <div className="peda-concepts">
+          <span className="peda-concept">Avdragsgill moms</span>
+          <span className="peda-concept">BAS-kontoplan</span>
+          <span className="peda-concept">Avskrivning</span>
+          <span className="peda-concept">Periodisering</span>
+        </div>
+        <div className="peda-tip">
+          Lärare kan skicka pedagogiska simulerade fakturor — det är samma
+          flöde som leverantörs-faktura-utskick i lärar-vyn. Lärare →
+          biz-postlåda → eleven hanterar.
+        </div>
+      </div>
+    </BizActorShell>
   );
 }
 
