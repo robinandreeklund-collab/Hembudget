@@ -1,27 +1,75 @@
 /**
- * v2-mode-flip · 3D-flip-animation när användaren byter mellan privat
- * och företag i topbaren. Matchar prototyp vol-7 rad 1944-1957.
+ * v2-mode-flip · 3D-flip + persistent backdrop som matchar prototyp
+ * vol-7 rad 1944-1980.
  *
- * Hela <main>-elementet (id="v2-flip-target") roteras runt Y-axeln
- * medan body[data-mode] byts:
- *   1. flip-out · 0.5s · rotateY 0 → 85deg + opacity 1 → 0
- *   2. byt mode + navigera (sker i toggleMode-handlern)
- *   3. flip-in · 0.5s · rotateY -85deg → 0deg + opacity 0 → 1
+ * Strategi (matchar prototypen exakt):
+ *   1. Backdrop (radial-gradients + grid-pattern) ligger på <body>
+ *      via ::before/::after så den aldrig rör sig
+ *   2. body[data-mode] styr backdrop-färg (orange privat / indigo biz)
+ *   3. Bara <main id="v2-flip-target"> roterar i 3D vid mode-byte
+ *   4. Topbar är persistent (singleton) ovanför flip-target
  *
- * Perspective sätts på parent-wrappern så barnet kan rotera korrekt
- * (utan perspective skulle rotateY se platt ut).
- *
- * Importeras från V2Topbar så CSS är tillgängligt på BÅDA sidor av
- * mode-bytet (annars finns klassen bara på den ena sidan och
- * animationen syns inte för halva flippen).
+ * Resultat: vid mode-byte stannar bakgrund + topbar still · BARA
+ * datan flippar och färgtemat byts.
  */
+
+
+/* === Persistent backdrop · alltid på body, aldrig flippad === */
+
+/* Privat-tema · orange/warm */
+body {
+  background: linear-gradient(180deg, #0a0e1a 0%, #0f1525 60%, #0a0e1a 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 25% 35%, rgba(220, 76, 43, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(251, 191, 36, 0.10) 0%, transparent 60%);
+  transition: background 0.5s ease;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(0deg, transparent 49.5%, rgba(255, 255, 255, 0.022) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255, 255, 255, 0.022) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  opacity: 0.5;
+}
+
+/* Företag-tema · byter backdrop-färg när data-mode="business" */
+body[data-mode="business"]::before {
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 35%, rgba(99, 102, 241, 0.20) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(168, 85, 247, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 80%, rgba(14, 165, 233, 0.10) 0%, transparent 60%);
+}
+
+
+/* === Flip-target · BARA datan flippar, ej bakgrund/topbar === */
 
 .v2-flip-perspective {
   perspective: 2400px;
+  /* z-index över body::before/after så content syns ovanpå backdrop */
+  position: relative;
+  z-index: 1;
 }
 
 .v2-flip-target {
   transform-style: preserve-3d;
+  /* Garantera att flip-target inte själv har ogenomskinlig bakgrund —
+   * backdrop kommer från body, ska skina igenom */
+  background: transparent;
 }
 
 .v2-flip-target.flip-out {
