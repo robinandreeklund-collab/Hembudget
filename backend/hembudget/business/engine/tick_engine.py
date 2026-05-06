@@ -691,6 +691,41 @@ def _phase_f_charge_subscriptions(
     summary.total_supplier_cost = total_cost
 
 
+def kickstart_pipeline_only(
+    s: Session, *, company: Company, weeks: int = 2,
+) -> None:
+    """Generera N veckors offertförfrågningar UTAN att boka veckoränta,
+    amortering, avskrivning eller andra phase_f-kostnader.
+
+    Används när vi vill fylla pipelinen direkt (t.ex. precis efter köp
+    av bas-utrustning) men INTE dubbel-debitera kostnader. run_business_
+    week kör ALLA phases inkl. _phase_f_charge_subscriptions, vilket
+    blev veckokostnader x2 på samma datum när buy_startup_kit + list_
+    opportunities båda försökte 'kickstarta'.
+
+    Bara phase_c (pipeline-generering) körs här. company.week_no avancerar
+    så pipeline_generator-statistiken känns korrekt, men inga transaktioner
+    bokförs.
+    """
+    if not company.active:
+        return
+    today = date.today()
+    for _ in range(weeks):
+        try:
+            company.week_no = (company.week_no or 0) + 1
+            summary = TickSummary(week_no=company.week_no)
+            _phase_c_generate_opportunities(
+                s, company=company, today=today, summary=summary,
+            )
+        except Exception:
+            log.exception(
+                "kickstart_pipeline_only: phase_c misslyckades vecka %s",
+                company.week_no,
+            )
+            break
+    s.flush()
+
+
 def _update_capacity_from_growth(
     s: Session, *, company: Company,
 ) -> None:

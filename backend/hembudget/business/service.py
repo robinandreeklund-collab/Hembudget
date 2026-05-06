@@ -437,7 +437,10 @@ def compute_business_pentagon(
         Decimal(0),
     ) - sum(
         (Decimal(t.amount_excl_vat or 0) for t in all_txs
-         if t.kind in ("expense", "salary", "vat_payment", "tax_payment")),
+         if t.kind in (
+             "expense", "salary", "vat_payment",
+             "tax_payment", "asset_purchase",
+         )),
         Decimal(0),
     )
     likviditet = max(0, min(100, int(50 + float(kassa) / 1000)))

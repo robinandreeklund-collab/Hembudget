@@ -194,11 +194,11 @@ def list_opportunities(
         auto_tick_if_due(s, company=co)
 
         # Pipeline-kickstart · om bolaget har bas-utrustning och inga
-        # opps någonsin genererats kör vi 2 biz-veckor manuellt så
-        # eleven inte fastnar i tomt-state. Detta kan inträffa om
-        # bas-utrustning köptes nyligen (alla tidigare auto-ticks
-        # hade pipelinen spärrad) eller om create_company-init-tick
-        # crashade tyst.
+        # opps någonsin genererats kör vi pipeline-only så eleven
+        # inte fastnar i tomt-state. VIKTIGT: kickstart_pipeline_only
+        # bokar INGA kostnader (veckoränta, amortering, avskrivning)
+        # — bara phase_c (offert-generering). Annars dubbel-debiteras
+        # samma vecka när auto-tick sen kör igen.
         if co.has_base_equipment:
             existing_count = (
                 s.query(JobOpportunity)
@@ -206,10 +206,11 @@ def list_opportunities(
                 .count()
             )
             if existing_count == 0:
-                from ..business.engine import run_business_week
+                from ..business.engine.tick_engine import (
+                    kickstart_pipeline_only,
+                )
                 try:
-                    for _ in range(2):
-                        run_business_week(s, company=co)
+                    kickstart_pipeline_only(s, company=co, weeks=2)
                 except Exception:
                     log.exception(
                         "list_opportunities: pipeline-kickstart misslyckades"

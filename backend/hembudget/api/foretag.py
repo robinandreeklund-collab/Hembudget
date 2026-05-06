@@ -2028,10 +2028,16 @@ def biz_bank_overview(info: TokenInfo = Depends(require_token)):
              for t in all_txs if t.kind == "income"),
             Decimal(0),
         )
+        # asset_purchase drar från KASSAN (likviditeten) men räknas
+        # INTE som resultat-kostnad. Se buy_startup_kit + tick_engine
+        # phase_f-avskrivning för pedagogiken.
         total_expense = sum(
             (Decimal(t.amount_excl_vat or 0)
              for t in all_txs
-             if t.kind in ("expense", "salary", "vat_payment", "tax_payment")),
+             if t.kind in (
+                 "expense", "salary", "vat_payment",
+                 "tax_payment", "asset_purchase",
+             )),
             Decimal(0),
         )
         kassa = total_income - total_expense

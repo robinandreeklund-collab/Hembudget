@@ -319,7 +319,11 @@ class LoanOut(BaseModel):
 # === Helpers · Kassa ===
 
 def _kassa(s, company: Company) -> int:
-    """Approximation: alla company-tx + aktiekapital."""
+    """Approximation: alla company-tx + aktiekapital.
+
+    Alla icke-income-kinds drar från kassan, inklusive asset_purchase
+    (det är cashflow ut även om det är balansrakning, inte resultat).
+    """
     txs = (
         s.query(CompanyTransaction)
         .filter(CompanyTransaction.company_id == company.id)
@@ -1071,18 +1075,16 @@ def buy_startup_kit(
 
         # Kick-start pipelinen direkt så eleven slipper vänta en timme
         # på första auto-tick för att se kundförfrågningar. Pipeline-
-        # generering var spärrad tills nu (has_base_equipment=False),
-        # så de tidigare veckornas ticks gav 0 förfrågningar. Kör 2
-        # nya weeks här så pipelinen fylls på (matchar create_company-
-        # logiken som också kör 2 initial-weeks).
+        # generering var spärrad tills nu (has_base_equipment=False).
+        # VIKTIGT: använd kickstart_pipeline_only — INTE run_business_
+        # week. Den senare bokar veckoränta + amortering + avskrivning
+        # vilket dubbel-debiterar när auto-tick sen kör samma fas igen.
         if body.item == "base_equipment":
             try:
-                from ..business.engine import run_business_week
-                for _ in range(2):
-                    run_business_week(s, company=c)
-                # Återställ auto-tick-baseline så de manuella veckorna
-                # inte räknas dubbelt nästa gång endpoint:en läses
-                c.last_auto_tick_at = datetime.utcnow()
+                from ..business.engine.tick_engine import (
+                    kickstart_pipeline_only,
+                )
+                kickstart_pipeline_only(s, company=c, weeks=2)
             except Exception:
                 log.exception(
                     "buy_startup_kit: kick-start pipeline failed för "
