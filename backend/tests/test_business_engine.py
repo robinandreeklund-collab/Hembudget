@@ -298,7 +298,10 @@ def test_get_biz_difficulty_default_basics():
 
 
 def test_industry_pool_known():
-    custs, jobs = industry_pool("hantverk")
+    """industry_pool keyed på industry_KEY (från industries.py), inte
+    label. Tidigare använde vi labels men 7/10 industrier saknade
+    mappning → eleven fick generiska 'Standarduppdrag'."""
+    custs, jobs = industry_pool("snickare")
     assert len(custs) >= 3
     assert len(jobs) >= 4
 
@@ -309,11 +312,19 @@ def test_industry_pool_unknown_falls_back():
     assert len(jobs) >= 1
 
 
-def test_industry_pool_normalises_swedish_chars():
-    """'Kreativ tjänst' ska matcha 'kreativ'-poolen."""
-    custs1, _ = industry_pool("Kreativ tjänst")
-    custs2, _ = industry_pool("kreativ")
-    assert len(custs1) == len(custs2)
+def test_industry_pool_all_ten_keys_mapped():
+    """Alla 10 fasta industrier från industries.py måste ha en
+    dedikerad pool — annars faller eleven till 'Standarduppdrag'."""
+    keys = [
+        "it_konsult", "webbdesigner", "snickare", "rormokare",
+        "elektriker", "frisor", "coach", "personal_trainer",
+        "fotograf", "catering",
+    ]
+    for k in keys:
+        custs, jobs = industry_pool(k)
+        # Default-pool har 2 jobs · branspecifika ska ha minst 5
+        assert len(jobs) >= 5, f"Industry '{k}' saknar dedikerad pool"
+        assert len(custs) >= 3, f"Industry '{k}' har för få kunder"
 
 
 # === Tick-engine end-to-end ===

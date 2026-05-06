@@ -819,8 +819,8 @@ function QuoteModal({
                 color: "rgba(255,255,255,0.8)",
                 margin: "12px 0 0", fontSize: "0.85rem",
               }}>
-                Kunden svarar nästa vecka. Tryck på "Stega vecka" i biz-hubben
-                för att få deras beslut.
+                Kunden bestämmer sig de närmaste timmarna · auto-motorn
+                rullar fram veckorna i bakgrunden. Kolla in igen lite senare.
               </p>
             </div>
             <button
@@ -1619,9 +1619,9 @@ export function BizLeverantorer() {
       </div>
       {invoices.length === 0 ? (
         <div className="biz-empty">
-          Inga leverantörsfakturor. Antingen är allt betalt, eller så har
-          läraren inte skickat ut några än. Tryck på <strong>Stega vecka</strong>{" "}
-          i biz-hubben för att simulera fram nya.
+          Inga leverantörsfakturor just nu. Allt är betalt eller så har
+          läraren inte skickat ut några än · auto-motorn drar in nya
+          över tid.
         </div>
       ) : (
         <div className="biz-table-grid">

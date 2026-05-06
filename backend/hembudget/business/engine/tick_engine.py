@@ -299,7 +299,11 @@ def _phase_c_generate_opportunities(
     )
     summary.notes.append(out.explanation)
 
-    customers, jobs = industry_pool(company.industry_label)
+    # Använd industry_KEY (stabil) istället för industry_LABEL (display).
+    # Tidigare bröt detta 7/10 industrier eftersom labels innehåller
+    # mellanslag/snedstreck ("Snickare / hantverkare") medan seed_data
+    # är keyed på key.
+    customers, jobs = industry_pool(company.industry_key)
 
     # === Stad-multipliers · pris + pipeline-täthet ===
     # Stockholm-IT 1200 kr/h, Umeå-IT 850 kr/h. Storstad → fler offerter.

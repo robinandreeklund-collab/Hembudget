@@ -294,8 +294,10 @@ export function BizHub() {
         <BizPrivateInfoBox company={company} />
       </div>
 
-      {/* Spelmotor-knappen längst ner (lärar-funktion) */}
-      <TickWeekButton />
+      {/* Tidigare fanns en "Stega vecka"-knapp här. Borttagen — biz-
+       * motorn driver sig själv via auto_tick_if_due (1 biz-vecka per
+       * real-timme, lazy-ticked vid endpoint-läsning). Inga manuella
+       * steg. */}
     </BizHubShell>
   );
 }
@@ -500,124 +502,6 @@ function BizPrivateInfoBox({ company }: { company: Company }) {
         du gör i biz påverkar ditt privata över tid: bättre vinst → mer egen
         lön → bättre privat-pentagon.
       </div>
-    </div>
-  );
-}
-
-
-/* ======================================================================
- * Spelmotor · stega vecka (lärar-test-knapp)
- * ====================================================================== */
-function TickWeekButton() {
-  const [running, setRunning] = useState(false);
-  const [last, setLast] = useState<{
-    week_no: number;
-    new_opps: number;
-    accepted: number;
-    rejected: number;
-    paid: number;
-    events: number;
-    rep: number;
-  } | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function tick() {
-    setRunning(true);
-    setErr(null);
-    try {
-      const r = await bizApi.tick();
-      setLast({
-        week_no: r.week_no,
-        new_opps: r.new_opportunities,
-        accepted: r.quotes_accepted,
-        rejected: r.quotes_rejected,
-        paid: r.invoices_paid_now,
-        events: r.events_triggered,
-        rep: r.reputation_after,
-      });
-    } catch (e) {
-      setErr(String((e as Error).message || e));
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  return (
-    <div
-      style={{
-        marginTop: 32,
-        padding: 18,
-        background:
-          "linear-gradient(120deg, rgba(99,102,241,0.18), rgba(167,139,250,0.12))",
-        border: "1px solid rgba(99, 102, 241, 0.3)",
-        borderRadius: 12,
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
-        flexWrap: "wrap",
-      }}
-    >
-      <div style={{ flex: "1 1 240px" }}>
-        <div className="biz-eye">Spelmotor · stega tiden</div>
-        <div
-          style={{
-            fontFamily: "Source Serif 4, Georgia, serif",
-            fontWeight: 700,
-            fontSize: "1.1rem",
-            marginTop: 4,
-            color: "#fff",
-          }}
-        >
-          Stega bolaget en vecka framåt
-        </div>
-        <div
-          style={{
-            color: "rgba(255,255,255,0.55)",
-            fontSize: "0.85rem",
-            marginTop: 4,
-          }}
-        >
-          Genererar nya offertförfrågningar, kunder svarar på öppna offerter,
-          gamla fakturor förfaller. Slump-events triggas i avancerat läge.
-        </div>
-      </div>
-      <button
-        onClick={tick}
-        disabled={running}
-        className="biz-btn solid"
-        style={{ padding: "12px 24px", fontSize: "1rem" }}
-      >
-        {running ? "Stegar…" : "Stega vecka →"}
-      </button>
-      {err && (
-        <div className="biz-error" style={{ flexBasis: "100%" }}>
-          {err}
-        </div>
-      )}
-      {last && (
-        <div
-          style={{
-            flexBasis: "100%",
-            marginTop: 8,
-            padding: 12,
-            borderRadius: 8,
-            background: "rgba(15, 21, 37, 0.5)",
-            fontSize: "0.85rem",
-          }}
-        >
-          <div style={{ color: "#6ee7b7", fontWeight: 600 }}>
-            Vecka {last.week_no} klar
-          </div>
-          <div style={{ color: "rgba(255,255,255,0.8)", marginTop: 4 }}>
-            {last.new_opps} nya förfrågningar
-            {last.accepted > 0 && ` · ${last.accepted} offerter accepterade`}
-            {last.rejected > 0 && ` · ${last.rejected} avslagna`}
-            {last.paid > 0 && ` · ${last.paid} fakturor betalda`}
-            {last.events > 0 && ` · ${last.events} oväntat event`}
-            {" · "}rykte {last.rep}/100
-          </div>
-        </div>
-      )}
     </div>
   );
 }
