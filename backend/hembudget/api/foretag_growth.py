@@ -1067,6 +1067,29 @@ def buy_startup_kit(
             c.has_car = True
             c.car_purchased_on = date.today()
 
+        s.flush()
+
+        # Kick-start pipelinen direkt så eleven slipper vänta en timme
+        # på första auto-tick för att se kundförfrågningar. Pipeline-
+        # generering var spärrad tills nu (has_base_equipment=False),
+        # så de tidigare veckornas ticks gav 0 förfrågningar. Kör 2
+        # nya weeks här så pipelinen fylls på (matchar create_company-
+        # logiken som också kör 2 initial-weeks).
+        if body.item == "base_equipment":
+            try:
+                from ..business.engine import run_business_week
+                for _ in range(2):
+                    run_business_week(s, company=c)
+                # Återställ auto-tick-baseline så de manuella veckorna
+                # inte räknas dubbelt nästa gång endpoint:en läses
+                c.last_auto_tick_at = datetime.utcnow()
+            except Exception:
+                log.exception(
+                    "buy_startup_kit: kick-start pipeline failed för "
+                    "company %s · fortsätter, eleven får vänta på auto-tick",
+                    c.id,
+                )
+
         s.commit()
 
     try:

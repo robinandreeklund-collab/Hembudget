@@ -8,9 +8,12 @@ manuell tick). Mountas på samma `/v2/foretag` prefix som foretag.py.
 """
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -189,6 +192,28 @@ def list_opportunities(
         # accept-besked från tidigare offerter dyka upp över tid utan
         # att klicka "Stega vecka". 1 biz-vecka per real-timme.
         auto_tick_if_due(s, company=co)
+
+        # Pipeline-kickstart · om bolaget har bas-utrustning och inga
+        # opps någonsin genererats kör vi 2 biz-veckor manuellt så
+        # eleven inte fastnar i tomt-state. Detta kan inträffa om
+        # bas-utrustning köptes nyligen (alla tidigare auto-ticks
+        # hade pipelinen spärrad) eller om create_company-init-tick
+        # crashade tyst.
+        if co.has_base_equipment:
+            existing_count = (
+                s.query(JobOpportunity)
+                .filter(JobOpportunity.company_id == co.id)
+                .count()
+            )
+            if existing_count == 0:
+                from ..business.engine import run_business_week
+                try:
+                    for _ in range(2):
+                        run_business_week(s, company=co)
+                except Exception:
+                    log.exception(
+                        "list_opportunities: pipeline-kickstart misslyckades"
+                    )
         q = (
             s.query(JobOpportunity)
             .filter(JobOpportunity.company_id == co.id)
