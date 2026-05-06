@@ -16280,12 +16280,16 @@ def v2_delete_student(
     1. Sync · markera Student.active=False så eleven försvinner från
        lärarens lista omedelbart (UI känns responsiv).
     2. Async · bakgrundstask gör scope-DB-wipe, master-FK-cleanup,
-       file-removal och s.delete(st).
+       file-removal och s.delete(st). Serialiseras via globalt lock
+       så två parallella tryck inte kraschar Cloud Run-instansen.
 
     Tidigare körde hela raderingen synkront. För en fully-seedad
     elev kunde det ta 30-60 s eftersom scope-DB har 50+ tabeller +
     master har 25+ FK:s. Cloud Run med --max-instances=1 blev då
     blockerad och nästa request fick 'Failed to fetch' i browser.
+
+    Status spåras i _delete_jobs · GET /v2/teacher/delete-jobs ger
+    UI:t feedback om vilka raderingar som pågår.
     """
     teacher_id = _require_teacher(info)
     with master_session() as s:
@@ -16294,16 +16298,49 @@ def v2_delete_student(
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, "Eleven hittades inte",
             )
+        # Idempotens: om eleven redan håller på att raderas, skicka
+        # inte en ny bakgrundstask (skulle annars köa upp dubbla jobb).
+        existing_job = _delete_jobs.get(student_id)
+        if existing_job and existing_job.get("status") in (
+            "queued", "running",
+        ):
+            return Response(status_code=204)
+
         # Sync · soft-delete så eleven försvinner direkt från listan.
         # Den fulla raderingen (scope + master-FK:s) körs i bakgrunden.
         st.active = False
+        student_name = st.display_name or f"Elev {student_id}"
         s.commit()
 
-    # Async · queue bakgrundstask som gör hela cleanup-jobbet.
+    # Spåra status så UI kan visa "Raderar…" och informera när klart.
+    import time as _t_d
+    _delete_jobs[student_id] = {
+        "student_id": student_id,
+        "student_name": student_name,
+        "teacher_id": teacher_id,
+        "status": "queued",
+        "started_at": _t_d.time(),
+        "finished_at": None,
+        "error": None,
+    }
     background_tasks.add_task(
         _hard_delete_student_worker, student_id, teacher_id,
     )
     return Response(status_code=204)
+
+
+# In-memory status-tracker för enskilda student-deletions. Visar
+# raderings-progress i UI:n. Lever bara i nuvarande Cloud Run-
+# instansen — om instansen restartar förlorar vi historik, men det
+# är OK eftersom soft-delete redan har tagit bort eleven från listan.
+# {student_id: {status, started_at, finished_at, error, ...}}
+_delete_jobs: dict[int, dict] = {}
+
+# Serialisera de tunga bakgrunds-raderingarna · max 1 åt gången per
+# instans. Undviker att två parallella deletes utmattar master-DB-
+# poolen eller råkar i lock-konflikter på samma scope-DB.
+import threading as _threading_d
+_hard_delete_lock = _threading_d.Semaphore(1)
 
 
 def _hard_delete_student_worker(
@@ -16311,163 +16348,231 @@ def _hard_delete_student_worker(
 ) -> None:
     """Bakgrunds-worker · gör den fulla student-raderingen.
 
-    Kör i en egen task så Cloud Run-instansen kan svara på nya
-    requests medan denna pågår. Best-effort: fel loggas men sväljs
-    eftersom UI redan har sett soft-delete:n.
+    Serialiseras via _hard_delete_lock så bara EN tung radering
+    körs åt gången per instans. Best-effort: fel loggas och skrivs
+    till _delete_jobs så UI kan visa dem; eleven står kvar med
+    active=False (osynlig för läraren) om något går fel — då kan
+    läraren trycka radera igen utan duplicering.
     """
     import logging as _log_d
+    import time as _t_d
     log = _log_d.getLogger(__name__)
-    try:
-        with master_session() as s:
-            st = s.get(Student, student_id)
-            if st is None:
-                log.info(
-                    "_hard_delete_student_worker: %s redan borttagen",
-                    student_id,
-                )
-                return
-            if st.teacher_id != teacher_id:
-                log.warning(
-                    "_hard_delete_student_worker: teacher-id mismatch "
-                    "för %s — skippar",
-                    student_id,
-                )
-                return
+    job = _delete_jobs.get(student_id)
+    if job is None:
+        # Inte spårat (skulle inte hända) — skapa en bakåtkompatibel post
+        job = {
+            "student_id": student_id, "teacher_id": teacher_id,
+            "status": "queued", "started_at": _t_d.time(),
+            "finished_at": None, "error": None,
+        }
+        _delete_jobs[student_id] = job
 
-            from ..school.engines import (
-                scope_for_student as _sfs_d, scope_context as _sctx_d,
-                get_scope_session as _gss_d,
+    # Vänta på lock (max 1 åt gången). Andra deletes köar upp utan
+    # att slå ut Cloud Run-instansen.
+    with _hard_delete_lock:
+        job["status"] = "running"
+        job["running_at"] = _t_d.time()
+        try:
+            _do_hard_delete_student(student_id, teacher_id)
+            job["status"] = "done"
+            job["finished_at"] = _t_d.time()
+            log.info(
+                "_hard_delete_student_worker: %s raderad på %.1fs",
+                student_id, job["finished_at"] - job["started_at"],
             )
-            scope_key = _sfs_d(st)
-            if not scope_key or not isinstance(scope_key, str):
-                log.error(
-                    "_hard_delete_student_worker: saknar scope_key "
-                    "för %s — avbryter",
-                    student_id,
-                )
-                return
+        except Exception as e:
+            log.exception(
+                "_hard_delete_student_worker: outer failure för %s",
+                student_id,
+            )
+            job["status"] = "failed"
+            job["finished_at"] = _t_d.time()
+            job["error"] = f"{type(e).__name__}: {str(e)[:200]}"
 
-            # Scope-DB-wipe (samma logik som tidigare synkront)
-            try:
-                with _sctx_d(scope_key):
-                    with _gss_d(scope_key)() as ss:
-                        from ..db.base import Base, TenantMixin
-                        for table in reversed(Base.metadata.sorted_tables):
-                            cls = next(
-                                (
-                                    c.class_ for c in Base.registry.mappers
-                                    if c.local_table is table
-                                ),
-                                None,
+
+def _do_hard_delete_student(student_id: int, teacher_id: int) -> None:
+    """Den faktiska raderings-logiken · separat så den är testbar och
+    så _hard_delete_student_worker bara hanterar lock + status."""
+    import logging as _log_d
+    log = _log_d.getLogger(__name__)
+    with master_session() as s:
+        st = s.get(Student, student_id)
+        if st is None:
+            log.info(
+                "_do_hard_delete_student: %s redan borttagen",
+                student_id,
+            )
+            return
+        if st.teacher_id != teacher_id:
+            log.warning(
+                "_do_hard_delete_student: teacher-id mismatch för %s",
+                student_id,
+            )
+            return
+
+        from ..school.engines import (
+            scope_for_student as _sfs_d, scope_context as _sctx_d,
+            get_scope_session as _gss_d,
+        )
+        scope_key = _sfs_d(st)
+        if not scope_key or not isinstance(scope_key, str):
+            log.error(
+                "_do_hard_delete_student: saknar scope_key för %s",
+                student_id,
+            )
+            return
+
+        # Scope-DB-wipe
+        try:
+            with _sctx_d(scope_key):
+                with _gss_d(scope_key)() as ss:
+                    from ..db.base import Base, TenantMixin
+                    for table in reversed(Base.metadata.sorted_tables):
+                        cls = next(
+                            (
+                                c.class_ for c in Base.registry.mappers
+                                if c.local_table is table
+                            ),
+                            None,
+                        )
+                        if cls is None or not issubclass(cls, TenantMixin):
+                            continue
+                        try:
+                            ss.query(cls).filter(
+                                cls.tenant_id == scope_key,
+                            ).delete(synchronize_session=False)
+                        except Exception:
+                            log.exception(
+                                "_do_hard_delete_student: delete %s "
+                                "för tenant %s failade",
+                                cls.__name__, scope_key,
                             )
-                            if cls is None or not issubclass(cls, TenantMixin):
-                                continue
-                            try:
-                                ss.query(cls).filter(
-                                    cls.tenant_id == scope_key,
-                                ).delete(synchronize_session=False)
-                            except Exception:
-                                log.exception(
-                                    "_hard_delete_student_worker: "
-                                    "delete %s för tenant %s failade",
-                                    cls.__name__, scope_key,
-                                )
-                        ss.commit()
-            except Exception:
-                log.exception(
-                    "_hard_delete_student_worker: scope-cleanup "
-                    "failed för %s", student_id,
-                )
+                    ss.commit()
+        except Exception:
+            log.exception(
+                "_do_hard_delete_student: scope-cleanup failed för %s",
+                student_id,
+            )
 
-            # SQLite-fil-läge: radera filen från disk
+        # SQLite-fil-läge: radera filen från disk
+        try:
+            import os as _os_d
+            from ..school.engines import _scope_db_path
+            path = _scope_db_path(scope_key)
+            if path and _os_d.path.exists(path):
+                _os_d.remove(path)
+        except Exception:
+            pass
+
+        # Master · CASCADE-snabbväg först
+        from sqlalchemy.exc import IntegrityError as _IE_d
+        try:
+            s.delete(st)
+            s.commit()
+            return
+        except _IE_d:
+            log.warning(
+                "_do_hard_delete_student: CASCADE failade för %s — "
+                "kör fallback-cleanup",
+                student_id,
+            )
             try:
-                import os as _os_d
-                from ..school.engines import _scope_db_path
-                path = _scope_db_path(scope_key)
-                if path and _os_d.path.exists(path):
-                    _os_d.remove(path)
+                s.rollback()
             except Exception:
                 pass
 
-            # Master · prova snabbvägen (CASCADE) först. Om den failar
-            # på FK-violation, kör explicit pre-cleanup på alla
-            # master-tabeller med FK till students.id.
-            from sqlalchemy.exc import IntegrityError as _IE_d
+        # Fallback · enumerera alla master-tabeller med FK till students.id
+        from ..school.models import MasterBase
+        tables_with_student_fk = []
+        for table in MasterBase.metadata.sorted_tables:
+            for fk in table.foreign_keys:
+                if (
+                    fk.column.table.name == "students"
+                    and fk.column.name == "id"
+                ):
+                    tables_with_student_fk.append(
+                        (table, fk.parent.name),
+                    )
+                    break
+        for table, fk_col in reversed(tables_with_student_fk):
+            if table.name == "students":
+                continue
             try:
-                s.delete(st)
-                s.commit()
-                log.info(
-                    "_hard_delete_student_worker: %s raderad "
-                    "(CASCADE-snabbväg)",
-                    student_id,
-                )
-                return
-            except _IE_d:
-                log.warning(
-                    "_hard_delete_student_worker: CASCADE failade "
-                    "för %s — kör fallback-cleanup",
-                    student_id,
-                )
-                try:
-                    s.rollback()
-                except Exception:
-                    pass
-
-            # Fallback · enumerera alla master-tabeller med FK till
-            # students.id och rensa dem child→parent.
-            from ..school.models import MasterBase
-            try:
-                tables_with_student_fk = []
-                for table in MasterBase.metadata.sorted_tables:
-                    for fk in table.foreign_keys:
-                        if (
-                            fk.column.table.name == "students"
-                            and fk.column.name == "id"
-                        ):
-                            tables_with_student_fk.append(
-                                (table, fk.parent.name),
-                            )
-                            break
-                for table, fk_col in reversed(tables_with_student_fk):
-                    if table.name == "students":
-                        continue
-                    try:
-                        s.execute(
-                            table.delete().where(
-                                table.c[fk_col] == student_id,
-                            ),
-                        )
-                    except Exception:
-                        log.exception(
-                            "_hard_delete_student_worker: cleanup "
-                            "av %s (FK %s) failade",
-                            table.name, fk_col,
-                        )
-                st_retry = s.get(Student, student_id)
-                if st_retry is not None:
-                    s.delete(st_retry)
-                s.commit()
-                log.info(
-                    "_hard_delete_student_worker: %s raderad "
-                    "(fallback-cleanup)",
-                    student_id,
+                s.execute(
+                    table.delete().where(
+                        table.c[fk_col] == student_id,
+                    ),
                 )
             except Exception:
                 log.exception(
-                    "_hard_delete_student_worker: även fallback "
-                    "failade för %s — eleven står kvar med "
-                    "active=False men inte raderad",
-                    student_id,
+                    "_do_hard_delete_student: cleanup av %s "
+                    "(FK %s) failade",
+                    table.name, fk_col,
                 )
-                try:
-                    s.rollback()
-                except Exception:
-                    pass
-    except Exception:
-        log.exception(
-            "_hard_delete_student_worker: outer failure för %s",
-            student_id,
-        )
+        st_retry = s.get(Student, student_id)
+        if st_retry is not None:
+            s.delete(st_retry)
+        s.commit()
+
+
+class V2DeleteJobRow(BaseModel):
+    student_id: int
+    student_name: str
+    status: Literal["queued", "running", "done", "failed"]
+    started_at: float
+    finished_at: Optional[float]
+    error: Optional[str]
+
+
+class V2DeleteJobsResponse(BaseModel):
+    rows: list[V2DeleteJobRow]
+    pending_count: int
+
+
+@router.get(
+    "/teacher/delete-jobs",
+    response_model=V2DeleteJobsResponse,
+)
+def v2_list_delete_jobs(
+    info: TokenInfo = Depends(require_token),
+) -> V2DeleteJobsResponse:
+    """UI-feedback · returnerar status för pågående och nyligen klara
+    student-raderingar för aktuell lärare. Frontend pollar denna under
+    pågående delete för att visa 'Raderar…' / 'Klar' / 'Fel' i kolumnen
+    där eleven låg innan klick.
+
+    Jobb äldre än 5 min städas bort så listan inte växer obegränsat.
+    """
+    teacher_id = _require_teacher(info)
+    import time as _t_l
+    now = _t_l.time()
+    # GC: ta bort gamla klara/failed-jobb äldre än 5 min
+    stale_cutoff = now - 300
+    for sid in list(_delete_jobs.keys()):
+        j = _delete_jobs[sid]
+        if (
+            j.get("status") in ("done", "failed")
+            and (j.get("finished_at") or 0) < stale_cutoff
+        ):
+            del _delete_jobs[sid]
+
+    rows: list[V2DeleteJobRow] = []
+    pending = 0
+    for sid, j in _delete_jobs.items():
+        if j.get("teacher_id") != teacher_id:
+            continue
+        rows.append(V2DeleteJobRow(
+            student_id=sid,
+            student_name=j.get("student_name") or f"Elev {sid}",
+            status=j.get("status", "queued"),  # type: ignore[arg-type]
+            started_at=float(j.get("started_at") or now),
+            finished_at=j.get("finished_at"),
+            error=j.get("error"),
+        ))
+        if j.get("status") in ("queued", "running"):
+            pending += 1
+    rows.sort(key=lambda r: -r.started_at)
+    return V2DeleteJobsResponse(rows=rows, pending_count=pending)
 
 
 class V2BulkDeleteResponse(BaseModel):

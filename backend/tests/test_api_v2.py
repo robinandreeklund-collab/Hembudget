@@ -7679,6 +7679,68 @@ def test_v2_teacher_delete_student_with_onboarding_events(fx) -> None:
         assert s.query(_OE).filter(_OE.student_id == ulla_id).count() == 0
 
 
+def test_v2_delete_jobs_status_endpoint(fx) -> None:
+    """GET /v2/teacher/delete-jobs returnerar status per radering så
+    UI kan visa 'Raderar…' / 'Klar' / 'Fel'.
+    """
+    client, tch, *_ = fx
+    create_r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"first_name": "Veronica", "last_initial": "T."},
+    )
+    assert create_r.status_code == 200, create_r.text
+    veronica_id = create_r.json()["student_id"]
+
+    # Radera
+    del_r = client.delete(
+        f"/v2/teacher/students/{veronica_id}",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert del_r.status_code == 204
+
+    # Status-endpoint ska visa Veronica som klar (TestClient kör
+    # BackgroundTask synkront efter response)
+    r = client.get(
+        "/v2/teacher/delete-jobs",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    matching = [row for row in data["rows"] if row["student_id"] == veronica_id]
+    assert len(matching) == 1
+    job = matching[0]
+    assert job["status"] in ("done", "running", "queued")
+    assert job["student_name"] == "Veronica T."
+
+
+def test_v2_delete_idempotent_double_click(fx) -> None:
+    """Två snabba radera-klick på samma elev ger inte dubbla bakgrunds-
+    jobb · andra anropet hittar pågående jobb och returnerar 204 utan
+    ny task. Inte heller crash på server-sidan.
+    """
+    client, tch, *_ = fx
+    create_r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"first_name": "Dubbel", "last_initial": "K."},
+    )
+    assert create_r.status_code == 200
+    sid = create_r.json()["student_id"]
+
+    r1 = client.delete(
+        f"/v2/teacher/students/{sid}",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    r2 = client.delete(
+        f"/v2/teacher/students/{sid}",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    # Båda ska returnera 204 — andra är idempotent no-op
+    assert r1.status_code == 204
+    assert r2.status_code in (204, 404)
+
+
 def test_v2_teacher_delete_student_pre_cleanup_covers_all_master_fks(fx) -> None:
     """Regression: pre-cleanup måste enumerera ALLA master-tabeller med
     FK till students.id, inte bara v2_onboarding_events. När en ny FK

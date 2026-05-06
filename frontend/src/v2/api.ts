@@ -3558,6 +3558,20 @@ export const v2Api = {
     api<void>(`/v2/teacher/students/${studentId}`, {
       method: "DELETE",
     }),
+  /** Status för pågående/nyligen klara student-raderingar. UI pollar
+   * denna under pågående delete för att visa 'Raderar…' / 'Klar' / 'Fel'. */
+  teacherDeleteJobs: () =>
+    api<{
+      rows: Array<{
+        student_id: number;
+        student_name: string;
+        status: "queued" | "running" | "done" | "failed";
+        started_at: number;
+        finished_at: number | null;
+        error: string | null;
+      }>;
+      pending_count: number;
+    }>(`/v2/teacher/delete-jobs`),
   /** Starta bakgrunds-radering av alla mina elever. Returnerar omedelbart. */
   teacherDeleteAllMyStudents: () =>
     api<{ status: string; teacher_id: number }>(
