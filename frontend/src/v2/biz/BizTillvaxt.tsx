@@ -796,9 +796,10 @@ type Decision = {
   started_on: string;
 };
 
+// Marknadsföring ligger nu under "Marknadsföring"-tabben med 10 paket-
+// nivåer (lokaltidning → TV). Här är bara löpande beslut/drift.
 const DECISION_PRESETS = [
   { kind: "employee", title: "Anställa heltidare", monthly_cost: 35000, desc: "+1 anställd · +40 h/v kapacitet · arbetsgivaravgifter ingår" },
-  { kind: "marketing", title: "Marknadsföring · digital", monthly_cost: 8000, desc: "+10 % pipeline · varar tills uppsagd" },
   { kind: "insurance", title: "Företagsförsäkring", monthly_cost: 1200, desc: "Skydd vid skada/stöld + ansvarsförsäkring" },
   { kind: "leasing", title: "Leasing · servicebil", monthly_cost: 4500, desc: "Servicebil utan kapital · färre kostnader än köp" },
   { kind: "wellness", title: "Friskvårdsbidrag (5k/anställd/år)", monthly_cost: 0, desc: "Skattefri förmån · höjer trivsel" },

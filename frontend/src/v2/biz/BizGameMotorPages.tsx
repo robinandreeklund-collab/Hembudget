@@ -8,6 +8,8 @@
  * BizLeverantorer  · /v2/foretag/leverantorer (inkommande fakturor)
  */
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "@/api/client";
 import { ImpactPreviewBox } from "./TimeCapacityWidget";
 import {
   bizEngineApi,
@@ -28,15 +30,29 @@ const SEK = (n: number) =>
 
 // === BIZ OFFERTER (matchar prototyp p-biz-kunder) ===
 
+type StartupKitStatus = {
+  has_base_equipment: boolean;
+  has_car: boolean;
+  requires_car: boolean;
+  base_equipment_label: string;
+  base_equipment_cost: number;
+};
+
 export function BizOfferter() {
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [editing, setEditing] = useState<Opportunity | null>(null);
+  const [kit, setKit] = useState<StartupKitStatus | null>(null);
 
   function refresh() {
     bizEngineApi.listOpportunities(undefined)
       .then(setOpps)
       .catch((e) => setErr(String((e as Error).message || e)));
+    // Hämta startup-kit-status så vi kan visa varför inga förfrågningar
+    // dyker upp om bas-utrustning saknas
+    api<StartupKitStatus>("/v2/foretag/growth/startup-kit")
+      .then(setKit)
+      .catch(() => undefined);
   }
 
   useEffect(() => { refresh(); }, []);
@@ -87,6 +103,64 @@ export function BizOfferter() {
       }
     >
       {err && <div className="biz-error">{err}</div>}
+
+      {kit && !kit.has_base_equipment && (
+        <div style={{
+          padding: "16px 18px",
+          marginBottom: 20,
+          background: "linear-gradient(135deg, rgba(220,76,43,0.08), rgba(15,21,37,0.55))",
+          border: "1px solid rgba(220,76,43,0.40)",
+          borderLeft: "3px solid #dc4c2b",
+          borderRadius: 8,
+        }}>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: "#fda594", marginBottom: 6 }}>
+            ⚠ INGA FÖRFRÅGNINGAR · BAS-UTRUSTNING SAKNAS
+          </div>
+          <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 14.5, color: "#fff", marginBottom: 6 }}>
+            Kunderna ringer inte förrän du kan utföra jobbet.
+          </div>
+          <p style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, color: "rgba(255,255,255,0.78)", margin: "0 0 12px", lineHeight: 1.55 }}>
+            Du behöver <strong>{kit.base_equipment_label}</strong>
+            {" "}({SEK(kit.base_equipment_cost)} kr) innan kunder hör av sig
+            med offertförfrågningar. Köp via Tillväxt — du kan ta lån om
+            kassan inte räcker.
+          </p>
+          <Link to="/v2/foretag/tillvaxt" style={{
+            display: "inline-block",
+            background: "#fbbf24",
+            color: "#422006",
+            padding: "8px 16px",
+            borderRadius: 6,
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 11, fontWeight: 700, letterSpacing: 1.2,
+            textTransform: "uppercase", textDecoration: "none",
+          }}>
+            Öppna Tillväxt → köp bas-utrustning
+          </Link>
+        </div>
+      )}
+
+      {kit && kit.has_base_equipment && opps.length === 0 && !err && (
+        <div style={{
+          padding: "14px 16px",
+          marginBottom: 20,
+          background: "rgba(99,102,241,0.06)",
+          border: "1px solid rgba(99,102,241,0.25)",
+          borderRadius: 8,
+        }}>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: "#c7d2fe", marginBottom: 6 }}>
+            ● VÄNTAR PÅ FÖRFRÅGNINGAR
+          </div>
+          <p style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, color: "rgba(255,255,255,0.78)", margin: 0, lineHeight: 1.55 }}>
+            Bas-utrustning ✓. Pipeline-motorn rullar 1 vecka per timme
+            real-tid. Större rykte och marknadsföring → fler förfrågningar.
+            {" "}<Link to="/v2/foretag/tillvaxt" style={{ color: "#fbbf24" }}>
+              Köp ett marknadsförings-paket
+            </Link>{" "}
+            för en boost.
+          </p>
+        </div>
+      )}
 
       <div className="act-grid">
         <div>

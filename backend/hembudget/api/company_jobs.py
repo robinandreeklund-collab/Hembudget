@@ -114,21 +114,61 @@ def create_job_ad(
         )
         if co is None:
             raise HTTPException(400, "Du måste ha ett aktivt företag")
+        co_id = co.id
+
+        # Försök hitta share. Saknas den = self-heal: kör sync_class_
+        # company_share så cachen byggs nu istället för att tvinga eleven
+        # gå runt och "ticka" först.
+        with master_session() as ms:
+            share_id = (
+                ms.query(ClassCompanyShare.id)
+                .filter(
+                    ClassCompanyShare.owner_student_id == student_id,
+                    ClassCompanyShare.company_id_in_scope == co_id,
+                )
+                .scalar()
+            )
+        if share_id is None:
+            try:
+                from .allabolag import sync_class_company_share
+                with master_session() as ms2:
+                    stu = ms2.get(Student, student_id)
+                    teacher_id = stu.teacher_id if stu else None
+                    class_label = stu.class_label if stu else None
+                if teacher_id is not None:
+                    sync_class_company_share(
+                        scope_s,
+                        company=co,
+                        teacher_id=teacher_id,
+                        student_id=student_id,
+                        class_label=class_label,
+                    )
+            except Exception:
+                log.exception(
+                    "create_job_ad: lazy-sync av ClassCompanyShare "
+                    "misslyckades för company=%s student=%s",
+                    co_id, student_id,
+                )
+            with master_session() as ms3:
+                share_id = (
+                    ms3.query(ClassCompanyShare.id)
+                    .filter(
+                        ClassCompanyShare.owner_student_id == student_id,
+                        ClassCompanyShare.company_id_in_scope == co_id,
+                    )
+                    .scalar()
+                )
+            if share_id is None:
+                raise HTTPException(
+                    503,
+                    "Allabolag-cachen kunde inte skapas. "
+                    "Försök igen om en stund.",
+                )
 
     with master_session() as s:
-        share = (
-            s.query(ClassCompanyShare)
-            .filter(
-                ClassCompanyShare.owner_student_id == student_id,
-                ClassCompanyShare.company_id_in_scope == co.id,
-            )
-            .first()
-        )
+        share = s.get(ClassCompanyShare, share_id)
         if share is None:
-            raise HTTPException(
-                404,
-                "Allabolag-cache saknas · ticka företaget först",
-            )
+            raise HTTPException(503, "Allabolag-cachen försvann")
 
         ad = CompanyJobAd(
             company_share_id=share.id,
