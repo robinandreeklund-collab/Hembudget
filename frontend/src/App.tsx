@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 
 function RedirectModuleToV2() {
   const { moduleId } = useParams<{ moduleId: string }>();
@@ -299,11 +299,13 @@ export default function App() {
   // istället för den gamla feta dev-bannern. Echo-drawern mountas
   // ALLTID (oavsett path) eftersom topbaren har Echo-knappen och
   // drawern måste vara mountad för att lyssna på 'echo-open'-eventet.
-  // Tidigare gating på window.location.pathname läste bara värdet vid
-  // initial render, så React Router-navigering mellan ej-v2 → v2 utan
-  // sida-reload lämnade drawern omountad.
-  const isV2Path = window.location.pathname.startsWith("/v2/")
-    || window.location.pathname.startsWith("/teacher/");
+  // KRITISKT: använd useLocation() (inte window.location.pathname).
+  // Det senare läser bara initialvärdet och uppdateras inte vid
+  // React Router-navigering — vilket gjorde att V1-sidebaren dök
+  // upp på V2-sidor när användaren navigerade dit utan reload.
+  const location = useLocation();
+  const isV2Path = location.pathname.startsWith("/v2/")
+    || location.pathname.startsWith("/teacher/");
 
   return (
     <GuideProvider>
