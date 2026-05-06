@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/api/client";
 import { BizActorShell } from "./BizActorShell";
+import { TimeCapacityBreakdown, useTimeCapacity } from "./TimeCapacityWidget";
 
 
 type Overview = {
@@ -151,6 +152,9 @@ export function BizTillvaxt() {
       }
     >
       {error && <div style={errorBoxStyle}>{error}</div>}
+
+      {/* Tids-kapacitet · Fas K */}
+      <TimeCapacitySection onRefresh={refresh} />
 
       {/* Kapacitetsmätare */}
       <div style={{ ...cardStyle, marginBottom: 18 }}>
@@ -619,3 +623,25 @@ const errorBoxStyle: React.CSSProperties = {
   border: "1px solid rgba(220,76,43,0.35)", borderRadius: 6,
   color: "#fda594", fontFamily: "Source Serif 4, Georgia, serif", marginBottom: 14,
 };
+
+
+function TimeCapacitySection({ onRefresh }: { onRefresh: () => void }) {
+  const { data, refresh } = useTimeCapacity();
+  if (!data) return null;
+  async function quit() {
+    if (!confirm(
+      "Säga upp privat-jobbet?\n\nKonsekvens: Trygghet -15 i pentagon.\n"
+      + "Bonus: +44 h/v till bolaget."
+    )) return;
+    try {
+      await api("/v2/foretag/capacity/quit-private-job", { method: "POST" });
+      refresh();
+      onRefresh();
+    } catch (e) { alert((e as Error).message); }
+  }
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <TimeCapacityBreakdown data={data} onQuit={quit} />
+    </div>
+  );
+}

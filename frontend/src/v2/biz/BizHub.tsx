@@ -22,6 +22,8 @@ import {
 } from "./api";
 import { BizPentagon as BizPentagonChart } from "./BizPentagon";
 import { BizPentagonFlipCard } from "./BizPentagonFlipCard";
+import { TimeCapacityBar, useTimeCapacity } from "./TimeCapacityWidget";
+import { api } from "@/api/client";
 import "./biz.css";
 
 
@@ -189,6 +191,9 @@ export function BizHub() {
 
         <BizCharCard company={company} pentagon={pentagon} stats={stats} />
       </div>
+
+      {/* === 1.5 TIDS-KAPACITET · alltid synlig på hubben === */}
+      <CapacityBanner />
 
       {/* === 2. PENTAGON-STAGE · klickbara axlar → flip-kort === */}
       {pentagon && (
@@ -1092,6 +1097,32 @@ function StartupCapitalDialog({
           Avbryt · välj annan form
         </button>
       </div>
+    </div>
+  );
+}
+
+
+function CapacityBanner() {
+  const { data, error, refresh } = useTimeCapacity();
+  if (error || !data) return null;
+
+  async function quit() {
+    if (!confirm(
+      "Säga upp privat-jobbet? Du går från lön + 40h privat-jobb "
+      + "till heltidsentreprenör.\n\n"
+      + "Påföljd: privat Trygghet -15.\n"
+      + "Bonus: +44 h/v för bolaget."
+    )) return;
+    try {
+      await api("/v2/foretag/capacity/quit-private-job", { method: "POST" });
+      refresh();
+      alert("Du är nu heltidsentreprenör. Lycka till!");
+    } catch (e) { alert((e as Error).message); }
+  }
+
+  return (
+    <div style={{ marginTop: 18, marginBottom: 18 }}>
+      <TimeCapacityBar data={data} onQuit={quit} />
     </div>
   );
 }

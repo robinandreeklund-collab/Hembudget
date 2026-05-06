@@ -469,6 +469,28 @@ class Job(TenantMixin, Base):
     )
     delivered_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
+    # Tids-kapacitet (Fas K)
+    # Skattat antal arbetstimmar för uppdraget. Sätts från industri-spec
+    # vid create. Används av time-capacity-helpern och overload-fasen.
+    estimated_hours: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    hours_per_week: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+
+    # Försenings-spårning · drivs av _phase_overload_consequences
+    delays_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    last_delayed_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    # Original-deadline · sparas så vi kan visa "förväntad: X, faktisk: Y"
+    original_deadline: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+
     invoice_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("company_invoices.id"), nullable=True,
     )

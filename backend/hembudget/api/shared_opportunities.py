@@ -305,6 +305,14 @@ def _decide_expired_opportunities(teacher_id: int) -> int:
                                 )
                                 scope_s.add(local_quote)
                                 scope_s.flush()
+                                from .foretag_capacity import estimate_job_hours
+                                est_h_w, per_w_w = estimate_job_hours(
+                                    opp.industry_key or co.industry_key or "default",
+                                    winner.offered_delivery_days,
+                                )
+                                deadline_w = (
+                                    now + timedelta(days=winner.offered_delivery_days)
+                                ).date()
                                 local_job = Job(
                                     company_id=co.id,
                                     opportunity_id=local_opp.id,
@@ -313,9 +321,10 @@ def _decide_expired_opportunities(teacher_id: int) -> int:
                                     customer_name=opp.customer_name,
                                     agreed_price=winner.offered_price,
                                     started_on=now.date(),
-                                    expected_complete_on=(
-                                        now + timedelta(days=winner.offered_delivery_days)
-                                    ).date(),
+                                    expected_complete_on=deadline_w,
+                                    original_deadline=deadline_w,
+                                    estimated_hours=est_h_w,
+                                    hours_per_week=per_w_w,
                                     status="in_progress",
                                 )
                                 scope_s.add(local_job)

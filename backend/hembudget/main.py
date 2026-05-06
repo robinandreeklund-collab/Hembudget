@@ -18,7 +18,8 @@ from .api import (
     admin, ai, ai_admin, allabolag, arbetsformedlingen, auth, backup,
     balances, bank, biz_class_actions, boendemarknad, budget, chat,
     company_jobs, credit, elpris, email_auth, employer, foretag,
-    foretag_annual_report, foretag_engine, foretag_growth, funds,
+    foretag_annual_report, foretag_capacity, foretag_engine,
+    foretag_growth, funds,
     game_engine, landing, leaderboard, ledger, loans, modules, reports,
     scenarios, school, settings_kv, shared_opportunities, smtp_admin,
     stock_trading, stocks, tax, events, teacher_ai_prompts, teacher_credit,
@@ -278,6 +279,7 @@ def build_app() -> FastAPI:
     app.include_router(company_jobs.owner_router)
     app.include_router(company_jobs.seeker_router)
     app.include_router(foretag_growth.router)
+    app.include_router(foretag_capacity.router)
     app.include_router(leaderboard.router)
     app.include_router(biz_class_actions.mentor_router)
     app.include_router(biz_class_actions.event_router)

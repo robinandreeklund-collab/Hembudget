@@ -8,6 +8,7 @@
  * BizLeverantorer  · /v2/foretag/leverantorer (inkommande fakturor)
  */
 import { useEffect, useState } from "react";
+import { ImpactPreviewBox } from "./TimeCapacityWidget";
 import {
   bizEngineApi,
   type Decision,
@@ -659,6 +660,16 @@ function QuoteModal({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<Quote | null>(null);
+  const [impact, setImpact] = useState<import("./TimeCapacityWidget").ImpactPreview | null>(null);
+
+  // Hämta tier-prediktion vid mount
+  useEffect(() => {
+    import("@/api/client").then(({ api }) =>
+      api<import("./TimeCapacityWidget").ImpactPreview>(
+        `/v2/foretag/capacity/preview-impact/${opp.id}`,
+      ).then(setImpact).catch(() => undefined)
+    );
+  }, [opp.id]);
 
   async function submit() {
     setErr(null);
@@ -751,6 +762,10 @@ function QuoteModal({
           <strong style={{ color: "#fff" }}>{opp.expected_delivery_days} dagar</strong>
           {" · "}deadline {opp.deadline_on}
         </p>
+
+        {impact && result === null && (
+          <ImpactPreviewBox preview={impact} />
+        )}
 
         {result === null ? (
           <>

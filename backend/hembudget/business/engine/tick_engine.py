@@ -195,6 +195,16 @@ def _phase_a_decide_quotes(
 
         if result.accepted:
             opp.status = "won"
+            # Tids-kapacitet · uppskatta arbetstimmar från industri
+            try:
+                from ...api.foretag_capacity import estimate_job_hours
+                est_h, per_w = estimate_job_hours(
+                    opp.industry_tag or company.industry_key or "default",
+                    q.offered_delivery_days,
+                )
+            except Exception:
+                est_h, per_w = 0, 0
+            deadline = today + timedelta(days=q.offered_delivery_days)
             # Skapa Job-rad
             job = Job(
                 company_id=company.id,
@@ -204,9 +214,10 @@ def _phase_a_decide_quotes(
                 customer_name=opp.customer_name,
                 agreed_price=q.offered_price,
                 started_on=today,
-                expected_complete_on=today + timedelta(
-                    days=q.offered_delivery_days,
-                ),
+                expected_complete_on=deadline,
+                original_deadline=deadline,
+                estimated_hours=est_h,
+                hours_per_week=per_w,
                 status="in_progress",
             )
             s.add(job)
@@ -701,6 +712,9 @@ def run_business_week(
         _phase_h_milestone_mails(
             s, company=company, summary=summary,
         )
+        _phase_i_overload_consequences(
+            s, company=company, today=today, summary=summary,
+        )
 
         s.flush()
         tick_row.status = "done"
@@ -1113,3 +1127,217 @@ def deliver_job(
 
     s.flush()
     return job, invoice
+
+
+# ===== Fas K · överbelastning-konsekvenser =====
+
+def _phase_i_overload_consequences(
+    s: Session, *, company: Company, today: date, summary: TickSummary,
+) -> None:
+    """Räknar belastning, tillämpar tier-konsekvenser, slumpar förseningar.
+
+    Spec: Fas K · dev/feature-allabolag.md (tids-kapacitet)
+
+    Tier-trappa (per vecka):
+      T0 ≤ 100%        ingen påföljd
+      T1 101-130%      Hälsa-3, 5% delay-risk per jobb
+      T2 131-180%      Hälsa-8 + Trygghet-2, 25% delay
+      T3 >180%         Hälsa-15 + Trygghet-5, 50% delay
+      T4 (T3 i 4+ v)   Krasch · capacity 0 i 1 v
+
+    Återhämtning: ratio < 0.9 → consecutive_overload_weeks --1
+    """
+    import random
+    from ...school.engines import (
+        get_current_actor_student, master_session,
+    )
+    from ...school.models import StudentProfile, Student
+    from ..models import CompanyMcpRental, Job
+
+    sid = get_current_actor_student()
+    if sid is None:
+        return
+
+    # Hämta tids-kapacitet
+    try:
+        from ...api.foretag_capacity import (
+            compute_time_capacity, _classify_tier, TIER_INFO,
+        )
+        cap = compute_time_capacity(s, company=company, student_id=sid)
+    except Exception:
+        log.exception("overload: kunde inte räkna kapacitet")
+        return
+
+    ratio = cap["ratio"]
+    weeks_over = cap["weeks_overloaded"]
+
+    # Uppdatera räknaren
+    with master_session() as ms:
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == sid)
+            .first()
+        )
+        if prof is None:
+            return
+        if ratio > 1.0:
+            current = int(getattr(prof, "consecutive_overload_weeks", 0) or 0)
+            prof.consecutive_overload_weeks = current + 1
+            weeks_over = current + 1
+        elif ratio < 0.9:
+            current = int(getattr(prof, "consecutive_overload_weeks", 0) or 0)
+            prof.consecutive_overload_weeks = max(0, current - 1)
+        ms.commit()
+
+    tier = _classify_tier(ratio, weeks_over)
+    if tier == 0:
+        return
+
+    info = TIER_INFO[tier]
+
+    # Privat-pentagon · Hälsa + Trygghet
+    try:
+        from ...game_engine.pentagon import apply_pentagon_delta
+        if info["health_per_week"] != 0:
+            apply_pentagon_delta(
+                sid, axis="health",
+                requested_delta=info["health_per_week"],
+                reason_kind="biz_overload",
+                reason_id=company.id,
+                reason_table="companies",
+                explanation=(
+                    f"Företaget är på {tier} ({info['label']}) · "
+                    f"belastning {int(ratio * 100)} %"
+                ),
+            )
+        if info["safety_per_week"] != 0:
+            apply_pentagon_delta(
+                sid, axis="safety",
+                requested_delta=info["safety_per_week"],
+                reason_kind="biz_overload",
+                reason_id=company.id,
+                reason_table="companies",
+                explanation=(
+                    f"Stress från företaget påverkar tryggheten ({info['label']})"
+                ),
+            )
+    except Exception:
+        log.exception("overload: kunde inte applicera pentagon-delta")
+
+    # Tier 4 · krasch · capacity 0 i 1 vecka
+    if tier == 4:
+        company.delivery_capacity = 0
+        # Generera mail
+        try:
+            from ...db.models import MailItem
+            s.flush()
+            # Mail till postlådan (privat-scope) görs via shared session_scope
+            # som redan är aktiv via tenant_id
+            from ...db.base import session_scope as _ps
+            with _ps() as priv_s:
+                priv_s.add(MailItem(
+                    sender="Vårdcentralen",
+                    sender_short="VC",
+                    sender_kind="health",
+                    mail_type="info",
+                    subject="Sjukskrivning · 1 vecka",
+                    body=(
+                        "Du har varit kraftigt överbelastad i 4 veckor "
+                        "rakt. Vi sjukskriver dig 1 vecka för återhämtning. "
+                        "Företagets kapacitet är 0 under denna tid · alla "
+                        "aktiva jobb pausas.\n\n"
+                        "När du kommer tillbaka: ta bort uppdrag, anställ "
+                        "någon eller säg upp privat-jobbet."
+                    ),
+                    amount=None,
+                    due_date=None,
+                    status="unhandled",
+                ))
+                priv_s.commit()
+        except Exception:
+            pass
+
+    # Slumpa förseningar per aktivt jobb
+    delay_prob = info["delay_risk_pct"] / 100.0
+    if delay_prob <= 0:
+        return
+
+    rng = random.Random(_tick_seed(company.id, company.week_no, suffix=99))
+    active_jobs = (
+        s.query(Job)
+        .filter(
+            Job.company_id == company.id,
+            Job.status == "in_progress",
+        )
+        .all()
+    )
+    for job in active_jobs:
+        if rng.random() >= delay_prob:
+            continue
+        # Försening · 7 dagar
+        from datetime import timedelta as _td
+        job.expected_complete_on = job.expected_complete_on + _td(days=7)
+        job.delays_count = int(job.delays_count or 0) + 1
+        job.last_delayed_on = today
+
+        # Kund klagar omedelbart
+        company.open_complaints += 1
+        company.reputation = max(0, company.reputation - 10)
+        summary.notes.append(
+            f"Försening: {job.title} · {job.delays_count}:e ggn"
+        )
+
+        # 3:e gången → kund avbryter
+        if job.delays_count >= 3:
+            job.status = "cancelled"
+            company.reputation = max(0, company.reputation - 15)
+            summary.notes.append(
+                f"Kund avbröt: {job.title} (3+ förseningar)"
+            )
+            try:
+                from ...db.models import MailItem
+                from ...db.base import session_scope as _ps
+                with _ps() as priv_s:
+                    priv_s.add(MailItem(
+                        sender=job.customer_name,
+                        sender_short="KUND",
+                        sender_kind="customer",
+                        mail_type="info",
+                        subject=f"Avbruten beställning · {job.title}",
+                        body=(
+                            f"Vi har tappat förtroendet efter 3 förseningar. "
+                            f"Vi avbryter beställningen utan slutbetalning. "
+                            f"Detta påverkar både företagets rykte och "
+                            f"kreditvärdighet."
+                        ),
+                        amount=None,
+                        due_date=None,
+                        status="unhandled",
+                    ))
+                    priv_s.commit()
+            except Exception:
+                pass
+        else:
+            # Klagomål-mail
+            try:
+                from ...db.models import MailItem
+                from ...db.base import session_scope as _ps
+                with _ps() as priv_s:
+                    priv_s.add(MailItem(
+                        sender=job.customer_name,
+                        sender_short="KUND",
+                        sender_kind="customer",
+                        mail_type="info",
+                        subject=f"Klagomål · {job.title}",
+                        body=(
+                            f"Hej. Vi noterar att leveransen försenats. "
+                            f"Detta är inte ok. Ny förväntad leverans: "
+                            f"{job.expected_complete_on.isoformat()}."
+                        ),
+                        amount=None,
+                        due_date=None,
+                        status="unhandled",
+                    ))
+                    priv_s.commit()
+            except Exception:
+                pass
