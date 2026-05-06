@@ -429,6 +429,62 @@ def _run_master_migrations(engine: Engine) -> None:
             "business_mode_enabled BOOLEAN NOT NULL DEFAULT 0",
         )
 
+    # Self-healing-backfill: om en elev redan har ett bolag i sin scope-
+    # DB men business_mode_enabled är FALSE betyder det att flaggan har
+    # tappats någon gång (t.ex. ephemeral-deploy som blåste bort raden,
+    # eller ett misslyckat write-back). Återställ FLAG:en så eleven inte
+    # förlorar tillgång till sitt företag vid varje deploy.
+    #
+    # Detta gäller bara Postgres-shared-läget där alla scope-tabeller
+    # ligger i samma DB med tenant_id. SQLite-per-scope-mode (lokalt
+    # / dev) skippas eftersom det skulle kräva att vi öppnar varje fil.
+    if "business_mode_enabled" in _cols("students") and is_postgres:
+        try:
+            with engine.begin() as conn:
+                # Hämta alla scope-nycklar som har minst ett bolag.
+                # tenant_id är t.ex. "s_42" (solo-elev) eller "f_7"
+                # (familj — alla familjemedlemmar delar scope).
+                rows = conn.execute(_text(
+                    "SELECT DISTINCT tenant_id FROM companies "
+                    "WHERE tenant_id IS NOT NULL"
+                )).fetchall()
+                solo_ids: list[int] = []
+                family_ids: list[int] = []
+                for (key,) in rows:
+                    if not key:
+                        continue
+                    if key.startswith("s_"):
+                        try:
+                            solo_ids.append(int(key[2:]))
+                        except ValueError:
+                            pass
+                    elif key.startswith("f_"):
+                        try:
+                            family_ids.append(int(key[2:]))
+                        except ValueError:
+                            pass
+                if solo_ids:
+                    conn.execute(
+                        _text(
+                            "UPDATE students SET business_mode_enabled = TRUE "
+                            "WHERE id = ANY(:ids) AND business_mode_enabled = FALSE"
+                        ),
+                        {"ids": solo_ids},
+                    )
+                if family_ids:
+                    conn.execute(
+                        _text(
+                            "UPDATE students SET business_mode_enabled = TRUE "
+                            "WHERE family_id = ANY(:ids) AND business_mode_enabled = FALSE"
+                        ),
+                        {"ids": family_ids},
+                    )
+        except Exception:
+            _log.exception(
+                "business_mode_enabled-backfill misslyckades — "
+                "fortsätter (icke-kritiskt)",
+            )
+
     # BatchArtifact.exported_to_my_batches (idé 3 i dev_v1.md):
     # bank-flödet kräver att bank-artefakter passerar /my-batches via
     # explicit export. Befintliga artefakter som redan är importerade
