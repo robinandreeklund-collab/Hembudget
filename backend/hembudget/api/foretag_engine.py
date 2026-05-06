@@ -77,6 +77,7 @@ class OpportunityOut(BaseModel):
     customer_name: str
     customer_segment: str
     industry_tag: Optional[str]
+    requires_car: bool = False
     market_price: int
     expected_delivery_days: int
     deadline_on: str
@@ -126,6 +127,7 @@ def _to_opportunity_out(opp: JobOpportunity) -> OpportunityOut:
         customer_name=opp.customer_name,
         customer_segment=opp.customer_segment,
         industry_tag=opp.industry_tag,
+        requires_car=bool(opp.requires_car),
         market_price=opp.market_price,
         expected_delivery_days=opp.expected_delivery_days,
         deadline_on=opp.deadline_on.isoformat(),
@@ -221,6 +223,18 @@ def submit_quote(
         if opp.status != "open":
             raise HTTPException(
                 400, f"Förfrågan har status '{opp.status}', kan ej offerera",
+            )
+        # Spärr · bil + bas-utrustning krävs
+        if not co.has_base_equipment:
+            raise HTTPException(
+                403,
+                "Du måste köpa bas-utrustning innan du kan svara på "
+                "kundförfrågningar (Tillväxt-vyn).",
+            )
+        if opp.requires_car and not co.has_car:
+            raise HTTPException(
+                403,
+                "Detta uppdrag kräver bil. Köp en i Tillväxt-vyn först.",
             )
         if opp.quote is not None:
             raise HTTPException(400, "Offert redan lämnad")

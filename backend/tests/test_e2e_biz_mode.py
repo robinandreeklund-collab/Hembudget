@@ -130,6 +130,18 @@ def test_biz_mode_full_flow(app_with_student):
     assert company["name"] == "Sara A. AB"
     assert company["form"] == "ab"
 
+    # === 2b. Köp bas-utrustning + bil (krävs av snickare) ===
+    r = client.post(
+        "/v2/foretag/growth/startup-kit/buy", headers=H,
+        json={"item": "base_equipment", "funding_method": "business_loan_pg"},
+    )
+    assert r.status_code == 200, f"Kunde inte köpa bas-utrustning: {r.text}"
+    r = client.post(
+        "/v2/foretag/growth/startup-kit/buy", headers=H,
+        json={"item": "car", "funding_method": "business_loan_pg"},
+    )
+    assert r.status_code == 200, f"Kunde inte köpa bil: {r.text}"
+
     # === 3. Manuell tick · ev. fler offerter (create_company pre-seedar
     #        2 veckor så bolaget aldrig är tomt direkt efter skapande)
     r = client.post("/v2/foretag/tick", headers=H)

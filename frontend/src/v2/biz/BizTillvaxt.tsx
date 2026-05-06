@@ -94,7 +94,7 @@ export function BizTillvaxt() {
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"location" | "equipment" | "loans">("location");
+  const [tab, setTab] = useState<"location" | "equipment" | "loans" | "decisions">("location");
   const [showLoanApply, setShowLoanApply] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
 
@@ -153,6 +153,9 @@ export function BizTillvaxt() {
     >
       {error && <div style={errorBoxStyle}>{error}</div>}
 
+      {/* Startup-kit · bas-utrustning + bil (om bransch kräver) */}
+      <StartupKitSection onRefresh={refresh} />
+
       {/* Tids-kapacitet · Fas K */}
       <TimeCapacitySection onRefresh={refresh} />
 
@@ -201,9 +204,10 @@ export function BizTillvaxt() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
         <TabBtn active={tab === "location"} onClick={() => setTab("location")}>Lokaler</TabBtn>
         <TabBtn active={tab === "equipment"} onClick={() => setTab("equipment")}>Utrustning</TabBtn>
+        <TabBtn active={tab === "decisions"} onClick={() => setTab("decisions")}>Beslut & Drift</TabBtn>
         <TabBtn active={tab === "loans"} onClick={() => setTab("loans")}>Lån</TabBtn>
       </div>
 
@@ -223,6 +227,11 @@ export function BizTillvaxt() {
             <EquipmentCard key={eq.kind} eq={eq} kassa={overview.kassa} onBought={refresh} />
           ))}
         </div>
+      )}
+
+      {/* Beslut & Drift · anställa, försäkring, leasing, friskvård */}
+      {tab === "decisions" && (
+        <DecisionsTab />
       )}
 
       {/* Lån */}
@@ -642,6 +651,242 @@ function TimeCapacitySection({ onRefresh }: { onRefresh: () => void }) {
   return (
     <div style={{ marginBottom: 18 }}>
       <TimeCapacityBreakdown data={data} onQuit={quit} />
+    </div>
+  );
+}
+
+
+// === Startup-kit-sektion · bas-utrustning + bil ===
+
+type StartupKit = {
+  has_base_equipment: boolean;
+  has_car: boolean;
+  requires_car: boolean;
+  base_equipment_label: string;
+  base_equipment_cost: number;
+  car_cost: number;
+  industry_label: string | null;
+  industry_key: string | null;
+};
+
+function StartupKitSection({ onRefresh }: { onRefresh: () => void }) {
+  const [kit, setKit] = useState<StartupKit | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function refresh() {
+    api<StartupKit>("/v2/foretag/growth/startup-kit").then(setKit).catch(() => undefined);
+  }
+  useEffect(() => { refresh(); }, []);
+  if (!kit) return null;
+
+  // Inget krävs för denna bransch
+  if (kit.has_base_equipment && (!kit.requires_car || kit.has_car)) return null;
+
+  async function buy(item: "base_equipment" | "car", funding: "cash" | "private_loan" | "business_loan_pg") {
+    setBusy(true);
+    try {
+      await api("/v2/foretag/growth/startup-kit/buy", {
+        method: "POST",
+        body: JSON.stringify({ item, funding_method: funding }),
+      });
+      refresh();
+      onRefresh();
+    } catch (e) { alert((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(220,76,43,0.08), rgba(15,21,37,0.55))",
+      border: "1px solid rgba(220,76,43,0.30)",
+      borderLeft: "3px solid #fda594",
+      borderRadius: 10, padding: 18, marginBottom: 18,
+    }}>
+      <div style={{
+        fontFamily: "JetBrains Mono, monospace", fontSize: 10.5,
+        fontWeight: 700, letterSpacing: 1.4, color: "#fda594",
+      }}>
+        ⚠ STARTUP-KIT KRÄVS · INNAN DU KAN TA UPPDRAG
+      </div>
+      <p style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 14, lineHeight: 1.55, color: "rgba(255,255,255,0.85)", margin: "8px 0 14px" }}>
+        En {kit.industry_label?.toLowerCase()} kan inte börja utan rätt
+        utrustning. Köp dessa innan kunderna börjar höra av sig.
+      </p>
+
+      {/* Bas-utrustning */}
+      {!kit.has_base_equipment && (
+        <KitItemCard
+          title="Bas-utrustning"
+          desc={kit.base_equipment_label}
+          cost={kit.base_equipment_cost}
+          busy={busy}
+          onBuyCash={() => buy("base_equipment", "cash")}
+          onBuyPrivateLoan={() => buy("base_equipment", "private_loan")}
+          onBuyBizLoan={() => buy("base_equipment", "business_loan_pg")}
+        />
+      )}
+
+      {/* Bil */}
+      {kit.requires_car && !kit.has_car && (
+        <div style={{ marginTop: kit.has_base_equipment ? 0 : 10 }}>
+          <KitItemCard
+            title="Företagsbil"
+            desc={`${kit.industry_label} kräver bil för transport till kund + leveranser. Utan bil kan du inte ta privat-kund-jobb.`}
+            cost={kit.car_cost}
+            busy={busy}
+            onBuyCash={() => buy("car", "cash")}
+            onBuyPrivateLoan={() => buy("car", "private_loan")}
+            onBuyBizLoan={() => buy("car", "business_loan_pg")}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function KitItemCard({
+  title, desc, cost, busy,
+  onBuyCash, onBuyPrivateLoan, onBuyBizLoan,
+}: {
+  title: string; desc: string; cost: number; busy: boolean;
+  onBuyCash: () => void;
+  onBuyPrivateLoan: () => void;
+  onBuyBizLoan: () => void;
+}) {
+  return (
+    <div style={{ padding: 14, background: "rgba(0,0,0,0.2)", borderRadius: 8, marginTop: 10 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+        <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 16, fontWeight: 700, color: "#fff" }}>
+          {title}
+        </div>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#fbbf24", fontWeight: 700 }}>
+          {SEK(cost)} kr
+        </span>
+      </div>
+      <p style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.55, margin: "6px 0 10px" }}>
+        {desc}
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={onBuyCash} disabled={busy} style={btnPrimary}>Betala från kassa</button>
+        <button onClick={onBuyPrivateLoan} disabled={busy} style={btnSecondary}>Privat-lån</button>
+        <button onClick={onBuyBizLoan} disabled={busy} style={btnSecondary}>Företagslån (personlig borgen)</button>
+      </div>
+    </div>
+  );
+}
+
+
+// === Beslut & Drift-tab · återanvänder existing decision-API ===
+
+type Decision = {
+  id: number;
+  kind: string;
+  title: string;
+  monthly_cost: number;
+  pipeline_boost?: number;
+  active: boolean;
+  started_on: string;
+};
+
+const DECISION_PRESETS = [
+  { kind: "employee", title: "Anställa heltidare", monthly_cost: 35000, desc: "+1 anställd · +84 h/v kapacitet · arbetsgivaravgifter ingår" },
+  { kind: "marketing", title: "Marknadsföring · digital", monthly_cost: 8000, desc: "+10 % pipeline · varar tills uppsagd" },
+  { kind: "insurance", title: "Företagsförsäkring", monthly_cost: 1200, desc: "Skydd vid skada/stöld + ansvarsförsäkring" },
+  { kind: "leasing", title: "Leasing · servicebil", monthly_cost: 4500, desc: "Servicebil utan kapital · färre kostnader än köp" },
+  { kind: "wellness", title: "Friskvårdsbidrag (5k/anställd/år)", monthly_cost: 0, desc: "Skattefri förmån · höjer trivsel" },
+];
+
+function DecisionsTab() {
+  const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  function refresh() {
+    api<Decision[]>("/v2/foretag/decisions").then(setDecisions).catch(() => undefined);
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function add(preset: typeof DECISION_PRESETS[number]) {
+    if (!confirm(`Aktivera "${preset.title}"? Månadskostnad: ${SEK(preset.monthly_cost)} kr`)) return;
+    setBusy(true);
+    try {
+      await api("/v2/foretag/decisions", {
+        method: "POST",
+        body: JSON.stringify({
+          kind: preset.kind,
+          title: preset.title,
+          monthly_cost: preset.monthly_cost,
+        }),
+      });
+      refresh();
+    } catch (e) { alert((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  async function endDecision(id: number) {
+    if (!confirm("Avsluta detta beslut?")) return;
+    try {
+      await api(`/v2/foretag/decisions/${id}`, { method: "DELETE" });
+      refresh();
+    } catch (e) { alert((e as Error).message); }
+  }
+
+  const active = decisions.filter((d) => d.active);
+
+  return (
+    <div>
+      <div style={sectionEyeStyle}>● AKTIVA BESLUT</div>
+      <div style={{ display: "grid", gap: 8, marginTop: 10, marginBottom: 24 }}>
+        {active.length === 0 ? (
+          <div style={emptyStyle}>Inga aktiva beslut.</div>
+        ) : (
+          active.map((d) => (
+            <div key={d.id} style={{
+              padding: "12px 16px",
+              background: "rgba(110,231,183,0.04)",
+              border: "1px solid rgba(110,231,183,0.25)",
+              borderRadius: 8,
+              display: "flex",
+              gap: 12,
+              alignItems: "baseline",
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 15, fontWeight: 700, color: "#fff" }}>
+                  {d.title}
+                </div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.55)" }}>
+                  {d.kind} · sedan {d.started_on}
+                </div>
+              </div>
+              <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#fbbf24" }}>
+                {SEK(d.monthly_cost)} kr/mån
+              </span>
+              <button onClick={() => endDecision(d.id)} style={btnGhost}>Avsluta</button>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div style={sectionEyeStyle}>● TILLGÄNGLIGA BESLUT · driv tillväxten</div>
+      <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+        {DECISION_PRESETS.map((p) => (
+          <div key={p.kind} style={{ ...cardStyle, display: "flex", gap: 12, alignItems: "baseline" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 15, fontWeight: 700, color: "#fff" }}>
+                {p.title}
+              </div>
+              <p style={{ color: "rgba(255,255,255,0.7)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 12.5, margin: "4px 0 0", lineHeight: 1.5 }}>
+                {p.desc}
+              </p>
+            </div>
+            <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#fbbf24" }}>
+              {p.monthly_cost > 0 ? `${SEK(p.monthly_cost)} kr/mån` : "0 kr"}
+            </span>
+            <button onClick={() => add(p)} disabled={busy} style={btnPrimary}>Aktivera</button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

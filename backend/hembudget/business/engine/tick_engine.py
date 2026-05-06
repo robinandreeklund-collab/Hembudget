@@ -280,7 +280,16 @@ def _phase_b_collect_payments(
 def _phase_c_generate_opportunities(
     s: Session, *, company: Company, today: date, summary: TickSummary,
 ) -> None:
-    """Fas C · pipeline_generator → nya JobOpportunity-rader."""
+    """Fas C · pipeline_generator → nya JobOpportunity-rader.
+
+    Spärrar generering om bolaget saknar bas-utrustning · eleven måste
+    köpa innan kunderna börjar höra av sig (realistisk modell)."""
+    if not company.has_base_equipment:
+        summary.notes.append(
+            "Inga nya förfrågningar · bas-utrustning saknas"
+        )
+        return
+
     profile = get_biz_difficulty(company.level)
 
     in_progress = (
@@ -411,6 +420,20 @@ def _phase_c_generate_opportunities(
             except Exception:
                 pass
 
+        # Kräver bil? Branscher med requires_car: alla privat-kund-jobb
+        # och 50 % av företag-jobb (deterministiskt via rng).
+        requires_car = False
+        try:
+            from ..industries import get_industry as _gi
+            ind_meta = _gi(company.industry_key) if company.industry_key else None
+            if ind_meta and ind_meta.requires_car:
+                if cust.segment == "privat":
+                    requires_car = True
+                elif cust.segment == "foretag":
+                    requires_car = rng.random() < 0.5
+        except Exception:
+            pass
+
         opp = JobOpportunity(
             company_id=company.id,
             customer_name=cust.name,
@@ -423,6 +446,7 @@ def _phase_c_generate_opportunities(
             title=tmpl.title,
             description=description,
             industry_tag=tmpl.industry_tag,
+            requires_car=requires_car,
             market_price=market_price,
             expected_delivery_days=tmpl.delivery_days,
             deadline_on=deadline,

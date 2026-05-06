@@ -66,6 +66,8 @@ def company(session):
         week_no=0,
         delivery_capacity=2,
         active=True,
+        has_base_equipment=True,
+        has_car=True,
     )
     session.add(co)
     session.flush()
@@ -451,6 +453,7 @@ def test_tick_idempotent_on_seed(session, company):
         industry_label="hantverk",
         level="basics", reputation=50, week_no=0,
         delivery_capacity=2, active=True,
+        has_base_equipment=True, has_car=True,
     )
     co2.id = company.id  # Force samma id
     # Vi kan inte enkelt simulera "samma seed → samma utfall" här utan

@@ -557,6 +557,18 @@ def create_company(
         s.flush()
         result = _to_company_out(c)
 
+        # Auto-flagga has_base_equipment om branschen har 0-kostnad
+        # (t.ex. coach/PT/IT där startset är så billigt vi räknar
+        # det som "skipped"). Annars är default False och eleven måste
+        # köpa via Tillväxt-vyn.
+        if industry.equipment_cost_init == 0:
+            c.has_base_equipment = True
+            c.base_equipment_purchased_on = date.today()
+        if not industry.requires_car:
+            c.has_car = True  # branscher utan bilkrav räknas som "klart"
+
+        s.flush()
+
         # Företagslån med personlig borgen · skapas i biz-scope
         if body.form == "ab" and body.funding_method == "business_loan_pg" and needed_capital > 0:
             from ..business.models import CompanyLoan

@@ -122,6 +122,24 @@ class Company(TenantMixin, Base):
     delivery_capacity: Mapped[int] = mapped_column(
         Integer, default=1, nullable=False,
     )
+    # Bas-utrustning · spärrar pipeline-generering tills inköpt.
+    # Eleven måste köpa kontant från privatkonto, från bolagets kassa
+    # eller via lån INNAN nya offertförfrågningar kommer in.
+    has_base_equipment: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    base_equipment_purchased_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    # Bil-unlock · krävs av vissa branscher (snickare, rörmokare,
+    # elektriker, fotograf, catering) för att över huvud taget kunna
+    # ta jobb. Branscher som requires_car=False struntar i denna.
+    has_car: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    car_purchased_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
 
     transactions: Mapped[list["CompanyTransaction"]] = relationship(
         back_populates="company", cascade="all, delete-orphan",
@@ -364,6 +382,11 @@ class JobOpportunity(TenantMixin, Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     industry_tag: Mapped[Optional[str]] = mapped_column(
         String(60), nullable=True,
+    )
+    # Kräver bil att utföra (sätts vid emit baserat på industri +
+    # privat-kund-segment) · spärrar submitQuote om eleven saknar bil
+    requires_car: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
     )
 
     # Marknad och deadline

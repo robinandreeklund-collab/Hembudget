@@ -829,3 +829,216 @@ def pay_loan(
             ))
         s.commit()
     return {"ok": True, "interest": interest_amt, "amortization": amort}
+
+
+# === Bas-utrustning + bil ===
+
+class StartupKitInfoOut(BaseModel):
+    has_base_equipment: bool
+    has_car: bool
+    requires_car: bool
+    base_equipment_label: str
+    base_equipment_cost: int
+    car_cost: int
+    industry_label: Optional[str]
+    industry_key: Optional[str]
+
+
+class StartupKitPurchaseIn(BaseModel):
+    item: str = Field(..., pattern="^(base_equipment|car)$")
+    funding_method: str = Field(
+        default="cash",
+        pattern="^(cash|private_loan|business_loan_pg)$",
+    )
+
+
+@router.get("/startup-kit", response_model=StartupKitInfoOut)
+def get_startup_kit_info(info: TokenInfo = Depends(require_token)):
+    """Info om bas-utrustning + bil för aktuell bransch."""
+    _require_student(info)
+    with session_scope() as s:
+        c = _get_active_company(s)
+        if c is None:
+            raise HTTPException(400, "Inget aktivt bolag")
+        try:
+            from ..business.industries import get_industry
+            ind = get_industry(c.industry_key) if c.industry_key else None
+        except Exception:
+            ind = None
+        return StartupKitInfoOut(
+            has_base_equipment=c.has_base_equipment,
+            has_car=c.has_car,
+            requires_car=ind.requires_car if ind else False,
+            base_equipment_label=ind.base_equipment_label if ind else "",
+            base_equipment_cost=ind.equipment_cost_init if ind else 0,
+            car_cost=ind.car_cost if ind else 0,
+            industry_label=ind.label if ind else c.industry_label,
+            industry_key=c.industry_key,
+        )
+
+
+@router.post("/startup-kit/buy")
+def buy_startup_kit(
+    body: StartupKitPurchaseIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Köp bas-utrustning eller bil. Funding:
+    - cash: drar från bolagets kassa (om tillräckligt)
+    - private_loan: skapar privat-lån (5 år, 6%) → eleven betalar privat
+    - business_loan_pg: skapar företagslån med personlig borgen
+    """
+    student_id = _require_student(info)
+    with session_scope() as s:
+        c = _get_active_company(s)
+        if c is None:
+            raise HTTPException(400, "Inget aktivt bolag")
+        try:
+            from ..business.industries import get_industry
+            ind = get_industry(c.industry_key) if c.industry_key else None
+        except Exception:
+            ind = None
+        if ind is None:
+            raise HTTPException(400, "Bransch saknas")
+
+        if body.item == "base_equipment":
+            if c.has_base_equipment:
+                raise HTTPException(409, "Bas-utrustning redan köpt")
+            cost = ind.equipment_cost_init
+            label = ind.base_equipment_label or "Bas-utrustning"
+        else:  # car
+            if not ind.requires_car:
+                raise HTTPException(
+                    400, "Din bransch kräver inte bil"
+                )
+            if c.has_car:
+                raise HTTPException(409, "Bil redan inköpt")
+            cost = ind.car_cost
+            label = "Företagsbil"
+
+        if cost <= 0:
+            raise HTTPException(400, "Inget att köpa")
+
+        if body.funding_method == "cash":
+            if _kassa(s, c) < cost:
+                raise HTTPException(
+                    402,
+                    f"Otillräcklig kassa · {cost - _kassa(s, c)} kr saknas. "
+                    "Använd 'private_loan' eller 'business_loan_pg'.",
+                )
+            s.add(CompanyTransaction(
+                company_id=c.id,
+                occurred_on=date.today(),
+                kind="expense",
+                category="Bas-utrustning" if body.item == "base_equipment" else "Bil",
+                description=f"Köpte {label}",
+                amount_excl_vat=Decimal(str(cost)),
+                vat_rate=Decimal("0.25"),
+                vat_amount=Decimal(str(int(cost * 0.25))),
+            ))
+        elif body.funding_method == "business_loan_pg":
+            # Skapa företagslån med PG · går in som inkomst, finansierar köpet
+            from ..business.models import CompanyLoan as _CL
+            terms = LOAN_TERMS["growth"]
+            rate = terms["rate_with_guarantee"]
+            months = terms["months"]
+            monthly = _annuity_payment(cost, rate, months)
+            ln = _CL(
+                company_id=c.id,
+                purpose="growth",
+                lender="Företagsbanken AB",
+                principal=cost,
+                outstanding=cost,
+                interest_rate=Decimal(str(rate)),
+                monthly_payment=monthly,
+                months_total=months,
+                months_left=months,
+                is_personal_guarantee=True,
+                status="active",
+                started_on=date.today(),
+            )
+            s.add(ln)
+            # Lånet → kassa, sedan köp = expense
+            s.add(CompanyTransaction(
+                company_id=c.id,
+                occurred_on=date.today(),
+                kind="income",
+                category="Lån",
+                description=f"Tillväxtlån · {label}",
+                amount_excl_vat=Decimal(str(cost)),
+                vat_rate=Decimal("0.0"),
+                vat_amount=Decimal(0),
+            ))
+            s.add(CompanyTransaction(
+                company_id=c.id,
+                occurred_on=date.today(),
+                kind="expense",
+                category="Bas-utrustning" if body.item == "base_equipment" else "Bil",
+                description=f"Köpte {label} (finansierat med lån)",
+                amount_excl_vat=Decimal(str(cost)),
+                vat_rate=Decimal("0.25"),
+                vat_amount=Decimal(str(int(cost * 0.25))),
+            ))
+        elif body.funding_method == "private_loan":
+            # Skapa privat-lån i privat-scope
+            from ..db.base import session_scope as _ps
+            from ..db.models import Loan as _PL
+            with _ps() as private_s:
+                pl = _PL(
+                    name=f"Lån för bolagets {label}",
+                    lender="Företagsbanken AB",
+                    principal_amount=Decimal(str(cost)),
+                    start_date=date.today(),
+                    interest_rate=0.06,
+                    binding_type="rörlig",
+                    amortization_monthly=Decimal(str(int(cost / 60))),
+                    notes=(
+                        f"Lånat {cost} kr för att köpa {label} till "
+                        "bolaget. 5 år, 6 % ränta. Eleven betalar privat."
+                    ),
+                    active=True,
+                )
+                private_s.add(pl)
+                private_s.commit()
+            # Pengarna går till bolaget direkt som ägartillskott (inte intäkt)
+            s.add(CompanyTransaction(
+                company_id=c.id,
+                occurred_on=date.today(),
+                kind="income",
+                category="Ägartillskott",
+                description=f"Privat-lån · {label}",
+                amount_excl_vat=Decimal(str(cost)),
+                vat_rate=Decimal("0.0"),
+                vat_amount=Decimal(0),
+            ))
+            s.add(CompanyTransaction(
+                company_id=c.id,
+                occurred_on=date.today(),
+                kind="expense",
+                category="Bas-utrustning" if body.item == "base_equipment" else "Bil",
+                description=f"Köpte {label}",
+                amount_excl_vat=Decimal(str(cost)),
+                vat_rate=Decimal("0.25"),
+                vat_amount=Decimal(str(int(cost * 0.25))),
+            ))
+
+        # Sätt flaggan
+        if body.item == "base_equipment":
+            c.has_base_equipment = True
+            c.base_equipment_purchased_on = date.today()
+        else:
+            c.has_car = True
+            c.car_purchased_on = date.today()
+
+        s.commit()
+
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind=f"biz.{'base_equipment' if body.item == 'base_equipment' else 'car'}_purchased",
+            summary=f"Köpte {label} · {cost} kr · {body.funding_method}",
+            payload={"cost": cost, "funding": body.funding_method},
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "cost": cost, "item": body.item}

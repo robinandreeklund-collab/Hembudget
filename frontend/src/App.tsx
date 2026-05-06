@@ -75,7 +75,7 @@ import { ArbetsformedlingenKlassJobb } from "./v2/ArbetsformedlingenKlassJobb";
 import { LeaderboardV2 } from "./v2/LeaderboardV2";
 import { TeacherSeasonEventsV2 } from "./v2/TeacherSeasonEventsV2";
 import {
-  BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
+  BizOfferter, BizJobb, BizMarknad, BizLeverantorer,
 } from "./v2/biz/BizGameMotorPages";
 import { BizBank } from "./v2/biz/BizBank";
 import { TeacherForetagKlassPage } from "./v2/TeacherForetagKlassPage";
@@ -445,7 +445,8 @@ export default function App() {
           <Route path="/v2/foretag/offerter" element={<BizOfferter />} />
           <Route path="/v2/foretag/jobb" element={<BizJobb />} />
           <Route path="/v2/foretag/marknad" element={<BizMarknad />} />
-          <Route path="/v2/foretag/beslut" element={<BizBeslut />} />
+          {/* /v2/foretag/beslut är ihopslaget i /v2/foretag/tillvaxt */}
+          <Route path="/v2/foretag/beslut" element={<Navigate to="/v2/foretag/tillvaxt" replace />} />
           <Route path="/v2/foretag/leverantorer" element={<BizLeverantorer />} />
           <Route path="/v2/foretag/bank" element={<BizBank />} />
           <Route path="/teacher/v2/foretag-klass" element={<TeacherForetagKlassPage />} />

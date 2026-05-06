@@ -321,13 +321,7 @@ export function BizHub() {
               {pentagon ? `${SEK(pentagon.metrics.kassa)} kr` : "—"}
             </div>
           </Link>
-          <Link to="/v2/foretag/beslut" className="biz-compass-node">
-            <div className="biz-compass-node-eye">Verktyg · biz</div>
-            <div className="biz-compass-node-name">Beslut</div>
-            <div className="biz-compass-node-val">
-              {company.form === "ab" ? "Anställa, försäkring" : "Friskvård, leasing"}
-            </div>
-          </Link>
+          {/* Beslut är ihopslaget i Tillväxt-vyn */}
         </div>
 
         {/* === 5. PEDAGOGIK · "Hur biz & privat hänger ihop" === */}

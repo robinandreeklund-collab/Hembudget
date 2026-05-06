@@ -475,6 +475,7 @@ export type Opportunity = {
   customer_name: string;
   customer_segment: string;
   industry_tag: string | null;
+  requires_car?: boolean;
   market_price: number;
   expected_delivery_days: number;
   deadline_on: string;

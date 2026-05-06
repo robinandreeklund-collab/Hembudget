@@ -272,6 +272,18 @@ export function BizOfferter() {
                         >
                           NY · {(o.customer_segment || "privat").toUpperCase()}
                         </span>
+                        {o.requires_car && (
+                          <span style={{
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontSize: 9, fontWeight: 700, letterSpacing: 1.2,
+                            padding: "2px 6px", borderRadius: 4,
+                            background: "rgba(220,76,43,0.18)",
+                            border: "1px solid rgba(220,76,43,0.4)",
+                            color: "#fda594",
+                          }}>
+                            🚗 KRÄVER BIL
+                          </span>
+                        )}
                         <span
                           style={{
                             fontFamily: "JetBrains Mono, monospace",

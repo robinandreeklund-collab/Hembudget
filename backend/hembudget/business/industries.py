@@ -79,6 +79,13 @@ class Industry:
     seasonality: list[float] = field(default_factory=lambda: JAMN)
     # Equipment-cost · engångskostnad vid företagsstart (kr)
     equipment_cost_init: int = 0
+    # Beskrivning av baspaketet (visas vid bransch-val + i Tillväxt)
+    base_equipment_label: str = ""
+    # Kräver bil för leveranser i kund-segmentet "privat"
+    # och vissa "foretag"-jobb. Lås upp i Tillväxt-vyn.
+    requires_car: bool = False
+    # Bil-kostnad (köpa) · separat från base equipment
+    car_cost: int = 0
     # Kräver lokal · fast hyra varje månad
     requires_lokal: bool = False
     monthly_lokal_cost_baseline: int = 0   # om requires_lokal=True
@@ -110,6 +117,7 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.20,
         seasonality=JAMN,
         equipment_cost_init=15_000,        # bra dator + skärmar
+                base_equipment_label="Bärbar dator (workstation) + 2 skärmar + dev-licenser",
         requires_lokal=False,
         pipeline_per_week_baseline=2.0,
         min_city_size="any",
@@ -137,6 +145,7 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.10,
         seasonality=JAMN,
         equipment_cost_init=22_000,        # Mac + Adobe-licenser första året
+                base_equipment_label="Macbook + Adobe Creative Suite-licens 1 år + ritplatta + extern skärm",
         requires_lokal=False,
         pipeline_per_week_baseline=1.8,
         min_city_size="any",
@@ -164,6 +173,9 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.05,
         seasonality=SOMMAR_TOPP,
         equipment_cost_init=45_000,        # Verktyg + transport
+                base_equipment_label="Verktygskit (såg, borr, hyvel, fräs, mätutrustning) + skyddsutrustning",
+        requires_car=True,
+        car_cost=80000,
         requires_lokal=True,
         monthly_lokal_cost_baseline=2_500,  # mindre förråd
         pipeline_per_week_baseline=1.5,
@@ -192,6 +204,9 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.15,
         seasonality=VINTER_TOPP,
         equipment_cost_init=55_000,
+                base_equipment_label="VVS-verktygskit (böjverktyg, lödutrustning, läcksök) + skyddsutrustning",
+        requires_car=True,
+        car_cost=95000,
         requires_lokal=True,
         monthly_lokal_cost_baseline=3_500,
         pipeline_per_week_baseline=2.5,    # Akut-uppdrag = hög
@@ -220,6 +235,9 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.15,
         seasonality=JAMN,
         equipment_cost_init=40_000,
+                base_equipment_label="Elektriker-verktyg + multimeter + isoleringsmätare + säkerhetsutrustning",
+        requires_car=True,
+        car_cost=80000,
         requires_lokal=True,
         monthly_lokal_cost_baseline=2_800,
         pipeline_per_week_baseline=2.0,
@@ -248,6 +266,7 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.0,
         seasonality=JAMN,
         equipment_cost_init=35_000,        # Stol, speglar, första lager
+                base_equipment_label="Salongstol + speglar + saxsortiment + hårdfön + första produktlager",
         requires_lokal=True,
         monthly_lokal_cost_baseline=8_000,  # Innerstadslokal är dyr
         pipeline_per_week_baseline=20.0,   # Många små jobb
@@ -276,6 +295,7 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.05,
         seasonality=JAN_TOPP,           # Nyår-resolutions
         equipment_cost_init=8_000,         # Webbkamera + ljud + plattform
+                base_equipment_label="Bärbar dator + webkamera + ljudutrustning + onboarding-material",
         requires_lokal=False,
         pipeline_per_week_baseline=1.2,
         min_city_size="any",
@@ -303,6 +323,7 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.0,
         seasonality=JAN_TOPP,
         equipment_cost_init=12_000,
+                base_equipment_label="PT-certifiering + bas-träningsutrustning + uniform + första kunder-paket",
         requires_lokal=False,           # Använder gym-lokal
         pipeline_per_week_baseline=2.5,
         min_city_size="medium",
@@ -330,6 +351,9 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.05,
         seasonality=SOMMAR_HOST,
         equipment_cost_init=80_000,        # Kamera + objektiv + ljus
+                base_equipment_label="DSLR-kamera + 2 objektiv + ljusutrustning + redigerings-PC",
+        requires_car=True,
+        car_cost=60000,
         requires_lokal=False,
         pipeline_per_week_baseline=1.5,
         min_city_size="medium",
@@ -357,6 +381,9 @@ INDUSTRIES: dict[IndustryKey, Industry] = {
         segment_mix_kommun=0.15,
         seasonality=HELG_TOPP,
         equipment_cost_init=65_000,        # Kök-utrustning
+                base_equipment_label="Kök-utrustning (ugn, spis, kylar) + serveringskärl + transportlådor",
+        requires_car=True,
+        car_cost=110000,
         requires_lokal=True,
         monthly_lokal_cost_baseline=12_000, # Kommersiellt kök
         pipeline_per_week_baseline=1.8,
