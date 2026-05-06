@@ -94,7 +94,7 @@ export function BizTillvaxt() {
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"location" | "equipment" | "loans" | "decisions">("location");
+  const [tab, setTab] = useState<"location" | "equipment" | "loans" | "decisions" | "marketing">("location");
   const [showLoanApply, setShowLoanApply] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
 
@@ -208,6 +208,7 @@ export function BizTillvaxt() {
         <TabBtn active={tab === "location"} onClick={() => setTab("location")}>Lokaler</TabBtn>
         <TabBtn active={tab === "equipment"} onClick={() => setTab("equipment")}>Utrustning</TabBtn>
         <TabBtn active={tab === "decisions"} onClick={() => setTab("decisions")}>Beslut & Drift</TabBtn>
+        <TabBtn active={tab === "marketing"} onClick={() => setTab("marketing")}>Marknadsföring</TabBtn>
         <TabBtn active={tab === "loans"} onClick={() => setTab("loans")}>Lån</TabBtn>
       </div>
 
@@ -232,6 +233,11 @@ export function BizTillvaxt() {
       {/* Beslut & Drift · anställa, försäkring, leasing, friskvård */}
       {tab === "decisions" && (
         <DecisionsTab />
+      )}
+
+      {/* Marknadsföring · 10 paket-nivåer (lokaltidning → TV) */}
+      {tab === "marketing" && (
+        <MarketingTab kassa={overview.kassa} onBought={refresh} />
       )}
 
       {/* Lån */}
@@ -886,6 +892,186 @@ function DecisionsTab() {
             <button onClick={() => add(p)} disabled={busy} style={btnPrimary}>Aktivera</button>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+
+// === Marknadsföring · 10 paket-nivåer (lokaltidning → TV) ===
+
+type MarketingPackage = {
+  key: string;
+  level: number;
+  title: string;
+  channel: string;
+  cost: number;
+  duration_weeks: number;
+  pipeline_boost: number;
+  reputation_bump: number;
+  description: string;
+};
+
+type ActiveMarketing = {
+  id: number;
+  kind: string;
+  title: string;
+  cost: number;
+  duration_weeks: number;
+  ai_feedback: string | null;
+  started_on: string;
+  ends_on: string;
+  active: boolean;
+};
+
+function MarketingTab({ kassa, onBought }: { kassa: number; onBought: () => void }) {
+  const [packages, setPackages] = useState<MarketingPackage[]>([]);
+  const [active, setActive] = useState<ActiveMarketing[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  function refresh() {
+    Promise.all([
+      api<MarketingPackage[]>("/v2/foretag/marketing/packages"),
+      api<ActiveMarketing[]>("/v2/foretag/marketing?only_active=true"),
+    ])
+      .then(([p, a]) => { setPackages(p); setActive(a); })
+      .catch(() => undefined);
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function buy(pkg: MarketingPackage) {
+    if (kassa < pkg.cost) {
+      if (!confirm(
+        `Otillräcklig kassa (saknas ${SEK(pkg.cost - kassa)} kr). ` +
+        `Detta blir en negativ post på företagskontot. Fortsätta?`
+      )) return;
+    } else if (!confirm(
+      `Köpa "${pkg.title}" för ${SEK(pkg.cost)} kr?\n\n` +
+      `Pipeline-boost: ${pkg.pipeline_boost.toFixed(2)}× i ${pkg.duration_weeks} v\n` +
+      `Rykte: +${pkg.reputation_bump} omedelbart`
+    )) return;
+
+    setBusy(pkg.key);
+    try {
+      await api("/v2/foretag/marketing/packages/buy", {
+        method: "POST",
+        body: JSON.stringify({ key: pkg.key }),
+      });
+      refresh();
+      onBought();
+    } catch (e) { alert(`Fel: ${(e as Error).message || e}`); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <div>
+      <div style={{
+        padding: 14,
+        background: "rgba(99,102,241,0.06)",
+        border: "1px solid rgba(99,102,241,0.25)",
+        borderRadius: 8,
+        marginBottom: 18,
+        color: "rgba(255,255,255,0.78)",
+        fontFamily: "Source Serif 4, Georgia, serif",
+        fontSize: 13.5,
+        lineHeight: 1.6,
+      }}>
+        <strong style={{ color: "#c7d2fe" }}>Hur paketen påverkar dig:</strong>
+        {" "}Pipeline-boost ökar chansen att vinna offerter (kundförfrågningar). Rykte
+        höjs omedelbart och ger dig ett försteg framöver. Större paket = bredare räckvidd =
+        högre pris. Välj realistiskt — pengarna måste in från jobben.
+      </div>
+
+      {active.filter((a) => a.kind === "paket").length > 0 && (
+        <>
+          <div style={sectionEyeStyle}>● AKTIVA PAKET</div>
+          <div style={{ display: "grid", gap: 8, marginTop: 10, marginBottom: 22 }}>
+            {active.filter((a) => a.kind === "paket").map((m) => (
+              <div key={m.id} style={{
+                padding: "12px 16px",
+                background: "rgba(110,231,183,0.04)",
+                border: "1px solid rgba(110,231,183,0.25)",
+                borderRadius: 8,
+              }}>
+                <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                  <span style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 15, fontWeight: 700, color: "#fff" }}>
+                    {m.title}
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.55)" }}>
+                    t.o.m. {m.ends_on}
+                  </span>
+                </div>
+                {m.ai_feedback && (
+                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>
+                    {m.ai_feedback}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div style={sectionEyeStyle}>● MARKNADSFÖRINGS-PAKET · 10 NIVÅER</div>
+      <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+        {packages.map((p) => {
+          const affordable = kassa >= p.cost;
+          return (
+            <div key={p.key} style={{
+              ...cardStyle,
+              borderColor: affordable ? "rgba(255,255,255,0.10)" : "rgba(220,76,43,0.25)",
+              opacity: 1,
+            }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                <span style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+                  color: "#c7d2fe",
+                  background: "rgba(99,102,241,0.18)",
+                  padding: "3px 8px", borderRadius: 4,
+                }}>
+                  NIVÅ {p.level}
+                </span>
+                <span style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 16, fontWeight: 700, color: "#fff" }}>
+                  {p.title}
+                </span>
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.5)" }}>
+                  · {p.channel}
+                </span>
+                <span style={{ flex: 1 }} />
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "#fbbf24", fontWeight: 700 }}>
+                  {SEK(p.cost)} kr
+                </span>
+              </div>
+              <p style={{ color: "rgba(255,255,255,0.72)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, margin: "8px 0", lineHeight: 1.5 }}>
+                {p.description}
+              </p>
+              <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 6 }}>
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "#6ee7b7", letterSpacing: 0.6 }}>
+                  PIPELINE × {p.pipeline_boost.toFixed(2)}
+                </span>
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "#fbbf24", letterSpacing: 0.6 }}>
+                  RYKTE +{p.reputation_bump}
+                </span>
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: 0.6 }}>
+                  · {p.duration_weeks} v
+                </span>
+                <span style={{ flex: 1 }} />
+                <button
+                  onClick={() => buy(p)}
+                  disabled={busy !== null}
+                  style={{
+                    ...btnPrimary,
+                    opacity: busy === p.key ? 0.6 : 1,
+                  }}
+                >
+                  {busy === p.key ? "Köper…" : "Köp paket →"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

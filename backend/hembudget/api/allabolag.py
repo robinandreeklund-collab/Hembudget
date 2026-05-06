@@ -346,49 +346,60 @@ def list_class_companies(info: TokenInfo = Depends(require_token)):
 
     # Sortera: vinstmarginal desc, omsättning desc som tiebreak
     visible.sort(
-        key=lambda r: (-r.margin_pct, -r.revenue_4w),
+        key=lambda r: (
+            -(getattr(r, "margin_pct", 0.0) or 0.0),
+            -(getattr(r, "revenue_4w", 0) or 0),
+        ),
     )
 
-    out_rows = [
-        AllabolagRow(
+    # Defensiv läsning: om en migration inte kört på prod kan ett fält
+    # vara None/saknas. getattr+default skyddar mot 500 så Allabolag visas
+    # även med ofullständig schema (dvs. nya kolumner ofyllda).
+    def _row(r: ClassCompanyShare) -> AllabolagRow:
+        ar_decided = getattr(r, "annual_report_decided_at", None)
+        last_synced = getattr(r, "last_synced_at", None)
+        return AllabolagRow(
             company_id_in_scope=r.company_id_in_scope,
             company_name=r.company_name,
             industry_label=r.industry_label,
             industry_key=r.industry_key,
-            city_key=r.city_key,
+            city_key=getattr(r, "city_key", None),
             form=r.form,
             started_on=r.started_on.isoformat() if r.started_on else None,
-            week_no=r.week_no,
-            revenue_4w=r.revenue_4w,
-            profit_4w=r.profit_4w,
-            margin_pct=r.margin_pct,
-            kassa=r.kassa,
-            n_employees=r.n_employees,
-            n_invoices_open=r.n_invoices_open,
-            n_invoices_overdue=r.n_invoices_overdue,
-            reputation=r.reputation,
-            annual_report_status=r.annual_report_status,
-            annual_report_year=r.annual_report_year,
+            week_no=getattr(r, "week_no", 0) or 0,
+            revenue_4w=getattr(r, "revenue_4w", 0) or 0,
+            profit_4w=getattr(r, "profit_4w", 0) or 0,
+            margin_pct=getattr(r, "margin_pct", 0.0) or 0.0,
+            kassa=getattr(r, "kassa", 0) or 0,
+            n_employees=getattr(r, "n_employees", 0) or 0,
+            n_invoices_open=getattr(r, "n_invoices_open", 0) or 0,
+            n_invoices_overdue=getattr(r, "n_invoices_overdue", 0) or 0,
+            reputation=getattr(r, "reputation", 50) or 50,
+            annual_report_status=getattr(
+                r, "annual_report_status", "not_due",
+            ) or "not_due",
+            annual_report_year=getattr(r, "annual_report_year", None),
             annual_report_decided_at=(
-                r.annual_report_decided_at.isoformat()
-                if r.annual_report_decided_at else None
+                ar_decided.isoformat() if ar_decided else None
             ),
-            uc_score=r.uc_score,
-            uc_rating=r.uc_rating,
-            company_level=r.company_level,
+            uc_score=getattr(r, "uc_score", 50) or 50,
+            uc_rating=getattr(r, "uc_rating", "B") or "B",
+            company_level=getattr(r, "company_level", "startup") or "startup",
             is_mine=(r.owner_student_id == my_student_id),
-            is_published=r.is_published,
+            is_published=getattr(r, "is_published", True),
             owner_display_name=name_map.get(r.owner_student_id),
-            last_synced_at=r.last_synced_at.isoformat(),
+            last_synced_at=(
+                last_synced.isoformat() if last_synced
+                else datetime.utcnow().isoformat()
+            ),
         )
-        for r in visible
-    ]
+    out_rows = [_row(r) for r in visible]
     return AllabolagListOut(
         rows=out_rows,
         class_total_revenue_4w=sum(r.revenue_4w for r in out_rows),
         class_total_profit_4w=sum(r.profit_4w for r in out_rows),
         n_companies=len(rows),
-        n_published=sum(1 for r in rows if r.is_published),
+        n_published=sum(1 for r in rows if getattr(r, "is_published", True)),
     )
 
 

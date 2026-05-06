@@ -548,6 +548,246 @@ def create_marketing(
         return _to_marketing_out(m)
 
 
+# === Marknadsförings-paket (10 nivåer · lokaltidning → TV) ===
+#
+# Pedagogisk koppling: eleven ser DIREKT hur högre rykte ökar chansen
+# i kundförfrågningar (acceptance_model.py · reputation_term + marketing
+# _term). Realistiska svenska annonspriser så jämförelsen mot omsättning
+# ger en konkret känsla för marknadsförings-ROI.
+
+MARKETING_PACKAGES: list[dict] = [
+    {
+        "key": "lokaltidning",
+        "level": 1,
+        "title": "Lokaltidning · annons",
+        "channel": "Print · lokal",
+        "cost": 3500,
+        "duration_weeks": 2,
+        "pipeline_boost": 1.05,
+        "reputation_bump": 1,
+        "description": (
+            "Helsida i lokaltidningen (t.ex. Mariestads-Tidningen). "
+            "Bas-paketet · liten räckvidd, men målgruppen läser noggrant."
+        ),
+    },
+    {
+        "key": "stads_facebook",
+        "level": 2,
+        "title": "Stadens Facebook-grupp",
+        "channel": "Social · lokal",
+        "cost": 1500,
+        "duration_weeks": 2,
+        "pipeline_boost": 1.04,
+        "reputation_bump": 1,
+        "description": (
+            "Sponsrat inlägg i ortens Facebook-grupp. Billigt + virtuellt "
+            "när folk taggar grannar."
+        ),
+    },
+    {
+        "key": "flygblad",
+        "level": 3,
+        "title": "Flygblad · 1 000 hushåll",
+        "channel": "Print · direktreklam",
+        "cost": 6500,
+        "duration_weeks": 1,
+        "pipeline_boost": 1.08,
+        "reputation_bump": 1,
+        "description": (
+            "Distribution till 1 000 hushåll i ditt postnummer. "
+            "Hög träffsäkerhet på lokal kundbas."
+        ),
+    },
+    {
+        "key": "google_lokal",
+        "level": 4,
+        "title": "Google Ads · lokala sökningar",
+        "channel": "Sök · lokal",
+        "cost": 12000,
+        "duration_weeks": 4,
+        "pipeline_boost": 1.15,
+        "reputation_bump": 2,
+        "description": (
+            "Sökord som \"snickare Mariestad\" + Google Maps-pin. "
+            "Folk som söker har KÖPINTRESSE — bästa ROI för småföretag."
+        ),
+    },
+    {
+        "key": "veckotidning",
+        "level": 5,
+        "title": "Veckotidning · regional helsida",
+        "channel": "Print · regional",
+        "cost": 18000,
+        "duration_weeks": 3,
+        "pipeline_boost": 1.18,
+        "reputation_bump": 2,
+        "description": (
+            "Helsida i regional veckotidning (t.ex. Land, Hemmets Journal). "
+            "Bredare målgrupp, mer status."
+        ),
+    },
+    {
+        "key": "radio_regional",
+        "level": 6,
+        "title": "Radio · regional reklam",
+        "channel": "Radio · regional",
+        "cost": 35000,
+        "duration_weeks": 4,
+        "pipeline_boost": 1.25,
+        "reputation_bump": 4,
+        "description": (
+            "30-sekundersspots på regional radiostation. Hörs i bilen "
+            "morgon + kväll · höjer top-of-mind."
+        ),
+    },
+    {
+        "key": "sponsring_idrott",
+        "level": 7,
+        "title": "Sponsring · idrottsförening",
+        "channel": "Brand · sponsring",
+        "cost": 50000,
+        "duration_weeks": 12,
+        "pipeline_boost": 1.20,
+        "reputation_bump": 6,
+        "description": (
+            "Logo på matchtröjor + skylt på arena. Lägre direkt-ROI men "
+            "STARK rykteseffekt — bygger varumärke och lokal goodwill."
+        ),
+    },
+    {
+        "key": "storstadstidning",
+        "level": 8,
+        "title": "Storstadstidning · halvsida",
+        "channel": "Print · riks",
+        "cost": 120000,
+        "duration_weeks": 4,
+        "pipeline_boost": 1.40,
+        "reputation_bump": 5,
+        "description": (
+            "Halvsida i Aftonbladet eller Dagens Nyheter. Räckvidd över "
+            "hela Sverige · seriöst varumärke."
+        ),
+    },
+    {
+        "key": "radio_riks",
+        "level": 9,
+        "title": "Radio · riksspelning",
+        "channel": "Radio · riks",
+        "cost": 250000,
+        "duration_weeks": 6,
+        "pipeline_boost": 1.55,
+        "reputation_bump": 8,
+        "description": (
+            "Kampanj i P3 + P4 nationellt. Massiv räckvidd · folk känner "
+            "igen ditt företag i hela landet."
+        ),
+    },
+    {
+        "key": "tv_reklam",
+        "level": 10,
+        "title": "TV-reklam · TV4 / Kanal 5 primetime",
+        "channel": "TV · riks",
+        "cost": 750000,
+        "duration_weeks": 4,
+        "pipeline_boost": 1.80,
+        "reputation_bump": 12,
+        "description": (
+            "30-sekundersspots primetime. Det dyraste men starkaste "
+            "marknadsverktyget. Förvandlar lokalt företag till nationellt."
+        ),
+    },
+]
+
+
+class MarketingPackageOut(BaseModel):
+    key: str
+    level: int
+    title: str
+    channel: str
+    cost: int
+    duration_weeks: int
+    pipeline_boost: float
+    reputation_bump: int
+    description: str
+
+
+class BuyPackageIn(BaseModel):
+    key: str = Field(..., min_length=1, max_length=40)
+
+
+@router.get(
+    "/marketing/packages", response_model=list[MarketingPackageOut],
+)
+def list_marketing_packages(info: TokenInfo = Depends(require_token)):
+    """10-nivåers paketkatalog · lokaltidning → TV."""
+    _require_student(info)
+    return [MarketingPackageOut(**p) for p in MARKETING_PACKAGES]
+
+
+@router.post("/marketing/packages/buy", response_model=MarketingOut)
+def buy_marketing_package(
+    body: BuyPackageIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Köp ett marknadsförings-paket. Bokför kostnaden, skapar
+    MarketingCampaign med tier-baserad pipeline_boost, och bumpar rykte
+    omedelbart med paketets reputation_bump."""
+    _require_student(info)
+    pkg = next((p for p in MARKETING_PACKAGES if p["key"] == body.key), None)
+    if pkg is None:
+        raise HTTPException(404, "Paketet finns inte")
+
+    today = date.today()
+    with session_scope() as s:
+        co = _get_active_company(s)
+
+        # Räcker pengarna? Vi har inte direkt tillgång till företagets
+        # kassa här — låter MarketingCampaign + transaktion gå igenom så
+        # ger eleven feedback via auto-tick (övertrasering syns på
+        # kontoutdraget). Pedagogiskt: konsekvensen får eleven se i
+        # bokföringen, inte som hård spärr.
+
+        m = MarketingCampaign(
+            company_id=co.id,
+            kind="paket",  # nytt kind-värde · tier-paket
+            title=pkg["title"],
+            copy_text=None,
+            cost=pkg["cost"],
+            duration_weeks=pkg["duration_weeks"],
+            ai_quality_factor=None,
+            ai_feedback=(
+                f"Paketköp · {pkg['channel']}. "
+                f"Pipeline-boost {pkg['pipeline_boost']:.2f}x · "
+                f"rykte +{pkg['reputation_bump']}."
+            ),
+            base_pipeline_boost=Decimal(str(pkg["pipeline_boost"])),
+            started_on=today,
+            ends_on=today + timedelta(weeks=pkg["duration_weeks"]),
+            active=True,
+        )
+        s.add(m)
+
+        # Bokför hela paket-kostnaden direkt (engångsutlägg)
+        from ..business.models import CompanyTransaction as _Tx
+        s.add(_Tx(
+            company_id=co.id,
+            occurred_on=today,
+            kind="expense",
+            category="marknadsforing",
+            description=f"Marknadsföringspaket · {pkg['title']}",
+            amount_excl_vat=Decimal(str(pkg["cost"])),
+            vat_rate=Decimal("0.25"),
+            vat_amount=Decimal(str(int(round(pkg["cost"] * 0.25)))),
+        ))
+
+        # Bumpa rykte omedelbart · klamras till 0..100
+        new_rep = min(100, max(0, int(co.reputation or 50) + int(pkg["reputation_bump"])))
+        co.reputation = new_rep
+
+        s.flush()
+        return _to_marketing_out(m)
+
+
 # === Schemas: Decision ===
 
 

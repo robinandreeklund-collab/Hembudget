@@ -241,15 +241,25 @@ function CreateAdModal({ onClose }: { onClose: (refreshed: boolean) => void }) {
   const [err, setErr] = useState<string | null>(null);
 
   async function submit() {
+    const t = title.trim();
+    const d = description.trim();
+    const s = parseInt(salary, 10);
+    if (t.length < 3) { setErr("Titeln måste vara minst 3 tecken."); return; }
+    if (d.length < 10) {
+      setErr("Beskriv jobbet med minst 10 tecken så klasskompisar förstår."); return;
+    }
+    if (!Number.isFinite(s) || s < 5000 || s > 200000) {
+      setErr("Månadslön måste vara mellan 5 000 och 200 000 kr."); return;
+    }
     setSubmitting(true);
     setErr(null);
     try {
       await api("/v2/foretag/job-ads", {
         method: "POST",
         body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          monthly_salary: parseInt(salary, 10),
+          title: t,
+          description: d,
+          monthly_salary: s,
         }),
       });
       onClose(true);

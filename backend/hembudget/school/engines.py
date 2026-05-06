@@ -607,6 +607,57 @@ def _run_master_migrations(engine: Engine) -> None:
             "consecutive_overload_weeks INTEGER NOT NULL DEFAULT 0",
         )
 
+    # === ClassCompanyShare · Allabolag-aggregat-cache ===
+    # Nya kolumner har lagts till i flera omgångar (Fas B: bolagsverket-
+    # status; Fas G: UC + nivå-progression). create_all skapar BARA NYA
+    # tabeller — så befintlig prod-Postgres saknar de nya kolumnerna →
+    # 'column does not exist' när /v2/allabolag SELECT:ar ClassCompanyShare.
+    ccs_cols = _cols("class_company_shares")
+    if ccs_cols:
+        ccs_columns = [
+            # Fas B · Bolagsverket / årsredovisning
+            ("annual_report_status",
+                "annual_report_status VARCHAR(20) NOT NULL DEFAULT 'not_due'"),
+            ("annual_report_year", "annual_report_year INTEGER"),
+            ("annual_report_decided_at", "annual_report_decided_at DATETIME"),
+            # Fas G · företags-UC + nivå-progression
+            ("uc_score", "uc_score INTEGER NOT NULL DEFAULT 50"),
+            ("uc_rating", "uc_rating VARCHAR(4) NOT NULL DEFAULT 'B'"),
+            ("company_level",
+                "company_level VARCHAR(20) NOT NULL DEFAULT 'startup'"),
+            ("level_unlocked_at", "level_unlocked_at DATETIME"),
+            # Aggregat (kan ha lagts till efter initial deploy)
+            ("n_employees", "n_employees INTEGER NOT NULL DEFAULT 0"),
+            ("n_invoices_open", "n_invoices_open INTEGER NOT NULL DEFAULT 0"),
+            ("n_invoices_overdue",
+                "n_invoices_overdue INTEGER NOT NULL DEFAULT 0"),
+            ("reputation", "reputation INTEGER NOT NULL DEFAULT 50"),
+            ("week_no", "week_no INTEGER NOT NULL DEFAULT 0"),
+            ("margin_pct",
+                "margin_pct " + (
+                    "DOUBLE PRECISION" if is_postgres else "FLOAT"
+                ) + " NOT NULL DEFAULT 0"),
+            ("kassa", "kassa INTEGER NOT NULL DEFAULT 0"),
+            ("revenue_4w", "revenue_4w INTEGER NOT NULL DEFAULT 0"),
+            ("profit_4w", "profit_4w INTEGER NOT NULL DEFAULT 0"),
+            ("is_published",
+                "is_published BOOLEAN NOT NULL DEFAULT 1"),
+            ("class_label", "class_label VARCHAR(60)"),
+            ("city_key", "city_key VARCHAR(40)"),
+        ]
+        for col_name, col_sql in ccs_columns:
+            if col_name not in ccs_cols:
+                _add("class_company_shares", col_sql)
+
+    # === Auto-migration · saknade NULLABLE-kolumner i master-DB ===
+    # Säkerhetsnät: jämför varje master-tabell mot SQLAlchemy-modellens
+    # kolumner. Saknas en NULLABLE-kolumn i DB:n → ADD COLUMN automatiskt.
+    # NOT NULL kräver explicit migration ovan med säker DEFAULT.
+    try:
+        _master_auto_add_nullable_columns(engine)
+    except Exception:
+        _log.exception("master auto-migration misslyckades")
+
     # === FK · v2_onboarding_events.student_id → students.id ON DELETE CASCADE.
     # Tabellen skapades utan ondelete=CASCADE, så befintlig FK-constraint
     # i Postgres blockerar DELETE på Student när det finns onboarding-events
@@ -653,6 +704,97 @@ def _run_master_migrations(engine: Engine) -> None:
                 "migration: kunde inte uppdatera "
                 "v2_onboarding_events FK till CASCADE",
             )
+
+
+def _master_auto_add_nullable_columns(engine: Engine) -> None:
+    """Auto-migration för saknade nullable-kolumner i master-DB-tabeller.
+
+    Speglar `db/migrate.py::_auto_add_nullable_columns` men för MasterBase
+    istället för Base (TenantMixin). Säkert att köra varje uppstart —
+    bara nullable-kolumner läggs till. NOT NULL kräver explicit migration
+    ovan med säker DEFAULT.
+
+    Detta är ett säkerhetsnät så framtida MasterBase-utbyggnader inte
+    kraschar prod om man glömmer lägga till explicit ALTER ovan.
+    """
+    from sqlalchemy import inspect as _inspect, text as _text
+    from .models import MasterBase
+
+    is_postgres = engine.dialect.name == "postgresql"
+    inspector = _inspect(engine)
+    log_ = logging.getLogger(__name__)
+
+    def _table_exists(name: str) -> bool:
+        try:
+            return inspector.has_table(name)
+        except Exception:
+            return False
+
+    def _existing_cols(name: str) -> set[str]:
+        try:
+            return {c["name"] for c in inspector.get_columns(name)}
+        except Exception:
+            return set()
+
+    for table in MasterBase.metadata.sorted_tables:
+        if not _table_exists(table.name):
+            continue
+        existing = _existing_cols(table.name)
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            if column.primary_key:
+                continue
+            if not column.nullable:
+                if column.default is None and column.server_default is None:
+                    log_.warning(
+                        "master auto-migration: skippar %s.%s "
+                        "(NOT NULL utan DEFAULT — kräver explicit migration)",
+                        table.name, column.name,
+                    )
+                    continue
+            col_type = column.type.compile(dialect=engine.dialect)
+            null_clause = "" if column.nullable else " NOT NULL"
+            default_clause = ""
+            if column.server_default is not None:
+                try:
+                    default_clause = (
+                        f" DEFAULT {column.server_default.arg}"
+                    )
+                except Exception:
+                    default_clause = ""
+            elif column.default is not None and column.default.is_scalar:
+                v = column.default.arg
+                if isinstance(v, bool):
+                    default_clause = (
+                        f" DEFAULT {'TRUE' if v else 'FALSE'}"
+                        if is_postgres else f" DEFAULT {1 if v else 0}"
+                    )
+                elif isinstance(v, (int, float)):
+                    default_clause = f" DEFAULT {v}"
+                elif isinstance(v, str):
+                    default_clause = f" DEFAULT '{v}'"
+            col_sql = (
+                f"{column.name} {col_type}{default_clause}{null_clause}"
+            )
+            stmt = f"ALTER TABLE {table.name} ADD COLUMN {col_sql}"
+            try:
+                with engine.begin() as conn:
+                    conn.execute(_text(stmt))
+                log_.info(
+                    "master auto-migration: %s.%s tillagd",
+                    table.name, column.name,
+                )
+            except Exception as exc:
+                msg = str(exc).lower()
+                if "already exists" in msg or "duplicate" in msg:
+                    pass
+                else:
+                    log_.exception(
+                        "master auto-migration: kunde inte lägga till "
+                        "%s.%s (SQL: %s)",
+                        table.name, column.name, col_sql,
+                    )
 
 
 @contextmanager

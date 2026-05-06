@@ -46,22 +46,22 @@ def _require_student(info: TokenInfo) -> int:
 
 class JobAdIn(BaseModel):
     title: str = Field(..., min_length=3, max_length=120)
-    description: str = Field(..., min_length=20, max_length=4000)
+    description: str = Field(..., min_length=10, max_length=4000)
     monthly_salary: int = Field(ge=5000, le=200000)
 
 
 class JobAdOut(BaseModel):
     id: int
-    company_name: str
-    industry_label: Optional[str]
-    title: str
-    description: str
-    monthly_salary: int
-    status: str
-    posted_at: str
-    n_applicants: int
-    is_my_company: bool
-    have_i_applied: bool
+    company_name: str = ""
+    industry_label: Optional[str] = None
+    title: str = ""
+    description: str = ""
+    monthly_salary: int = 0
+    status: str = "open"
+    posted_at: str = ""
+    n_applicants: int = 0
+    is_my_company: bool = False
+    have_i_applied: bool = False
     my_application_status: Optional[str] = None
 
 
@@ -165,44 +165,60 @@ def list_my_job_ads(info: TokenInfo = Depends(require_token)):
         ClassCompanyShare, CompanyJobAd, CompanyJobApplication,
     )
 
-    with master_session() as s:
-        ads = (
-            s.query(CompanyJobAd)
-            .filter(CompanyJobAd.posted_by_student_id == student_id)
-            .order_by(CompanyJobAd.posted_at.desc())
-            .all()
-        )
-        if not ads:
-            return []
-        share_ids = list({a.company_share_id for a in ads})
-        shares = (
-            s.query(ClassCompanyShare)
-            .filter(ClassCompanyShare.id.in_(share_ids))
-            .all()
-        )
-        share_map = {sh.id: sh for sh in shares}
-        out = []
-        for ad in ads:
-            n_apps = (
-                s.query(CompanyJobApplication)
-                .filter(CompanyJobApplication.job_ad_id == ad.id)
-                .count()
+    # Defensiv hela vägen: om master_session, query eller en specifik rad
+    # smäller (t.ex. saknad kolumn på prod-Postgres innan migration kört)
+    # vill vi returnera tom lista istället för 500/422 så frontend kan
+    # rendera en användbar tom vy.
+    try:
+        with master_session() as s:
+            ads = (
+                s.query(CompanyJobAd)
+                .filter(CompanyJobAd.posted_by_student_id == student_id)
+                .order_by(CompanyJobAd.posted_at.desc())
+                .all()
             )
-            sh = share_map.get(ad.company_share_id)
-            out.append(JobAdOut(
-                id=ad.id,
-                company_name=sh.company_name if sh else "?",
-                industry_label=sh.industry_label if sh else None,
-                title=ad.title,
-                description=ad.description,
-                monthly_salary=ad.monthly_salary,
-                status=ad.status,
-                posted_at=ad.posted_at.isoformat(),
-                n_applicants=n_apps,
-                is_my_company=True,
-                have_i_applied=False,
-            ))
-        return out
+            if not ads:
+                return []
+            share_ids = list({a.company_share_id for a in ads})
+            shares = (
+                s.query(ClassCompanyShare)
+                .filter(ClassCompanyShare.id.in_(share_ids))
+                .all()
+            )
+            share_map = {sh.id: sh for sh in shares}
+            out = []
+            for ad in ads:
+                try:
+                    n_apps = (
+                        s.query(CompanyJobApplication)
+                        .filter(CompanyJobApplication.job_ad_id == ad.id)
+                        .count()
+                    )
+                except Exception:
+                    n_apps = 0
+                sh = share_map.get(ad.company_share_id)
+                posted = getattr(ad, "posted_at", None)
+                out.append(JobAdOut(
+                    id=ad.id,
+                    company_name=(sh.company_name if sh else "?") or "?",
+                    industry_label=(
+                        getattr(sh, "industry_label", None) if sh else None
+                    ),
+                    title=ad.title or "",
+                    description=ad.description or "",
+                    monthly_salary=int(ad.monthly_salary or 0),
+                    status=ad.status or "open",
+                    posted_at=posted.isoformat() if posted else "",
+                    n_applicants=n_apps,
+                    is_my_company=True,
+                    have_i_applied=False,
+                ))
+            return out
+    except Exception:
+        log.exception(
+            "list_my_job_ads misslyckades — returnerar tom lista",
+        )
+        return []
 
 
 @owner_router.get("/{ad_id}/applications", response_model=list[JobApplicationOut])
