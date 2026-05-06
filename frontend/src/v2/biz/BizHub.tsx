@@ -227,6 +227,13 @@ export function BizHub() {
               Tävla med klasskompisar om <em>samma kund</em>
             </div>
           </Link>
+          <Link to="/v2/foretag/jobbannonser" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · klass</div>
+            <div className="biz-compass-node-name">Anställ klasskompis</div>
+            <div className="biz-compass-node-val">
+              Posta jobb · <em>klass-företag-tagg</em>
+            </div>
+          </Link>
           <Link to="/v2/foretag/offerter" className="biz-compass-node">
             <div className="biz-compass-node-eye">Aktör · biz</div>
             <div className="biz-compass-node-name">Kunder & offerter</div>

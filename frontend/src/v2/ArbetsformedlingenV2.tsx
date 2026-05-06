@@ -124,6 +124,25 @@ export function ArbetsformedlingenV2() {
               {jobsData?.mats_message ||
                 "Mats hjälper dig hitta nytt jobb genom 5 ronder."}
             </p>
+            <Link
+              to="/v2/arbetsformedlingen/klass-jobb"
+              style={{
+                display: "inline-block",
+                marginTop: 12,
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: 1.2,
+                color: "#c7d2fe",
+                textDecoration: "none",
+                background: "rgba(99,102,241,0.12)",
+                border: "1px solid rgba(99,102,241,0.35)",
+                padding: "6px 12px",
+                borderRadius: 6,
+              }}
+            >
+              ● JOBB HOS KLASSKOMPISARS BOLAG →
+            </Link>
           </div>
         </header>
 

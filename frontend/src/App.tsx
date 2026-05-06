@@ -69,6 +69,8 @@ import {
 } from "./v2/biz/BizPages";
 import { BizArsredovisning } from "./v2/biz/BizArsredovisning";
 import { BizSharedOpps } from "./v2/biz/BizSharedOpps";
+import { BizJobAds } from "./v2/biz/BizJobAds";
+import { ArbetsformedlingenKlassJobb } from "./v2/ArbetsformedlingenKlassJobb";
 import {
   BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
 } from "./v2/biz/BizGameMotorPages";
@@ -421,6 +423,10 @@ export default function App() {
           <Route path="/v2/foretag/arsredovisning" element={<BizArsredovisning />} />
           {/* Klass-pool · shared opportunities */}
           <Route path="/v2/foretag/klass-pool" element={<BizSharedOpps />} />
+          {/* Klass-företag jobbannonser (företagsägare) */}
+          <Route path="/v2/foretag/jobbannonser" element={<BizJobAds />} />
+          {/* Klass-företag jobb (arbetssökande elev) */}
+          <Route path="/v2/arbetsformedlingen/klass-jobb" element={<ArbetsformedlingenKlassJobb />} />
           <Route path="/v2/foretag/bokforing" element={<BizBokforing />} />
           <Route path="/v2/foretag/fakturor" element={<BizFakturor />} />
           <Route path="/v2/foretag/lon" element={<BizLon />} />

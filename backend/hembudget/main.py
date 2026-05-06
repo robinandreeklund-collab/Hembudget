@@ -16,13 +16,13 @@ faulthandler.enable()
 
 from .api import (
     admin, ai, ai_admin, allabolag, arbetsformedlingen, auth, backup,
-    balances, bank, boendemarknad, budget, chat, credit, elpris,
-    email_auth, employer, foretag, foretag_annual_report, foretag_engine,
-    funds, game_engine, landing, ledger, loans, modules, reports,
-    scenarios, school, settings_kv, shared_opportunities, smtp_admin,
-    stock_trading, stocks, tax, events, teacher_ai_prompts, teacher_credit,
-    teacher_employer, teacher_stocks, teacher_wellbeing, transactions,
-    transfers, upcoming, upload, utility, v2, wellbeing,
+    balances, bank, boendemarknad, budget, chat, company_jobs, credit,
+    elpris, email_auth, employer, foretag, foretag_annual_report,
+    foretag_engine, funds, game_engine, landing, ledger, loans, modules,
+    reports, scenarios, school, settings_kv, shared_opportunities,
+    smtp_admin, stock_trading, stocks, tax, events, teacher_ai_prompts,
+    teacher_credit, teacher_employer, teacher_stocks, teacher_wellbeing,
+    transactions, transfers, upcoming, upload, utility, v2, wellbeing,
 )
 from .config import settings
 
@@ -274,6 +274,8 @@ def build_app() -> FastAPI:
     app.include_router(allabolag.router)
     app.include_router(foretag_annual_report.router)
     app.include_router(shared_opportunities.router)
+    app.include_router(company_jobs.owner_router)
+    app.include_router(company_jobs.seeker_router)
     app.include_router(wellbeing.router)
     app.include_router(events.router)
     # V2-alias för events-routern. Eleven anropar /v2/events/... från

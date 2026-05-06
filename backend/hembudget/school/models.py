@@ -1462,6 +1462,107 @@ class SharedQuote(MasterBase):
     )
 
 
+class CompanyJobAd(MasterBase):
+    """Jobbannons från ett klass-företag · syns på Arbetsförmedlingen
+    för andra elever att söka.
+
+    Spec: dev/feature-allabolag.md (Fas D)
+
+    Företagsägaren publicerar jobb. Andra elever i samma klass kan söka
+    via /v2/arbetsformedlingen/klass-jobb. Vid anställning skapas en
+    CompanyEmployment-rad och eleven får 'klass-företag · {bolagsnamn}'-
+    badge i sin arbetsmarknad-vy."""
+    __tablename__ = "company_job_ads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_share_id: Mapped[int] = mapped_column(
+        ForeignKey("class_company_shares.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    posted_by_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    monthly_salary: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Status: open | filled | closed
+    status: Mapped[str] = mapped_column(
+        String(20), default="open", nullable=False,
+    )
+    hired_student_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("students.id", ondelete="SET NULL"), nullable=True,
+    )
+    posted_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    filled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+
+class CompanyJobApplication(MasterBase):
+    """Elevs ansökan till en CompanyJobAd."""
+    __tablename__ = "company_job_applications"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_ad_id", "applicant_student_id",
+            name="uq_company_job_app",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_ad_id: Mapped[int] = mapped_column(
+        ForeignKey("company_job_ads.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    applicant_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    cover_letter: Mapped[str] = mapped_column(Text, nullable=False)
+    # Status: pending | accepted | rejected
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False,
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class CompanyEmployment(MasterBase):
+    """Aktiv anställning: en elev jobbar i en annan elevs klass-företag."""
+    __tablename__ = "company_employments"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_share_id", "employee_student_id",
+            name="uq_company_employment",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_share_id: Mapped[int] = mapped_column(
+        ForeignKey("class_company_shares.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    employee_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    monthly_salary: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[date] = mapped_column(
+        Date, server_default=func.current_date(),
+    )
+    ended_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Status: active | terminated
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", nullable=False,
+    )
+
+
 class TeacherAiPrompt(MasterBase):
     """Lärares anpassning av en AI-system-prompt.
 
