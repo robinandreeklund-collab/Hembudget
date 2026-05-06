@@ -304,13 +304,13 @@ export default function App() {
   // istället för den gamla feta dev-bannern. Echo-drawern mountas
   // ALLTID (oavsett path) eftersom topbaren har Echo-knappen och
   // drawern måste vara mountad för att lyssna på 'echo-open'-eventet.
-  // KRITISKT: använd useLocation() (inte window.location.pathname).
-  // Det senare läser bara initialvärdet och uppdateras inte vid
-  // React Router-navigering — vilket gjorde att V1-sidebaren dök
-  // upp på V2-sidor när användaren navigerade dit utan reload.
-  const location = useLocation();
-  const isV2Path = location.pathname.startsWith("/v2/")
-    || location.pathname.startsWith("/teacher/");
+  // V1 är AVVECKLAD · alla autentiserade vyer renderar nu V2-skalet,
+  // även /dashboard, /, catchall och legacy-redirects. Tidigare blixtrade
+  // V1 Sidebar/paper-bg under tiden RoleAwareHomeRedirect hann skicka
+  // eleven till /v2/hub. Vi behåller useLocation() bara för att tvinga
+  // re-render vid path-change så routes hänger med konsekvent.
+  useLocation();
+  const isV2Path = true;
 
   return (
     <GuideProvider>

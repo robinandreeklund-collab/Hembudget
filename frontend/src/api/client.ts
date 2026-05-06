@@ -6,24 +6,62 @@ const AS_STUDENT_KEY = "hembudget_as_student";
 
 export type Role = "teacher" | "student";
 
+// === Auth-storage · localStorage istället för sessionStorage ===
+//
+// sessionStorage är PER FLIK · öppnar eleven en ny flik (eller följer
+// en länk som öppnas i ny flik) försvinner token och fetchen får
+// "Missing bearer token" → 401 → reload → utloggad. Det är samma
+// underliggande orsak till den intermittenta utloggningen användaren
+// rapporterade. localStorage är gemensam för alla flikar på samma
+// origin och persistar även över browser-restart, vilket matchar
+// användarens förväntning ("jag är fortfarande inloggad").
+//
+// Migrations-stöd: läs först från legacy sessionStorage så befintliga
+// elev-sessioner inte tappas vid deploy. Skriv alltid till localStorage.
+
+function readAuthValue(key: string): string | null {
+  // 1. Ny canonical lagring · localStorage
+  const fromLocal = localStorage.getItem(key);
+  if (fromLocal !== null) return fromLocal;
+  // 2. Legacy fallback · läs från sessionStorage och migrera
+  const fromSession = sessionStorage.getItem(key);
+  if (fromSession !== null) {
+    localStorage.setItem(key, fromSession);
+    sessionStorage.removeItem(key);
+    return fromSession;
+  }
+  return null;
+}
+
+function writeAuthValue(key: string, value: string): void {
+  localStorage.setItem(key, value);
+  // Rensa legacy-värdet så inte stale data ligger kvar
+  sessionStorage.removeItem(key);
+}
+
+function clearAuthValue(key: string): void {
+  localStorage.removeItem(key);
+  sessionStorage.removeItem(key);
+}
+
 export function getRole(): Role | null {
-  const v = sessionStorage.getItem(ROLE_KEY);
+  const v = readAuthValue(ROLE_KEY);
   return v === "teacher" || v === "student" ? v : null;
 }
 export function setRole(role: Role): void {
-  sessionStorage.setItem(ROLE_KEY, role);
+  writeAuthValue(ROLE_KEY, role);
 }
 export function clearRole(): void {
-  sessionStorage.removeItem(ROLE_KEY);
+  clearAuthValue(ROLE_KEY);
 }
 
 export function getAsStudent(): number | null {
-  const v = sessionStorage.getItem(AS_STUDENT_KEY);
+  const v = readAuthValue(AS_STUDENT_KEY);
   return v ? parseInt(v, 10) : null;
 }
 export function setAsStudent(id: number | null): void {
-  if (id === null) sessionStorage.removeItem(AS_STUDENT_KEY);
-  else sessionStorage.setItem(AS_STUDENT_KEY, String(id));
+  if (id === null) clearAuthValue(AS_STUDENT_KEY);
+  else writeAuthValue(AS_STUDENT_KEY, String(id));
 }
 
 export function setApiBaseOverride(url: string | null): void {
@@ -36,15 +74,15 @@ export function getApiBaseOverride(): string | null {
 }
 
 export function getToken(): string | null {
-  return sessionStorage.getItem(TOKEN_KEY);
+  return readAuthValue(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
-  sessionStorage.setItem(TOKEN_KEY, token);
+  writeAuthValue(TOKEN_KEY, token);
 }
 
 export function clearToken(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
+  clearAuthValue(TOKEN_KEY);
 }
 
 function apiBase(): string {
