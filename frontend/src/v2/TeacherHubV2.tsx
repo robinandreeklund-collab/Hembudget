@@ -157,6 +157,9 @@ export function TeacherHubV2() {
               <Link to="/teacher/v2/rubrics" className="larare-tb-btn">
                 Rubrics
               </Link>
+              <Link to="/teacher/v2/ai-prompts" className="larare-tb-btn">
+                AI-promptar
+              </Link>
               <Link to="/teacher/v2/roster" className="larare-tb-btn">
                 v2-roster
               </Link>

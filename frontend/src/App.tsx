@@ -60,6 +60,7 @@ import { ArbetsformedlingenV2 } from "./v2/ArbetsformedlingenV2";
 import { TeacherClassesV2 } from "./v2/TeacherClassesV2";
 import { TeacherTimeOnTaskV2 } from "./v2/TeacherTimeOnTaskV2";
 import { TeacherRubricsV2 } from "./v2/TeacherRubricsV2";
+import { TeacherAiPromptsV2 } from "./v2/TeacherAiPromptsV2";
 import { ModuleViewV2 } from "./v2/ModuleViewV2";
 import {
   BizBokforing, BizFakturor, BizLon, BizMoms,
@@ -576,6 +577,11 @@ export default function App() {
           <Route
             path="/teacher/v2/rubrics"
             element={<TeacherRubricsV2 />}
+          />
+          {/* Lärar-AI-laboratorium · /teacher/v2/ai-prompts */}
+          <Route
+            path="/teacher/v2/ai-prompts"
+            element={<TeacherAiPromptsV2 />}
           />
           <Route
             path="/teacher/v2/historik/:studentId"

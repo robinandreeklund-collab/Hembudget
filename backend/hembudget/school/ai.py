@@ -164,6 +164,40 @@ def is_available() -> bool:
     return _get_client() is not None
 
 
+def resolve_prompt(
+    prompt_key: str, *, teacher_id: int | None, default: str,
+) -> str:
+    """Returnera lärarens custom-prompt om en finns + är aktiv,
+    annars default. Idempotent + fail-soft.
+
+    Används av varje AI-anropare för att låta läraren styra hur AI
+    pratar med deras klass. Tom custom_text behandlas som "använd
+    default" (vill man stänga av en feature gör man det via lärar-
+    konto-toggle, inte via tom prompt).
+    """
+    if not teacher_id:
+        return default
+    try:
+        from .engines import master_session
+        from .models import TeacherAiPrompt
+        with master_session() as s:
+            row = (
+                s.query(TeacherAiPrompt)
+                .filter(
+                    TeacherAiPrompt.teacher_id == teacher_id,
+                    TeacherAiPrompt.prompt_key == prompt_key,
+                    TeacherAiPrompt.is_active.is_(True),
+                )
+                .first()
+            )
+            if row and row.custom_text and row.custom_text.strip():
+                return row.custom_text
+    except Exception:
+        log = logging.getLogger(__name__)
+        log.exception("resolve_prompt failed för %s", prompt_key)
+    return default
+
+
 def is_enabled_for_teacher(teacher_id: int) -> bool:
     """Kombinerar klient-tillgänglighet + per-lärarkonfig."""
     if not is_available():
@@ -531,7 +565,11 @@ def generate_feedback_suggestion(
     )
     return _call_claude(
         model=MODEL_HAIKU,
-        system=FEEDBACK_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "teacher_feedback",
+            teacher_id=teacher_id,
+            default=FEEDBACK_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_FEEDBACK,
         use_thinking=False,
@@ -606,7 +644,11 @@ def score_with_rubric(
     )
     return _call_claude_structured(
         model=MODEL_SONNET,
-        system=RUBRIC_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "rubric_grading",
+            teacher_id=teacher_id,
+            default=RUBRIC_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_RUBRIC,
         tool_name="submit_rubric_assessment",
@@ -698,7 +740,11 @@ def answer_chat_message(
             system=[
                 {
                     "type": "text",
-                    "text": CHAT_SYSTEM_PROMPT,
+                    "text": resolve_prompt(
+                        "chat_coach",
+                        teacher_id=teacher_id,
+                        default=CHAT_SYSTEM_PROMPT,
+                    ),
                     "cache_control": {"type": "ephemeral"},
                 },
             ],
@@ -788,20 +834,52 @@ def negotiate_salary_round(
 
     events_summary = "; ".join(recent_events[-3:]) if recent_events else "inga"
 
-    system = NEGOTIATION_SYSTEM_TEMPLATE.format(
-        student_name=student_name,
-        profession=profession,
-        employer=employer,
-        salary=salary,
-        years=max(0, years),
-        agreement_name=agreement_name,
-        pct=avtal_pct,
-        score=satisfaction_score,
-        trend=satisfaction_trend,
-        events_summary=events_summary,
-        round_no=round_no,
-        max_rounds=max_rounds,
+    # Resolva lärarens custom-prompt om en finns · annars default-templaten.
+    # Lärare styr Marias HR-stil per klass via /teacher/v2/ai-prompts.
+    template = resolve_prompt(
+        "negotiation_maria",
+        teacher_id=teacher_id,
+        default=NEGOTIATION_SYSTEM_TEMPLATE,
     )
+    # Fail-soft: om lärarens custom-text saknar någon obligatorisk
+    # f-string-variabel ramlar formattering · då faller vi tillbaka
+    # till default-templaten. Lärare har validerats vid spara att alla
+    # variabler finns men bug i UI:t kan släppa förbi.
+    try:
+        system = template.format(
+            student_name=student_name,
+            profession=profession,
+            employer=employer,
+            salary=salary,
+            years=max(0, years),
+            agreement_name=agreement_name,
+            pct=avtal_pct,
+            score=satisfaction_score,
+            trend=satisfaction_trend,
+            events_summary=events_summary,
+            round_no=round_no,
+            max_rounds=max_rounds,
+        )
+    except (KeyError, IndexError):
+        log = logging.getLogger(__name__)
+        log.warning(
+            "negotiate_salary_round: lärarens custom-prompt saknade "
+            "obligatorisk variabel · fall tillbaka till default",
+        )
+        system = NEGOTIATION_SYSTEM_TEMPLATE.format(
+            student_name=student_name,
+            profession=profession,
+            employer=employer,
+            salary=salary,
+            years=max(0, years),
+            agreement_name=agreement_name,
+            pct=avtal_pct,
+            score=satisfaction_score,
+            trend=satisfaction_trend,
+            events_summary=events_summary,
+            round_no=round_no,
+            max_rounds=max_rounds,
+        )
 
     # Historik som turn-by-turn-meddelanden. Eleven = "user",
     # AI = "assistant". Vi inkluderar bara ronder som faktiskt
@@ -1043,7 +1121,9 @@ def answer_student_question(
     user = f"{context}\n\nElevens fråga:\n{question}"
     return _call_claude(
         model=MODEL_SONNET,
-        system=QA_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "qa_coach", teacher_id=teacher_id, default=QA_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_QA,
         use_thinking=True,
@@ -1118,7 +1198,11 @@ def generate_module_template(
     )
     return _call_claude_structured(
         model=MODEL_SONNET,
-        system=MODULE_GEN_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "module_gen",
+            teacher_id=teacher_id,
+            default=MODULE_GEN_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_MODULE,
         tool_name="submit_module_template",
@@ -1176,7 +1260,11 @@ def generate_student_summary(
 ) -> Optional[AIStructuredResult]:
     return _call_claude_structured(
         model=MODEL_SONNET,
-        system=STUDENT_SUMMARY_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "student_summary",
+            teacher_id=teacher_id,
+            default=STUDENT_SUMMARY_SYSTEM_PROMPT,
+        ),
         user_prompt=context_bundle + "\n\nKör `submit_student_summary`.",
         max_tokens=1200,
         tool_name="submit_student_summary",
@@ -1295,7 +1383,11 @@ def explain_stock_term(
     user = f"Förklara termen: '{term}'"
     return _call_claude(
         model=MODEL_HAIKU,
-        system=STOCK_TERM_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "stock_term_explain",
+            teacher_id=teacher_id,
+            default=STOCK_TERM_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_STOCK_TERM,
         use_thinking=False,
@@ -1340,7 +1432,11 @@ def feedback_on_trade(
     )
     return _call_claude(
         model=MODEL_HAIKU,
-        system=STOCK_TRADE_FEEDBACK_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "stock_trade_feedback",
+            teacher_id=teacher_id,
+            default=STOCK_TRADE_FEEDBACK_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_STOCK_FEEDBACK,
         use_thinking=False,
@@ -1378,7 +1474,11 @@ def evaluate_diversification(
     )
     return _call_claude(
         model=MODEL_HAIKU,
-        system=DIVERSIFICATION_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "diversification",
+            teacher_id=teacher_id,
+            default=DIVERSIFICATION_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_DIVERSIFICATION,
         use_thinking=False,
@@ -1443,7 +1543,11 @@ def monthly_wellbeing_feedback(
     )
     return _call_claude(
         model=MODEL_HAIKU,
-        system=WELLBEING_MONTHLY_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "wellbeing_monthly",
+            teacher_id=teacher_id,
+            default=WELLBEING_MONTHLY_SYSTEM_PROMPT,
+        ),
         user_prompt=prompt,
         max_tokens=MAX_TOKENS_WELLBEING_MONTHLY,
         use_thinking=False,
@@ -1625,7 +1729,11 @@ def evaluate_cover_letter(
     )
     return _call_claude_structured(
         model=MODEL_SONNET,
-        system=COVER_LETTER_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "cover_letter_mats",
+            teacher_id=teacher_id,
+            default=COVER_LETTER_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=900,
         tool_name="submit_cover_letter_evaluation",
@@ -1704,7 +1812,11 @@ def evaluate_interview_answers(
     )
     return _call_claude_structured(
         model=MODEL_SONNET,
-        system=INTERVIEW_ANSWER_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "interview_mats",
+            teacher_id=teacher_id,
+            default=INTERVIEW_ANSWER_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=600,
         tool_name="submit_interview_evaluation",

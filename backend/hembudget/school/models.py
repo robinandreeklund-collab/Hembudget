@@ -1264,6 +1264,51 @@ class StudentActivity(MasterBase):
     )
 
 
+class TeacherAiPrompt(MasterBase):
+    """Lärares anpassning av en AI-system-prompt.
+
+    Varje lärare kan skriva sin egen variant av Marias HR-prompt,
+    Mats Arbetsförmedlings-prompt, pitch-bedömaren osv. Vid
+    AI-anrop letas first lärar-id → custom-text upp via
+    `resolve_prompt(prompt_key, teacher_id, default)`. Saknas rad
+    eller är `is_active=False` används default-prompten från koden.
+
+    `prompt_key` mappar mot konstanter i `school/ai_prompt_registry.py`
+    (en katalog över alla prompts som får anpassas). Inte alla AI-
+    anrop exponeras — tekniska klassificerare (kategori-match,
+    klasskompis-bjudningar) hålls hårdkodade i koden.
+
+    Nivåer: en lärare = en uppsättning prompts. Familje-konton räknas
+    som lärare med is_family_account=True. Super-admin kan i
+    nästa fas publicera mallar som blir tillgängliga för alla lärare.
+    """
+    __tablename__ = "teacher_ai_prompts"
+    __table_args__ = (
+        UniqueConstraint(
+            "teacher_id", "prompt_key", name="uq_teacher_ai_prompt",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    prompt_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    # Lärarens custom-text. Tom sträng tillåten · betyder "stäng av
+    # AI för denna prompt" om is_active=True. Använd hellre is_active
+    # för on/off så att texten kan bevaras mellan av/på-cykler.
+    custom_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # is_active=False → fall tillbaka till default-prompten utan att
+    # läraren behöver radera sin text. Bra för A/B-testning.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
 # Aktie-master-modeller (StockMaster, StockQuote, LatestStockQuote,
 # MarketCalendar) — importeras här så att MasterBase.metadata känner
 # till dem vid create_all.

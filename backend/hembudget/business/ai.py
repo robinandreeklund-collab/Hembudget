@@ -77,9 +77,12 @@ def evaluate_quote_pitch(
             f"Elevens pitch:\n{pitch.strip()}\n\n"
             f"Bedöm pitchens kvalitet (returnera bara JSON)."
         )
+        from ..school.ai import resolve_prompt as _resolve
         result = _call_claude(
             model=MODEL_HAIKU,
-            system=_PITCH_SYSTEM,
+            system=_resolve(
+                "biz_pitch", teacher_id=teacher_id, default=_PITCH_SYSTEM,
+            ),
             user_prompt=user,
             max_tokens=150,
             teacher_id=teacher_id,
@@ -155,9 +158,14 @@ def evaluate_marketing_copy(
             f"Elevens copy:\n{copy_text.strip()}\n\n"
             f"Bedöm copy:n (returnera bara JSON)."
         )
+        from ..school.ai import resolve_prompt as _resolve
         result = _call_claude(
             model=MODEL_HAIKU,
-            system=_MARKETING_SYSTEM,
+            system=_resolve(
+                "biz_marketing",
+                teacher_id=teacher_id,
+                default=_MARKETING_SYSTEM,
+            ),
             user_prompt=user,
             max_tokens=300,
             teacher_id=teacher_id,
@@ -313,9 +321,14 @@ def generate_job_description(
             f"Kund: {customer_name}\n\n"
             f"Skriv jobbeskrivningen som om kunden förklarar vad hen vill ha gjort."
         )
+        from ..school.ai import resolve_prompt as _resolve
         result = _call_claude(
             model=MODEL_HAIKU,
-            system=_JOB_DESC_SYSTEM,
+            system=_resolve(
+                "biz_job_desc",
+                teacher_id=teacher_id,
+                default=_JOB_DESC_SYSTEM,
+            ),
             user_prompt=user,
             max_tokens=200,
             teacher_id=teacher_id,
