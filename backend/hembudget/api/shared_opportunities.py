@@ -144,8 +144,20 @@ def _emit_shared_opportunities_if_due(
         )
         cust = rng.choice(customers)
         tmpl = rng.choice(jobs)
-        # Pris-volatilitet ±10 % runt baspriset
-        price = int(round(tmpl.base_price * (1.0 + rng.uniform(-0.1, 0.1)) / 100) * 100)
+        # Klass-pool · prisboost för att driva engagemang. Kunderna
+        # i klass-poolen är "större" / mer prestigefyllda än vanliga
+        # privat-förfrågningar (en tävlingsmoment där flera bolag
+        # konkurrerar) → 40-60 % över bas-marknadspris. Pedagogiskt:
+        # eleven ser värdet av att lägga tid på pitch och pris-
+        # strategi när jobbet är värt mer än vardagsförfrågan.
+        SHARED_PRICE_BOOST_MIN = 1.40
+        SHARED_PRICE_BOOST_MAX = 1.60
+        price_mult = SHARED_PRICE_BOOST_MIN + rng.random() * (
+            SHARED_PRICE_BOOST_MAX - SHARED_PRICE_BOOST_MIN
+        )
+        # ±5 % vola ovanpå boosten
+        price_mult *= (1.0 + rng.uniform(-0.05, 0.05))
+        price = int(round(tmpl.base_price * price_mult / 100) * 100)
         deadline = now + timedelta(hours=SHARED_DEADLINE_HOURS)
         opp = SharedOpportunity(
             teacher_id=teacher_id,
@@ -277,12 +289,15 @@ def _decide_expired_opportunities(teacher_id: int) -> int:
                             if co is not None:
                                 # Skapa lokal opportunity + quote +
                                 # job så vinnaren ser det i sin
-                                # vanliga jobb-lista
+                                # vanliga jobb-lista. Tagga som
+                                # 'klass-pool' så frontend kan visa
+                                # crown-badge + förklara att det är
+                                # ett tävlingsuppdrag.
                                 local_opp = JobOpportunity(
                                     company_id=co.id,
                                     customer_name=opp.customer_name,
                                     customer_segment=opp.customer_segment,
-                                    title=opp.title,
+                                    title=f"⭐ Klass-pool · {opp.title}",
                                     description=opp.description,
                                     industry_tag=opp.industry_key,
                                     market_price=opp.market_price,
@@ -320,7 +335,7 @@ def _decide_expired_opportunities(teacher_id: int) -> int:
                                     company_id=co.id,
                                     opportunity_id=local_opp.id,
                                     quote_id=local_quote.id,
-                                    title=opp.title,
+                                    title=f"⭐ Klass-pool · {opp.title}",
                                     customer_name=opp.customer_name,
                                     agreed_price=winner.offered_price,
                                     started_on=now.date(),
@@ -331,6 +346,14 @@ def _decide_expired_opportunities(teacher_id: int) -> int:
                                     status="in_progress",
                                 )
                                 scope_s.add(local_job)
+                                # Klass-pool · vinnar-bonus i rykte (+5)
+                                # · publik tävling som höjer varumärket.
+                                # Vanliga vunna offerter ger +1 från
+                                # tick_engine vid leverans; här ger vi
+                                # ett extra premium direkt vid vinst.
+                                co.reputation = min(
+                                    100, int(co.reputation or 50) + 5,
+                                )
                                 scope_s.commit()
             except Exception:
                 log.exception(

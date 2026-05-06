@@ -995,49 +995,17 @@ export function BizJobb() {
           Inga jobb än. Vinn en offert först!
         </p>
       ) : (
-        <table style={tableStyle}>
-          <thead>
-            <tr style={{ color: "#aab", textAlign: "left" }}>
-              <th style={{ padding: "8px 4px" }}>Jobb / Kund</th>
-              <th style={{ padding: "8px 4px", textAlign: "right" }}>Pris</th>
-              <th style={{ padding: "8px 4px" }}>Status</th>
-              <th style={{ padding: "8px 4px" }}>Kvalitet</th>
-              <th style={{ padding: "8px 4px" }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map(j => (
-              <tr key={j.id} style={{ borderBottom: "1px solid rgba(99,102,241,0.08)" }}>
-                <td style={{ padding: "10px 4px" }}>
-                  <div style={{ color: "white", fontWeight: 600 }}>{j.title}</div>
-                  <div style={{ color: "#aab", fontSize: "0.8rem" }}>{j.customer_name}</div>
-                </td>
-                <td style={{ padding: "10px 4px", textAlign: "right", color: "white" }}>
-                  {SEK(j.agreed_price)} kr
-                </td>
-                <td style={{
-                  padding: "10px 4px",
-                  color: STATUS_COLOR[j.status] || "white",
-                }}>
-                  {STATUS_LABEL[j.status] || j.status}
-                </td>
-                <td style={{ padding: "10px 4px", color: "white" }}>
-                  {j.quality_score !== null ? `${j.quality_score}/100` : "—"}
-                </td>
-                <td style={{ padding: "10px 4px", textAlign: "right" }}>
-                  {j.status === "in_progress" && (
-                    <button
-                      onClick={() => setDelivering(j)}
-                      style={btnPrimary}
-                    >
-                      Leverera
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div style={{ display: "grid", gap: 10 }}>
+          {jobs.map(j => (
+            <JobCard
+              key={j.id}
+              job={j}
+              statusLabel={STATUS_LABEL[j.status] || j.status}
+              statusColor={STATUS_COLOR[j.status] || "white"}
+              onDeliver={() => setDelivering(j)}
+            />
+          ))}
+        </div>
       )}
 
       {delivering && (
@@ -1050,6 +1018,143 @@ export function BizJobb() {
         />
       )}
     </BizActorShell>
+  );
+}
+
+
+function JobCard({
+  job, statusLabel, statusColor, onDeliver,
+}: {
+  job: Job;
+  statusLabel: string;
+  statusColor: string;
+  onDeliver: () => void;
+}) {
+  // Live-tick · uppdatera progress var minut så timern syns rörlig.
+  // Servern räknar progress_pct vid läsning, men UI:n vill kännas
+  // levande så vi räknar om lokalt mellan API-anrop.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (job.status !== "in_progress") return;
+    const id = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(id);
+  }, [job.status]);
+
+  const startMs = new Date(job.started_on + "T08:00:00").getTime();
+  const endMs = new Date(job.expected_complete_on + "T17:00:00").getTime();
+  const totalMs = Math.max(1, endMs - startMs);
+  const elapsedMs = Math.max(0, now - startMs);
+  const livePct = job.status === "in_progress"
+    ? Math.min(100, Math.round((elapsedMs / totalMs) * 100))
+    : job.progress_pct;
+  const remainingMs = endMs - now;
+  const days = Math.floor(Math.abs(remainingMs) / 86_400_000);
+  const hours = Math.floor((Math.abs(remainingMs) % 86_400_000) / 3_600_000);
+  const isOverdueLive = job.status === "in_progress" && remainingMs < 0;
+
+  const barColor = isOverdueLive
+    ? "#dc4c2b"
+    : livePct > 85 ? "#fbbf24" : "#6ee7b7";
+
+  return (
+    <div style={{
+      padding: 16,
+      borderRadius: 10,
+      background: job.is_klass_pool
+        ? "linear-gradient(135deg, rgba(251,191,36,0.08), rgba(15,21,37,0.55))"
+        : "rgba(15,21,37,0.55)",
+      border: `1px solid ${
+        job.is_klass_pool
+          ? "rgba(251,191,36,0.35)"
+          : "rgba(99,102,241,0.15)"
+      }`,
+    }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+        {job.is_klass_pool && (
+          <span style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 9, fontWeight: 700, letterSpacing: 1.4,
+            color: "#fbbf24",
+            background: "rgba(251,191,36,0.18)",
+            padding: "3px 8px", borderRadius: 4,
+          }}>⭐ KLASS-POOL</span>
+        )}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 16, fontWeight: 700, color: "#fff" }}>
+            {job.title}
+          </div>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
+            {job.customer_name}
+          </div>
+        </div>
+        <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "#fbbf24", fontWeight: 700 }}>
+          {SEK(job.agreed_price)} kr
+        </span>
+        <span style={{ color: statusColor, fontSize: 11, fontFamily: "JetBrains Mono, monospace", letterSpacing: 1 }}>
+          {statusLabel.toUpperCase()}
+        </span>
+      </div>
+
+      {job.status === "in_progress" && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{
+            display: "flex", gap: 14, fontFamily: "JetBrains Mono, monospace",
+            fontSize: 10, color: "rgba(255,255,255,0.65)", letterSpacing: 0.6,
+            marginBottom: 6,
+          }}>
+            <span>⏱ {job.estimated_hours} h totalt · {job.hours_per_week} h/v</span>
+            <span style={{ color: barColor, fontWeight: 700 }}>
+              {isOverdueLive
+                ? `⚠ FÖRSENAD ${days} d ${hours} h`
+                : `${days} d ${hours} h kvar`}
+            </span>
+            <span style={{ marginLeft: "auto" }}>
+              start {job.started_on} · deadline {job.expected_complete_on}
+            </span>
+          </div>
+          <div style={{
+            height: 8,
+            background: "rgba(255,255,255,0.08)",
+            borderRadius: 100,
+            overflow: "hidden",
+          }}>
+            <div style={{
+              height: "100%",
+              width: `${livePct}%`,
+              background: barColor,
+              transition: "width 0.5s",
+            }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+            <button onClick={onDeliver} style={btnPrimary}>
+              Leverera + skapa kund + faktura →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {job.status !== "in_progress" && (
+        <div style={{
+          marginTop: 12,
+          display: "flex", gap: 14, alignItems: "baseline",
+          fontFamily: "JetBrains Mono, monospace", fontSize: 10,
+          color: "rgba(255,255,255,0.55)",
+        }}>
+          {job.delivered_on && <span>levererat {job.delivered_on}</span>}
+          {job.quality_score !== null && (
+            <span>kvalitet <strong style={{ color: "#fff" }}>{job.quality_score}/100</strong></span>
+          )}
+          {job.invoice_id && (
+            <span>
+              · faktura skapad ·{" "}
+              <a href="/v2/foretag/fakturor" style={{ color: "#fbbf24" }}>
+                öppna /v2/foretag/fakturor →
+              </a>
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1148,24 +1253,34 @@ function DeliverModal({
               marginTop: 16,
             }}>
               <h3 style={{ color: "#6ee7b7", margin: "0 0 8px" }}>
-                Levererat!
+                Levererat ✓
               </h3>
               <p style={{ color: "white", margin: 0, fontSize: "0.9rem" }}>
-                Faktura <strong>{done.invoice_number}</strong> har skickats.
+                Kunden <strong>{job.customer_name}</strong> är upplagd
+                som ny kund i bolaget och faktura{" "}
+                <strong>{done.invoice_number}</strong> är skickad.
               </p>
               <p style={{
                 color: "rgba(255,255,255,0.7)",
                 margin: "8px 0 0", fontSize: "0.85rem",
               }}>
-                Kunden betalar inom 30 dagar (de flesta).
+                Kunden betalar inom 30 dagar. Du kan följa fakturan i{" "}
+                <a href="/v2/foretag/fakturor" style={{ color: "#fbbf24" }}>
+                  /v2/foretag/fakturor
+                </a>.
               </p>
             </div>
-            <button
-              onClick={() => onClose(true)}
-              style={{ ...btnPrimary, marginTop: 16 }}
-            >
-              Klar
-            </button>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <a
+                href="/v2/foretag/fakturor"
+                style={{ ...btnPrimary, textDecoration: "none" }}
+              >
+                Öppna fakturor →
+              </a>
+              <button onClick={() => onClose(true)} style={btnGhost}>
+                Klar
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1909,10 +2024,6 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid rgba(99,102,241,0.3)",
   background: "rgba(15,21,37,0.5)", color: "white",
   fontSize: "0.95rem",
-};
-
-const tableStyle: React.CSSProperties = {
-  width: "100%", borderCollapse: "collapse", fontSize: "0.9rem",
 };
 
 const btnPrimary: React.CSSProperties = {

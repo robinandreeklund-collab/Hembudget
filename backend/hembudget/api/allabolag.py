@@ -321,6 +321,49 @@ def list_class_companies(info: TokenInfo = Depends(require_token)):
     else:
         raise HTTPException(403, "Endast lärare/elever")
 
+    # Self-heal: om eleven har ett aktivt bolag i sin scope-DB men ingen
+    # ClassCompanyShare-rad i master, kör en sync så raden skapas innan
+    # vi listar. Fångar fall där create_company-syncen failade tyst
+    # (rörlig prod-Postgres, master-migration som inte körts än, etc.).
+    if info.role == "student" and my_student_id is not None:
+        try:
+            from ..business.models import Company as _Co
+            from ..db.base import session_scope as _scsc
+            with master_session() as ms_pre:
+                existing_share = (
+                    ms_pre.query(ClassCompanyShare.id)
+                    .filter(
+                        ClassCompanyShare.owner_student_id == my_student_id,
+                    )
+                    .first()
+                )
+            if existing_share is None:
+                with _scsc() as scope_s:
+                    co = (
+                        scope_s.query(_Co)
+                        .filter(_Co.active.is_(True))
+                        .first()
+                    )
+                    if co is not None:
+                        with master_session() as ms_pre2:
+                            stu = ms_pre2.get(Student, my_student_id)
+                            class_label = (
+                                stu.class_label if stu else None
+                            )
+                        sync_class_company_share(
+                            scope_s,
+                            company=co,
+                            teacher_id=teacher_id,
+                            student_id=my_student_id,
+                            class_label=class_label,
+                        )
+        except Exception:
+            log.exception(
+                "list_class_companies: lazy-sync misslyckades för "
+                "student=%s — fortsätter med befintliga rader",
+                my_student_id,
+            )
+
     with master_session() as s:
         rows = (
             s.query(ClassCompanyShare)

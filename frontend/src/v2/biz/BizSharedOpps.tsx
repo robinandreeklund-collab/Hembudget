@@ -75,13 +75,13 @@ export function BizSharedOpps() {
 
   return (
     <BizActorShell
-      pillLabel="Aktör · biz · Klass-pool"
+      pillLabel="Aktör · biz · Klass-pool · ⭐ premium"
       title={
         <>
-          {open.length} <em>öppna förfrågningar</em> · klassen tävlar.
+          {open.length} <em>premium-förfrågningar</em> · klassen tävlar.
         </>
       }
-      subtitle="Alla elever i din bransch får samma kund-förfrågan · AI väljer vinnare vid deadline"
+      subtitle="Klass-pool-uppdrag betalar 40–60 % över marknadspris · vinnaren får +5 rykte direkt + ⭐ klass-pool-badge på jobbet"
       meta={
         <>
           Pågår: <strong>{open.length}</strong>

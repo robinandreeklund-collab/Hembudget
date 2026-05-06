@@ -517,6 +517,13 @@ export type Job = {
   status: string;
   quality_score: number | null;
   invoice_id: number | null;
+  estimated_hours: number;
+  hours_per_week: number;
+  days_remaining: number;
+  days_total: number;
+  progress_pct: number;
+  is_overdue: boolean;
+  is_klass_pool: boolean;
 };
 
 export type MarketingCampaign = {

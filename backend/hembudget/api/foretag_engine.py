@@ -333,6 +333,14 @@ class JobOut(BaseModel):
     status: str
     quality_score: Optional[int]
     invoice_id: Optional[int]
+    # Tids-tracking · för live-countdown i UI
+    estimated_hours: int = 0
+    hours_per_week: int = 0
+    days_remaining: int = 0  # antal dagar tills expected_complete_on
+    days_total: int = 0      # totalt antal dagar från start till deadline
+    progress_pct: int = 0    # 0-100 baserat på elapsed/total tid
+    is_overdue: bool = False
+    is_klass_pool: bool = False  # ⭐ klass-pool-jobb · högre belöning
 
 
 class DeliverIn(BaseModel):
@@ -347,6 +355,11 @@ class DeliverOut(BaseModel):
 
 
 def _to_job_out(j: Job) -> JobOut:
+    today = date.today()
+    days_total = max(1, (j.expected_complete_on - j.started_on).days)
+    elapsed = max(0, (today - j.started_on).days)
+    days_remaining = (j.expected_complete_on - today).days
+    progress = min(100, int(round(elapsed / days_total * 100)))
     return JobOut(
         id=j.id, title=j.title, customer_name=j.customer_name,
         agreed_price=j.agreed_price,
@@ -356,6 +369,15 @@ def _to_job_out(j: Job) -> JobOut:
         status=j.status,
         quality_score=j.quality_score,
         invoice_id=j.invoice_id,
+        estimated_hours=int(j.estimated_hours or 0),
+        hours_per_week=int(j.hours_per_week or 0),
+        days_remaining=days_remaining,
+        days_total=days_total,
+        progress_pct=progress,
+        is_overdue=(
+            j.status == "in_progress" and days_remaining < 0
+        ),
+        is_klass_pool=(j.title or "").startswith("⭐ Klass-pool"),
     )
 
 
