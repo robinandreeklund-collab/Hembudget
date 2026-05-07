@@ -2552,6 +2552,7 @@ export type OnboardingEventType =
 export const v2Api = {
   status: () => api<V2Status>("/v2/status"),
   hub: () => api<HubData>("/v2/hub"),
+  gameTime: () => api<HubGameTime>("/v2/game-time"),
   // === Events / sociala händelser ===
   eventsPending: () =>
     api<{ events: V2EventItem[]; count: number }>("/v2/events/pending"),

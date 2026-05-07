@@ -271,6 +271,63 @@ def _current_year_month() -> str:
     return f"{today.year:04d}-{today.month:02d}"
 
 
+@router.get("/game-time", response_model=HubGameTime)
+def get_game_time(info: TokenInfo = Depends(require_token)) -> HubGameTime:
+    """Lättviktigt endpoint som returnerar elevens nuvarande spel-tid.
+    Används av sidor som vill defaulta till spel-månad (Bokföring,
+    Postlådan, etc.) utan att behöva hämta hela /v2/hub."""
+    target_sid: Optional[int] = None
+    if info.role == "student" and info.student_id is not None:
+        target_sid = info.student_id
+    elif info.role == "teacher" and info.teacher_id is not None:
+        from ..school.engines import get_current_actor_student
+        target_sid = get_current_actor_student()
+    if target_sid is None:
+        # Fallback: anchor-datum
+        from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+        return HubGameTime(
+            iso_date=GAME_ANCHOR_DATE.isoformat(),
+            weekday_label="Torsdag",
+            full_label="Torsdag 1 januari 2026",
+            short_label="1 januari",
+            year_month=GAME_ANCHOR_DATE.strftime("%Y-%m"),
+            real_anchor_at=datetime.utcnow().isoformat(),
+        )
+    from ..game_engine.release_schedule import game_date_for
+    with master_session() as ms:
+        stu = ms.get(Student, target_sid)
+        if stu is None or stu.created_at is None:
+            from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+            return HubGameTime(
+                iso_date=GAME_ANCHOR_DATE.isoformat(),
+                weekday_label="Torsdag",
+                full_label="Torsdag 1 januari 2026",
+                short_label="1 januari",
+                year_month=GAME_ANCHOR_DATE.strftime("%Y-%m"),
+                real_anchor_at=datetime.utcnow().isoformat(),
+            )
+        gy, gm, gd = game_date_for(stu.created_at)
+        gd = max(1, min(28, gd))
+        game_d = _date(gy, gm, gd)
+        weekdays = ["Måndag", "Tisdag", "Onsdag", "Torsdag",
+                    "Fredag", "Lördag", "Söndag"]
+        months = [
+            "januari", "februari", "mars", "april", "maj",
+            "juni", "juli", "augusti", "september", "oktober",
+            "november", "december",
+        ]
+        wd = weekdays[game_d.weekday()]
+        mn = months[gm - 1]
+        return HubGameTime(
+            iso_date=game_d.isoformat(),
+            weekday_label=wd,
+            full_label=f"{wd} {gd} {mn} {gy}",
+            short_label=f"{gd} {mn}",
+            year_month=f"{gy:04d}-{gm:02d}",
+            real_anchor_at=stu.created_at.isoformat(),
+        )
+
+
 @router.get("/hub", response_model=HubResponse)
 def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
     """Aggregerar all data hubben behöver i ett anrop.

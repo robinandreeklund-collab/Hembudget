@@ -363,10 +363,19 @@ export function HubV2() {
               {month_summary.income === 0
                 && character.net_salary_monthly
                 ? `lönen kommer ${(() => {
-                    const today = new Date();
-                    const day = today.getDate();
-                    const target = day <= 25 ? today : new Date(today.getFullYear(), today.getMonth() + 1, 25);
-                    if (day <= 25) target.setDate(25);
+                    // Använd spel-tiden (game_time.iso_date) i stället
+                    // för real-datum så texten stämmer med eleven nu
+                    // är 1 jan i spel-tid och nästa lön = 25 jan.
+                    const refIso = hub.game_time?.iso_date;
+                    const ref = refIso ? new Date(refIso) : new Date();
+                    const day = ref.getDate();
+                    const target = new Date(ref);
+                    if (day <= 25) {
+                      target.setDate(25);
+                    } else {
+                      target.setMonth(ref.getMonth() + 1);
+                      target.setDate(25);
+                    }
                     const months = [
                       "jan", "feb", "mar", "apr", "maj", "jun",
                       "jul", "aug", "sep", "okt", "nov", "dec",

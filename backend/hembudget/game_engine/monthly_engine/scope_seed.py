@@ -67,8 +67,17 @@ def ensure_scope_accounts(
 
         opening = Decimal("0")
         if spec["type"] == "checking":
-            # Buffer = halv månadsnetto för att undvika "fakturakaos dag 1"
-            opening = Decimal(profile.monthly_net // 2)
+            # Lönekonto-buffer = ~2 månadsnetto. Tidigare 0.5 vilket
+            # var för tunt: 3 mån seed-historik med slumpmässiga
+            # lifestyle-events (sjukvård, tandvård, taxi) kunde äta
+            # 5-15k → eleven hamnade på minus innan spelet ens startat.
+            # 2 månadslöner = realistisk ung-vuxen-buffer.
+            opening = Decimal(profile.monthly_net * 2)
+        elif spec["type"] == "savings":
+            # Sparkonto · ~1 månadsnetto. Pedagogiskt: det FINNS
+            # pengar avsatta separat, men buffer-säkerheten ligger på
+            # lönekontot.
+            opening = Decimal(profile.monthly_net)
 
         acc = Account(
             name=spec["name"],
