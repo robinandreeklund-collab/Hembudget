@@ -581,7 +581,17 @@ export type TickResult = {
   notes: string[];
 };
 
+export type TickStatus = {
+  last_auto_tick_at: string | null;
+  next_tick_at: string;
+  interval_hours: number;
+  seconds_until_next_tick: number;
+  week_no: number;
+  open_quotes_count: number;
+};
+
 export const bizEngineApi = {
+  tickStatus: () => call<TickStatus>("/v2/foretag/tick-status"),
   listOpportunities: (status?: string) =>
     call<Opportunity[]>(
       `/v2/foretag/opportunities${status ? `?status_filter=${status}` : ""}`,

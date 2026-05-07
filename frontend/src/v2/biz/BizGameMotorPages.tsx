@@ -43,6 +43,8 @@ export function BizOfferter() {
   const [err, setErr] = useState<string | null>(null);
   const [editing, setEditing] = useState<Opportunity | null>(null);
   const [kit, setKit] = useState<StartupKitStatus | null>(null);
+  const [tick, setTick] = useState<import("./api").TickStatus | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
   // Pagination · 44 nya offertförfrågningar bara över natten gör listan
   // helt omöjlig att skrolla. Max 5 per sida.
   const NYA_PAGE_SIZE = 5;
@@ -57,9 +59,52 @@ export function BizOfferter() {
     api<StartupKitStatus>("/v2/foretag/growth/startup-kit")
       .then(setKit)
       .catch(() => undefined);
+    bizEngineApi.tickStatus()
+      .then(setTick)
+      .catch(() => undefined);
   }
 
   useEffect(() => { refresh(); }, []);
+
+  // Lokal tick-uppdatering var sekund så countdown rör sig. Var 60:e
+  // tick refetchar vi tick-status från backend för att synka mot
+  // verklig server-tid (annars driftar countdown om browser-klockan
+  // är off eller om eleven öppnat fliken länge sedan).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setNowTick((n) => {
+        const next = n + 1000;
+        return next;
+      });
+    }, 1000);
+    const refreshId = window.setInterval(() => {
+      bizEngineApi.tickStatus().then(setTick).catch(() => undefined);
+      // Re-fetch opps när vi just passerat next_tick_at + 5 s så vi
+      // ser nya decisions direkt utan att eleven behöver F5:a.
+      bizEngineApi.listOpportunities(undefined)
+        .then(setOpps)
+        .catch(() => undefined);
+    }, 60000);
+    return () => {
+      window.clearInterval(id);
+      window.clearInterval(refreshId);
+    };
+  }, []);
+
+  const nextTickAt = tick ? new Date(tick.next_tick_at).getTime() : 0;
+  const secondsUntilTick = nextTickAt > 0
+    ? Math.max(0, Math.floor((nextTickAt - nowTick) / 1000))
+    : 0;
+  const tickH = Math.floor(secondsUntilTick / 3600);
+  const tickM = Math.floor((secondsUntilTick % 3600) / 60);
+  const tickS = secondsUntilTick % 60;
+  const tickLabel = secondsUntilTick === 0
+    ? "körs vid nästa sidladdning"
+    : tickH > 0
+      ? `${tickH} h ${tickM} min`
+      : tickM > 0
+        ? `${tickM} min ${tickS} s`
+        : `${tickS} s`;
 
   // Pipelinen delas i tre sektioner enligt prototypen p-biz-kunder:
   //   - Aktiva uppdrag = "quoted" eller "won" (vi har lagt offert / vunnit)
@@ -107,6 +152,59 @@ export function BizOfferter() {
       }
     >
       {err && <div className="biz-error">{err}</div>}
+
+      {tick && (
+        <div style={{
+          padding: "12px 16px",
+          marginBottom: 16,
+          background: secondsUntilTick === 0
+            ? "rgba(110,231,183,0.06)"
+            : "rgba(99,102,241,0.06)",
+          border: `1px solid ${secondsUntilTick === 0
+            ? "rgba(110,231,183,0.25)"
+            : "rgba(99,102,241,0.25)"}`,
+          borderRadius: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          flexWrap: "wrap",
+        }}>
+          <div style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+            color: secondsUntilTick === 0 ? "#6ee7b7" : "#c7d2fe",
+          }}>
+            ● BIZ-TICK
+          </div>
+          <div style={{
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 14, color: "#fff",
+          }}>
+            {secondsUntilTick === 0 ? (
+              <>Tick körs vid nästa sidladdning · {tick.open_quotes_count} offerter avgörs</>
+            ) : (
+              <>Nästa tick om <strong style={{
+                color: "#fbbf24",
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 13.5,
+              }}>{tickLabel}</strong>
+              {tick.open_quotes_count > 0 && (
+                <> · {tick.open_quotes_count} offerter avgörs då</>
+              )}
+              </>
+            )}
+          </div>
+          <span style={{ flex: 1 }} />
+          <span style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 9.5,
+            color: "rgba(255,255,255,0.45)",
+            letterSpacing: 0.6,
+          }}>
+            VECKA {tick.week_no} · 1 H = 1 BIZ-VECKA
+          </span>
+        </div>
+      )}
 
       {kit && !kit.has_base_equipment && (
         <div style={{
@@ -274,18 +372,37 @@ export function BizOfferter() {
                   >
                     {o.expected_delivery_days} dgr
                   </span>
-                  <span
-                    className={`biz-status ${
-                      o.status === "won" ? "paid" : "sent"
-                    }`}
-                    title={
-                      o.status === "won"
-                        ? "Klicka för att se progress på jobbet"
-                        : "Du har lämnat offert · väntar på kundens beslut"
-                    }
-                  >
-                    {o.status === "won" ? "Vunnen → jobb" : "Offert lämnad"}
-                  </span>
+                  <div style={{
+                    display: "flex", flexDirection: "column",
+                    alignItems: "flex-end", gap: 4,
+                  }}>
+                    <span
+                      className={`biz-status ${
+                        o.status === "won" ? "paid" : "sent"
+                      }`}
+                      title={
+                        o.status === "won"
+                          ? "Klicka för att se progress på jobbet"
+                          : "Du har lämnat offert · väntar på kundens beslut"
+                      }
+                    >
+                      {o.status === "won" ? "Vunnen → jobb" : "Offert lämnad"}
+                    </span>
+                    {o.status === "quoted" && tick && (
+                      <span style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 9,
+                        color: secondsUntilTick === 0
+                          ? "#6ee7b7"
+                          : "rgba(255,255,255,0.5)",
+                        letterSpacing: 0.6,
+                      }}>
+                        {secondsUntilTick === 0
+                          ? "svar nu"
+                          : `svar om ${tickLabel}`}
+                      </span>
+                    )}
+                  </div>
                 </a>
               ))}
             </div>

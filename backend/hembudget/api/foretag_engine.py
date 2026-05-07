@@ -172,6 +172,63 @@ def _to_quote_out(q: Quote) -> QuoteOut:
     )
 
 
+# === Endpoints: Tick-status (för UI-countdown) ===
+
+
+class TickStatusOut(BaseModel):
+    """Realtid-status för spelarens biz-tick. Frontend pollar för
+    att visa 'nästa tick om HH:MM' och 'svar förväntas' på offerter."""
+    last_auto_tick_at: Optional[str]  # ISO · när senaste tick kördes
+    next_tick_at: str  # ISO · när nästa tick körs (+ AUTO_TICK_INTERVAL_HOURS)
+    interval_hours: float  # AUTO_TICK_INTERVAL_HOURS
+    seconds_until_next_tick: int
+    week_no: int
+    open_quotes_count: int
+
+
+@router.get("/tick-status", response_model=TickStatusOut)
+def get_tick_status(info: TokenInfo = Depends(require_token)):
+    """Realtid-status för biz-tick. Används av UI:t för countdown.
+
+    1 real-timme = 1 biz-vecka. När eleven öppnar offerter-sidan
+    triggas auto_tick_if_due som kör en tick om 1+ h passerat. Det
+    här endpointet säger BARA när nästa tick kommer — kör inte ticken.
+    """
+    from ..business.engine.tick_engine import (
+        AUTO_TICK_INTERVAL_HOURS,
+    )
+    _require_student(info)
+    with session_scope() as s:
+        co = _get_active_company(s)
+        last_at = co.last_auto_tick_at
+        if last_at is None:
+            # Aldrig tickat (precis skapad) → nästa tick är NU
+            next_at = datetime.utcnow()
+        else:
+            next_at = last_at + timedelta(hours=AUTO_TICK_INTERVAL_HOURS)
+        seconds_until = max(
+            0, int((next_at - datetime.utcnow()).total_seconds()),
+        )
+        open_quotes = (
+            s.query(Quote)
+            .join(JobOpportunity, JobOpportunity.id == Quote.opportunity_id)
+            .filter(
+                Quote.company_id == co.id,
+                Quote.accepted.is_(None),
+                JobOpportunity.status == "quoted",
+            )
+            .count()
+        )
+        return TickStatusOut(
+            last_auto_tick_at=last_at.isoformat() if last_at else None,
+            next_tick_at=next_at.isoformat(),
+            interval_hours=AUTO_TICK_INTERVAL_HOURS,
+            seconds_until_next_tick=seconds_until,
+            week_no=int(co.week_no or 0),
+            open_quotes_count=open_quotes,
+        )
+
+
 # === Endpoints: Opportunity ===
 
 
