@@ -17653,7 +17653,9 @@ _DUNNING_STEPS = [
 ]
 
 
-def _run_dunning_for_student(student_id: int) -> None:
+def _run_dunning_for_student(
+    student_id: int, *, force_run: bool = False,
+) -> None:
     """Eskalera obetalda fakturor för en elev. Idempotent + cache-gated.
     Kallas från /v2/hub och /v2/postladan. Tysta fel — får aldrig ta
     ner request:en eftersom det är "live"-uppdatering, inte kärndata.
@@ -17661,12 +17663,17 @@ def _run_dunning_for_student(student_id: int) -> None:
     Sätter scope-ContextVar internt så helpern fungerar både via
     request-flödet (där middleware sätter den) och vid direkt-anrop
     från tester / batch-jobb.
+
+    `force_run`: kringgår både 60s-cache och 12h-spärren för nya elever.
+    Avsedd för tester som verifierar dunning-logik utan att behöva
+    backdatera student.created_at.
     """
     import time as _t_dun
     from datetime import date as _d_dun, datetime as _dt_dun, timedelta as _td_dun
-    last = _dunning_cache.get(student_id, 0.0)
-    if _t_dun.time() - last < _DUNNING_CACHE_TTL:
-        return
+    if not force_run:
+        last = _dunning_cache.get(student_id, 0.0)
+        if _t_dun.time() - last < _DUNNING_CACHE_TTL:
+            return
     _dunning_cache[student_id] = _t_dun.time()
 
     # Resolva scope-key från student_id om ContextVar:n inte är satt
@@ -17682,17 +17689,18 @@ def _run_dunning_for_student(student_id: int) -> None:
     # seed-sweepen klar skulle dunning eskalera oseedade-betalda
     # invoices till inkasso/kronofogden direkt → eleven startar med
     # massa anmärkningar. 12 timmars buffer ger seed-jobbet tid.
-    try:
-        with master_session() as _ms_dun:
-            stu_dun = _ms_dun.get(_Stu_dun, student_id)
-            if stu_dun is not None and stu_dun.created_at is not None:
-                age_h = (
-                    _dt_dun.utcnow() - stu_dun.created_at
-                ).total_seconds() / 3600.0
-                if age_h < 12.0:
-                    return
-    except Exception:
-        pass
+    if not force_run:
+        try:
+            with master_session() as _ms_dun:
+                stu_dun = _ms_dun.get(_Stu_dun, student_id)
+                if stu_dun is not None and stu_dun.created_at is not None:
+                    age_h = (
+                        _dt_dun.utcnow() - stu_dun.created_at
+                    ).total_seconds() / 3600.0
+                    if age_h < 12.0:
+                        return
+        except Exception:
+            pass
 
     scope_key = _gcs_dun()
     if not scope_key:

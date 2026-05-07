@@ -9407,7 +9407,7 @@ def test_v2_dunning_creates_paminnelse_after_5_days(fx) -> None:
     mid = _seed_overdue_invoice(sid, days_overdue=7)
     v2_mod._dunning_cache.clear()
 
-    v2_mod._run_dunning_for_student(sid)
+    v2_mod._run_dunning_for_student(sid, force_run=True)
 
     # Filtrera på parent_mail_id — student-seeden inkluderar
     # current-month-fakturor (t.ex. hyra 1:a) som också kan vara
@@ -9433,7 +9433,7 @@ def test_v2_dunning_kronofogden_creates_payment_mark(fx) -> None:
     mid = _seed_overdue_invoice(sid, days_overdue=65)
     v2_mod._dunning_cache.clear()
 
-    v2_mod._run_dunning_for_student(sid)
+    v2_mod._run_dunning_for_student(sid, force_run=True)
 
     from hembudget.db.models import MailItem, PaymentMark
     reminders = _scope_query(sid, lambda ss: ss.query(MailItem).filter(
@@ -9459,9 +9459,9 @@ def test_v2_dunning_idempotent(fx) -> None:
     mid = _seed_overdue_invoice(sid, days_overdue=8)
 
     v2_mod._dunning_cache.clear()
-    v2_mod._run_dunning_for_student(sid)
+    v2_mod._run_dunning_for_student(sid, force_run=True)
     v2_mod._dunning_cache.clear()  # bypass 60s cache
-    v2_mod._run_dunning_for_student(sid)
+    v2_mod._run_dunning_for_student(sid, force_run=True)
 
     from hembudget.db.models import MailItem
     reminders = _scope_query(sid, lambda ss: ss.query(MailItem).filter(
@@ -9508,7 +9508,7 @@ def test_v2_dunning_paid_via_match_does_not_trigger(fx) -> None:
     _scope_query(sid, setup)
 
     v2_mod._dunning_cache.clear()
-    v2_mod._run_dunning_for_student(sid)
+    v2_mod._run_dunning_for_student(sid, force_run=True)
 
     # Inga reminders ska ha skapats för VÅR test-faktura — och
     # original-mailet ska markerats som paid eftersom det är matchat.
