@@ -7799,15 +7799,20 @@ def test_v2_teacher_delete_student_other_teachers_student_404(fx) -> None:
 
 
 def test_v2_seed_initial_marks_april_as_paid(fx) -> None:
-    """Reproduce: ny elev → april ska vara HISTORIK (alla fakturor
-    autogiro-betalda, status=paid), inte ohanterade.
+    """Reproduce: ny elev → historisk månad ska vara HISTORIK (alla
+    fakturor autogiro-betalda, status=paid), inte ohanterade.
 
-    Buggen: april-fakturor seedades med status=unhandled så
-    eleven såg dem som "förfallna" trots att april redan hänt.
+    Buggen: historiska fakturor seedades med status=unhandled så
+    eleven såg dem som "förfallna" trots att månaden redan hänt.
+
+    Sedan spel-anchor-refaktorn (commit 10d1411) seedar vi 3 månader
+    bakåt från GAME_ANCHOR_DATE (jan 2026) → okt/nov/dec 2025. Vi
+    kollar december 2025 (närmast spel-nuvarande).
     """
     from hembudget.api.v2 import _seed_initial_student_data
     from hembudget.db.models import MailItem
     from hembudget.school.models import Student as _S
+    from hembudget.game_engine.release_schedule import GAME_ANCHOR_DATE
 
     _client, tch, *_ = fx
     # Skapa elev (utlöser seed)
@@ -7823,13 +7828,14 @@ def test_v2_seed_initial_marks_april_as_paid(fx) -> None:
     assert create_r.status_code == 200, create_r.text
     sid_g = create_r.json()["student_id"]
 
-    # Kolla i scope-DB att alla fakturor från förra månaden är paid
+    # Kolla i scope-DB att fakturor från förra spel-månaden (= månaden
+    # innan GAME_ANCHOR_DATE) är paid. Med anchor 2026-01-01 är det
+    # december 2025.
     from datetime import date as _d
-    today = _d.today()
-    if today.month == 1:
-        prev_y, prev_m = today.year - 1, 12
+    if GAME_ANCHOR_DATE.month == 1:
+        prev_y, prev_m = GAME_ANCHOR_DATE.year - 1, 12
     else:
-        prev_y, prev_m = today.year, today.month - 1
+        prev_y, prev_m = GAME_ANCHOR_DATE.year, GAME_ANCHOR_DATE.month - 1
     period_start = _d(prev_y, prev_m, 1)
     period_end = (
         _d(prev_y + 1, 1, 1) if prev_m == 12
@@ -7851,12 +7857,12 @@ def test_v2_seed_initial_marks_april_as_paid(fx) -> None:
         # Alla ska vara paid (autogiro)
         unhandled = [m for m in prev_invoices if m.status != "paid"]
         assert not unhandled, (
-            f"April-fakturor som inte är paid: "
+            f"Historiska fakturor som inte är paid: "
             f"{[(m.id, m.status, m.subject) for m in unhandled]}"
         )
         # Lönespec från förra månaden ska också vara hanterad
-        # — annars ligger den som "ohanterad · förfaller 25 apr"
-        # i postlådan på 5:e maj, vilket är pedagogiskt fel.
+        # — annars ligger den som "ohanterad · förfaller 25 dec"
+        # i postlådan på 1:a januari, vilket är pedagogiskt fel.
         prev_payslips = (
             s.query(MailItem)
             .filter(MailItem.mail_type == "salary_slip")
@@ -7869,7 +7875,7 @@ def test_v2_seed_initial_marks_april_as_paid(fx) -> None:
         )
         unhandled_pay = [m for m in prev_payslips if m.status != "paid"]
         assert not unhandled_pay, (
-            f"April-lönespecar som inte är paid: "
+            f"Historiska lönespecar som inte är paid: "
             f"{[(m.id, m.status, m.subject) for m in unhandled_pay]}"
         )
 
