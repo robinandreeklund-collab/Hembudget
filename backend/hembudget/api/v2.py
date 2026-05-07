@@ -325,10 +325,15 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             )
 
         # Auto-tick · eskalera obetalda fakturor + tick fram nya
-        # spel-månader när real-tid passerar. Båda cachat per elev,
+        # spel-månader + släpp Skatteverket-deklaration-events när
+        # spel-tiden passerar SKV:s årliga datum. Cachat per elev,
         # idempotent. Tysta fel — får aldrig påverka hub-vyn.
         try:
             _auto_tick_private_months_if_due(target_sid)
+        except Exception:
+            pass
+        try:
+            _seed_skv_deklaration_events(target_sid)
         except Exception:
             pass
         try:
@@ -640,11 +645,8 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         with master_session() as _ms_gt:
             _stu_gt = _ms_gt.get(Student, target_sid)
             if _stu_gt is not None and _stu_gt.created_at is not None:
-                anchor_ym = (
-                    f"{_stu_gt.created_at.year:04d}-"
-                    f"{_stu_gt.created_at.month:02d}"
-                )
-                gy, gm, gd = game_date_for(_stu_gt.created_at, anchor_ym)
+                # game_date_for använder GAME_ANCHOR_DATE som start
+                gy, gm, gd = game_date_for(_stu_gt.created_at)
                 gd = max(1, min(28, gd))  # safety för Python-date
                 from datetime import date as _d_gt
                 game_d = _d_gt(gy, gm, gd)
@@ -2107,9 +2109,14 @@ def get_mail(
     # Plus auto-tick nya privata månader (1 real-timme = 1 spel-vecka)
     # — när eleven driver karaktären framåt seedar vi nästa månad så
     # postlådan fortsätter fyllas.
+    # Plus släpp Skatteverket-deklaration-mail per spel-år.
     if info.role == "student" and info.student_id is not None:
         try:
             _auto_tick_private_months_if_due(info.student_id)
+        except Exception:
+            pass
+        try:
+            _seed_skv_deklaration_events(info.student_id)
         except Exception:
             pass
         try:
@@ -17105,6 +17112,172 @@ _seed_semaphore = _threading_seed.Semaphore(_SEED_CONCURRENCY)
 _dunning_cache: dict[int, float] = {}  # student_id → last-run-ts
 _DUNNING_CACHE_TTL = 60.0  # sekunder
 
+
+# === Skatteverket · deklaration-events =====================
+#
+# När spel-tiden passerar 2 mars/17 mars/31 mars/4 maj varje år
+# triggar vi mail från Skatteverket som följer SKV:s riktiga tids-
+# linje. Eleven ser deklaration-fönstret öppna och stänga, kan
+# lämna in i tid och få återbäring i april — eller missa deadline
+# och få förseningsavgift.
+#
+# Spel-tiden börjar 2026-01-01. Första deklarationen (för 2026)
+# blir tillgänglig 2027-03-02 = 14.5 real-dagar in. Förstaårs-
+# studenter hinner se ETT helt deklaration-flöde inom 4 veckors
+# elev-tid.
+
+_SKV_EVENTS_CACHE: dict[int, float] = {}
+_SKV_EVENTS_TTL = 300.0  # 5 min
+
+
+def _seed_skv_deklaration_events(student_id: int) -> int:
+    """Skapa Skatteverket-deklaration-mail när spel-tiden passerar
+    SKV:s tidslinje. Idempotent · cache-gated (5 min). Tysta fel.
+
+    Trigger-datum per spel-år Y (deklaration för år Y-1):
+        Y mars 2:  Din deklaration finns i digital brevlåda
+        Y mars 17: Du kan deklarera nu
+        Y mars 31: Sista dag för digital deklaration + ev. återbäring
+        Y maj 4:   Sista dag att deklarera
+
+    Returnerar antal nya mail.
+    """
+    import time as _t_skv
+    last_run = _SKV_EVENTS_CACHE.get(student_id, 0.0)
+    if _t_skv.time() - last_run < _SKV_EVENTS_TTL:
+        return 0
+    _SKV_EVENTS_CACHE[student_id] = _t_skv.time()
+
+    try:
+        from datetime import date as _d_skv
+        from ..game_engine.release_schedule import (
+            GAME_ANCHOR_DATE,
+            game_date_for,
+        )
+        from ..school.engines import (
+            scope_context as _sctx_skv,
+            scope_for_student as _sfs_skv,
+        )
+        from ..db.models import MailItem as _MI_skv
+
+        with master_session() as ms:
+            stu = ms.get(Student, student_id)
+            if stu is None or stu.created_at is None:
+                return 0
+
+        gy, gm, gd = game_date_for(stu.created_at)
+        try:
+            current_game_d = _d_skv(gy, gm, max(1, min(28, gd)))
+        except Exception:
+            return 0
+
+        # Bygg list av alla SKV-milstolpar som passerats sedan anchor
+        skv_steps = [
+            (
+                "skv_brevlada", _d_skv.fromisoformat,
+                "Din deklaration finns i digital brevlåda",
+                "Hej. Din inkomstdeklaration för {prev_year} ligger nu "
+                "i digitala brevlådan. Du kan börja granska direkt — "
+                "själva inlämningen öppnar 17 mars. Kontrollera "
+                "förtryckta uppgifter, ev. ROT/RUT-arbeten, ränteavdrag.",
+                3, 2,  # mars 2
+            ),
+            (
+                "skv_open", _d_skv.fromisoformat,
+                "Du kan deklarera nu",
+                "Inlämningstjänsten är öppen. Lämna in senast 31 mars "
+                "om du vill ha eventuell skatteåterbäring i april. "
+                "Sista dag totalt är 4 maj.",
+                3, 17,
+            ),
+            (
+                "skv_digital_deadline",
+                _d_skv.fromisoformat,
+                "Digital deadline · skatteåterbäring i april",
+                "Idag är sista dag att deklarera digitalt för att "
+                "garantera skatteåterbäring i april. Efter detta "
+                "betalas eventuell återbäring i juni–augusti.",
+                3, 31,
+            ),
+            (
+                "skv_final_deadline",
+                _d_skv.fromisoformat,
+                "Sista dag att deklarera",
+                "Idag är ALLRA SISTA dagen att lämna in deklarationen. "
+                "Missar du deadline blir det förseningsavgift "
+                "(1 250 kr första gången, 6 250 kr om du fortsatt "
+                "inte deklarerar).",
+                5, 4,
+            ),
+        ]
+
+        # För varje passerat SKV-fönster (varje år sedan ANCHOR-året)
+        scope_key = _sfs_skv(stu)
+        n_created = 0
+        with _sctx_skv(scope_key):
+            with session_scope() as s:
+                # Loopa år från ANCHOR_YEAR + 1 (första deklaration)
+                # till current_game_year. För varje år: kolla varje
+                # SKV-step och skapa mail om datumet passerats och
+                # mailet inte finns redan.
+                for tax_year in range(
+                    GAME_ANCHOR_DATE.year + 1, gy + 1,
+                ):
+                    prev_year = tax_year - 1
+                    for (
+                        kind, _parse, subject, body_tmpl, mm, dd,
+                    ) in skv_steps:
+                        try:
+                            milestone_d = _d_skv(tax_year, mm, dd)
+                        except Exception:
+                            continue
+                        if milestone_d > current_game_d:
+                            continue  # inte passerat än
+                        # Idempotens · samma year+kind = en mail
+                        unique_subj = (
+                            f"{subject} · {prev_year}"
+                        )
+                        existing = (
+                            s.query(_MI_skv)
+                            .filter(_MI_skv.subject == unique_subj)
+                            .first()
+                        )
+                        if existing is not None:
+                            continue
+                        body = body_tmpl.replace(
+                            "{prev_year}", str(prev_year),
+                        )
+                        s.add(_MI_skv(
+                            sender="Skatteverket",
+                            sender_short="SKV",
+                            sender_kind="agency",
+                            sender_meta=(
+                                f"Deklaration {prev_year}"
+                            ),
+                            mail_type="authority",
+                            subject=unique_subj,
+                            body_meta=f"Deklaration · {prev_year}",
+                            body=body,
+                            amount=None,
+                            due_date=milestone_d if kind in (
+                                "skv_digital_deadline",
+                                "skv_final_deadline",
+                            ) else None,
+                            status="unhandled",
+                            released_at=None,
+                        ))
+                        n_created += 1
+                if n_created > 0:
+                    s.commit()
+        return n_created
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_seed_skv_deklaration_events failed för student %s",
+            student_id,
+        )
+        return 0
+
 # Auto-tick-månader · cacha 5 min så vi inte tickar samma månad
 # flera gånger per request-burst.
 _auto_tick_month_cache: dict[int, float] = {}
@@ -17160,8 +17333,9 @@ def _auto_tick_private_months_if_due(student_id: int) -> int:
 
         if created_at is None:
             return 0
-        anchor_ym = f"{created_at.year:04d}-{created_at.month:02d}"
-        current_game_ym = game_year_month(created_at, anchor_ym)
+        # game_year_month använder GAME_ANCHOR_DATE (2026-01-01) som
+        # spel-startpunkt. Andra argumentet är legacy och ignoreras.
+        current_game_ym = game_year_month(created_at)
 
         # Hitta senast tickade ym = max year_month från MailItem.due_date
         scope_key = _sfs_at(stu)
@@ -17726,16 +17900,16 @@ def _seed_initial_student_data(
                 )
 
     # === Steg 2 (HISTORISKA MÅNADER) ===
-    # Seedar de SENASTE 4 månaderna bakåt så Arbetsgivar-vyns
-    # "Lönespecar · senaste 4 månader"-widget faktiskt visar 4 rader,
-    # och så att eleven ser etablerad historik på bankkontot vid
-    # första inloggningen istället för bara senaste lönen.
-    # Alla månader t.o.m. förra hela månaden auto-betalas.
+    # Spel-tiden börjar på GAME_ANCHOR_DATE (2026-01-01). Vi seedar
+    # 3 månader BAKÅT från anchor (okt/nov/dec 2025) som "redan har
+    # hänt" — eleven ser etablerad bankhistorik + 3 lönespec-rader
+    # i Arbetsgivar-widgeten vid första inloggningen.
+    from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+    anchor_y, anchor_m = GAME_ANCHOR_DATE.year, GAME_ANCHOR_DATE.month
     historical_months: list[str] = []
-    cur_y, cur_m = today.year, today.month
-    for back in range(4, 0, -1):  # 4, 3, 2, 1 mån bakåt
-        ty = cur_y
-        tm = cur_m - back
+    for back in range(3, 0, -1):  # 3, 2, 1 mån bakåt från anchor
+        ty = anchor_y
+        tm = anchor_m - back
         while tm <= 0:
             tm += 12
             ty -= 1
@@ -17759,12 +17933,13 @@ def _seed_initial_student_data(
                 hist_ym, student.id,
             )
 
-    # === Steg 2b (NUVARANDE MÅNAD) ===
-    # Tick även innevarande månad — då släpps fakturor + lön via
-    # realtid-projektion (auto-detect i tick_month sätter
-    # release_base = NOW när year_month >= current_ym).
-    today2 = _d.today()
-    current_ym = f"{today2.year:04d}-{today2.month:02d}"
+    # === Steg 2b (NUVARANDE SPEL-MÅNAD = anchor 2026-01) ===
+    # Spelaren börjar i anchor-månaden. Ticka den med release_base =
+    # student.created_at så hyra dag 1 dyker upp direkt, lönespec
+    # dag 22 efter ~3 h och lön dag 25 efter ~3.5 h. Tick_month auto-
+    # detect gör fel jämförelse (lex 2026-01 < 2026-05 = real-ym)
+    # och skulle markera anchor som historik.
+    current_ym = f"{anchor_y:04d}-{anchor_m:02d}"
     if current_ym not in historical_months:
         try:
             tick_month(
@@ -17773,14 +17948,7 @@ def _seed_initial_student_data(
                 current_ym,
                 spend_profile=spend_profile,
                 starting_level=starting_level,
-            )
-            # Viktigt: auto-betala fakturor i NUVARANDE månad vars
-            # förfallodag redan passerats. Annars startar eleven med
-            # förfallna fakturor + redan-triggade påminnelser
-            # (klassisk hyran-1:a-i-månaden-fälla för nya elever
-            # som skapas mitt i månaden).
-            _auto_pay_historical_invoices(
-                student, current_ym, cutoff_date=today2,
+                release_base=student.created_at,
             )
         except Exception:
             import logging
