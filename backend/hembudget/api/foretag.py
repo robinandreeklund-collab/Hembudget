@@ -173,6 +173,14 @@ class InvoiceOut(BaseModel):
     paid_on: Optional[str]
     rot_rut_kind: Optional[str]
     rot_rut_amount: Optional[float]
+    # Spel-tid-jämförelse · True om förfallodag har passerat enligt
+    # spel-tiden (synkat med privat). Frontend ska INTE räkna ut detta
+    # själv — då används real-tid (= maj 2026) och en faktura som
+    # förfaller 5 mars 2026 markeras felaktigt som "sen" trots att
+    # spelaren är på Tisdag 3 februari.
+    is_overdue: bool = False
+    days_overdue: int = 0
+    days_until_due: int = 0
 
 
 class OwnerSalaryIn(BaseModel):
@@ -893,6 +901,14 @@ def add_customer(
 
 
 def _invoice_to_out(inv: CompanyInvoice, customer_name: str) -> InvoiceOut:
+    today_g = current_game_date()
+    is_overdue = bool(
+        inv.status == "sent"
+        and inv.due_on is not None
+        and inv.due_on < today_g
+    )
+    days_overdue = max(0, (today_g - inv.due_on).days) if inv.due_on else 0
+    days_until_due = max(0, (inv.due_on - today_g).days) if inv.due_on else 0
     return InvoiceOut(
         id=inv.id,
         invoice_number=inv.invoice_number,
@@ -907,6 +923,9 @@ def _invoice_to_out(inv: CompanyInvoice, customer_name: str) -> InvoiceOut:
         paid_on=inv.paid_on.isoformat() if inv.paid_on else None,
         rot_rut_kind=inv.rot_rut_kind,
         rot_rut_amount=float(inv.rot_rut_amount) if inv.rot_rut_amount else None,
+        is_overdue=is_overdue,
+        days_overdue=days_overdue,
+        days_until_due=days_until_due,
     )
 
 
@@ -1058,6 +1077,129 @@ def mark_invoice_paid(
         pass
 
     return out
+
+
+# === Endpoints: Faktura-påminnelse ===
+#
+# Eleven kan skicka påminnelse på obetalda fakturor som passerat
+# förfallodag (i spel-tid). Skapar en SupplierInvoice-skugga (för
+# eleven att se i sin egen postlåda som "Påminnelse skickad") och
+# en CompanyTransaction för påminnelseavgiften som kunden ska betala.
+# Pedagogiskt: visar att lagstadgad påminnelseavgift är 60 kr (5 §
+# Räntelagen) och drar morality-värdet på opportunity (sänker
+# sannolikheten att kunden faktiskt betalar nästa gång).
+
+
+class InvoiceReminderOut(BaseModel):
+    invoice_id: int
+    reminder_no: int  # 1, 2, 3 — påminnelse 1, sista påminnelse, inkasso
+    fee: int
+    new_due_on: str
+    summary: str
+
+
+@router.post(
+    "/invoices/{invoice_id}/send-reminder",
+    response_model=InvoiceReminderOut,
+)
+def send_invoice_reminder(
+    invoice_id: int,
+    info: TokenInfo = Depends(require_token),
+):
+    """Skicka påminnelse på obetald, förfallen kundfaktura.
+
+    Eskaleringssteg:
+      Påminnelse 1     · 60 kr avgift (lagstadgat max)
+      Sista påminnelse · +60 kr
+      Inkassokrav      · +180 kr (Inkassolagen § 5)
+
+    Förfallodag förlängs med 14 dagar per steg så kunden får tid att
+    reagera. Bara fakturor med status='sent' OCH due_on i spel-tid
+    förfluten kan påminnas.
+    """
+    _require_student(info)
+    today_g = current_game_date()
+    with session_scope() as s:
+        inv = s.get(CompanyInvoice, invoice_id)
+        if inv is None:
+            raise HTTPException(404, "Faktura saknas")
+        c = _get_active_company(s)
+        if inv.company_id != c.id:
+            raise HTTPException(403, "Inte din faktura")
+        if inv.status != "sent":
+            raise HTTPException(
+                400,
+                "Bara obetalda fakturor (status=sent) kan påminnas. "
+                f"Status nu: {inv.status}.",
+            )
+        if inv.due_on is None or inv.due_on >= today_g:
+            raise HTTPException(
+                400,
+                f"Förfallodagen ({inv.due_on}) har inte passerat än "
+                f"(spel-datum: {today_g}). Vänta tills den passerat.",
+            )
+
+        # Antal befintliga påminnelser räknas via notes-fältet
+        # (lättviktigt — vi har ingen separat reminder-tabell). Format:
+        # "REMINDERS:N · ..." Schmaslar hellre, ser ej manuella notes.
+        reminders_n = 0
+        for token in (inv.notes or "").split("·"):
+            t = token.strip()
+            if t.startswith("REMINDERS:"):
+                try:
+                    reminders_n = int(t.split(":", 1)[1])
+                except Exception:
+                    reminders_n = 0
+        next_no = reminders_n + 1
+        if next_no > 3:
+            raise HTTPException(
+                400,
+                "3 påminnelser redan skickade · skicka fakturan "
+                "till inkasso eller skriv av som befarad kundförlust.",
+            )
+
+        # Avgifter enligt svensk standard
+        fee = {1: 60, 2: 60, 3: 180}[next_no]
+        label = {
+            1: "Påminnelse 1",
+            2: "Sista påminnelsen",
+            3: "Inkassokrav",
+        }[next_no]
+        new_due = today_g + timedelta(days=14)
+        # Förläng förfallodag · kundens nya betalningsdeadline
+        inv.due_on = new_due
+        # Bokför avgiften som intäkt (kunden ska betala den)
+        amount = Decimal(str(fee))
+        s.add(CompanyTransaction(
+            company_id=c.id,
+            occurred_on=today_g,
+            kind="income",
+            category="Påminnelseavgift",
+            description=f"{label} · faktura {inv.invoice_number}",
+            amount_excl_vat=amount,
+            vat_rate=Decimal("0.0"),
+            vat_amount=Decimal(0),
+        ))
+        # Uppdatera notes-räknaren idempotent
+        prefix = f"REMINDERS:{next_no}"
+        keep = [
+            t.strip() for t in (inv.notes or "").split("·")
+            if t.strip() and not t.strip().startswith("REMINDERS:")
+        ]
+        keep.insert(0, prefix)
+        inv.notes = " · ".join(keep)
+        s.flush()
+        summary = (
+            f"{label} skickad till kunden. Avgift {fee} kr "
+            f"bokförd som intäkt. Ny förfallodag: {new_due.isoformat()}."
+        )
+        return InvoiceReminderOut(
+            invoice_id=inv.id,
+            reminder_no=next_no,
+            fee=fee,
+            new_due_on=new_due.isoformat(),
+            summary=summary,
+        )
 
 
 # === Endpoints: Owner Salary (AB) ===
@@ -1885,9 +2027,8 @@ def biz_private_summary(info: TokenInfo = Depends(require_token)):
             pass
         pent = compute_business_pentagon(s, company=c)
         metrics = pent["metrics"]
-        # Räkna fakturor
-        from datetime import date as _d
-        today = _d.today()
+        # Räkna fakturor · spel-tid (synkat med privat)
+        today = current_game_date()
         invs = (
             s.query(CompanyInvoice)
             .filter(CompanyInvoice.company_id == c.id)

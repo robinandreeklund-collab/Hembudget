@@ -406,17 +406,19 @@ export function BizFakturor() {
   };
   useEffect(() => { refresh(); }, []);
 
-  const today = TODAY();
   const totalNet = invoices.reduce((acc, i) => acc + i.amount_excl_vat, 0);
   const totalIncl = invoices.reduce((acc, i) => acc + i.total_incl_vat, 0);
   const sent = invoices.filter((i) => i.status === "sent").length;
   const paid = invoices.filter((i) => i.status === "paid").length;
   const drafts = invoices.filter((i) => i.status === "draft").length;
+  // Använd backend:s spel-tid-jämförelse (is_overdue / days_until_due)
+  // i stället för real-tid `new Date()`. Annars markeras nya fakturor
+  // som "sen" innan spel-tiden ens nått förfallodagen.
   const overdue = invoices.filter(
-    (i) => i.status === "sent" && i.due_on < today,
+    (i) => i.status === "sent" && i.is_overdue,
   );
   const dueToday = invoices.filter(
-    (i) => i.status === "sent" && i.due_on === today,
+    (i) => i.status === "sent" && !i.is_overdue && i.days_until_due === 0,
   );
   const outstanding = invoices
     .filter((i) => i.status === "sent")
@@ -545,8 +547,16 @@ export function BizFakturor() {
             <span></span>
           </div>
           {invoices.map((inv) => {
-            const isOverdue = inv.status === "sent" && inv.due_on < today;
-            const isDueToday = inv.status === "sent" && inv.due_on === today;
+            // Backend räknar is_overdue mot SPEL-tid (synkat med privat).
+            // Vi får INTE räkna med real-tid (`new Date()`) här — då
+            // markeras en faktura som förfaller 5 mars som "sen" trots
+            // att spelaren är på 3 februari.
+            const isOverdue = inv.status === "sent" && inv.is_overdue;
+            const isDueToday = (
+              inv.status === "sent"
+              && !inv.is_overdue
+              && inv.days_until_due === 0
+            );
             return (
               <div
                 key={inv.id}
@@ -679,16 +689,44 @@ export function BizFakturor() {
                     : "Utkast"}
                 </span>
                 {inv.status === "sent" && (
-                  <button
-                    onClick={async () => {
-                      await bizApi.markInvoicePaid(inv.id);
-                      refresh();
-                    }}
-                    className="biz-btn"
-                    style={{ padding: "4px 8px", fontSize: 10 }}
-                  >
-                    Betald ✓
-                  </button>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {isOverdue && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const r = await bizApi.sendInvoiceReminder(inv.id);
+                            alert(r.summary);
+                            refresh();
+                          } catch (e) {
+                            alert(String((e as Error).message || e));
+                          }
+                        }}
+                        className="biz-btn"
+                        style={{
+                          padding: "4px 8px",
+                          fontSize: 10,
+                          background: "rgba(220,76,43,0.15)",
+                          borderColor: "#dc4c2b",
+                          color: "#dc4c2b",
+                        }}
+                        title={
+                          `Skicka påminnelse · ${inv.days_overdue} d försenad`
+                        }
+                      >
+                        Påminn
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        await bizApi.markInvoicePaid(inv.id);
+                        refresh();
+                      }}
+                      className="biz-btn"
+                      style={{ padding: "4px 8px", fontSize: 10 }}
+                    >
+                      Betald ✓
+                    </button>
+                  </div>
                 )}
                 {inv.status !== "sent" && <span></span>}
               </div>

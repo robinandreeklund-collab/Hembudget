@@ -69,10 +69,29 @@ def list_pending(scope: Session = Depends(db)) -> dict:
     (jan-april) som har passerat deadlinen redan vid student-skapandet.
     Utan auto-expire skulle de stå kvar som 'pending' och förvirra
     eleven med 'Karaokekväll · deadline 6 jan' när det är 7 maj.
+
+    SPEL-TID: deadline-jämförelser måste ske mot spel-datum (synkat med
+    privat-tid). Använder vi real-tid (=maj 2026) markeras alla events
+    som expired direkt eftersom de seedats med deadline i spel-jan/feb.
+
+    Auto-tick: om elev öppnar /v2/handelser FÖRE /v2/hub eller
+    /v2/postladan så hade aldrig auto-tick av nya månader körts → 0
+    events. Vi triggar samma helper här så feed:en aldrig är tom.
     """
-    from datetime import date as _d_pe
-    expire_old_events(scope)
-    today = _d_pe.today()
+    from ..business.game_clock import current_game_date
+    # Trigger auto-tick av spel-månader så nya events skapas allteftersom
+    # eleven driver karaktären framåt. Tysta fel — får inte ta ner GET:en.
+    try:
+        from .v2 import _auto_tick_private_months_if_due
+        from .deps import require_auth as _ra  # noqa: F401
+        from ..school.engines import get_current_actor_student
+        sid = get_current_actor_student()
+        if sid is not None:
+            _auto_tick_private_months_if_due(sid)
+    except Exception:
+        pass
+    today = current_game_date()
+    expire_old_events(scope, today=today)
     rows = (
         scope.query(StudentEvent)
         .filter(
@@ -130,6 +149,10 @@ def trigger_tick(
             today = date.fromisoformat(payload.today)
         except ValueError:
             raise HTTPException(400, "Felaktigt datum")
+    if today is None:
+        # Default · spel-tid synkat med privat
+        from ..business.game_clock import current_game_date
+        today = current_game_date()
 
     # Säkerställ att master har templates
     with master_session() as ms:
@@ -160,7 +183,8 @@ def trigger_tick(
 @router.post("/internal/expire")
 def trigger_expire(scope: Session = Depends(db)) -> dict:
     """Markera passade pending-events som expired."""
-    n = expire_old_events(scope)
+    from ..business.game_clock import current_game_date
+    n = expire_old_events(scope, today=current_game_date())
     return {"expired": n}
 
 

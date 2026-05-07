@@ -17431,10 +17431,29 @@ def _auto_tick_private_months_if_due(student_id: int) -> int:
                     .first()
                 )
                 if latest_due is None or latest_due[0] is None:
-                    return 0
-                latest_ym = (
-                    f"{latest_due[0].year:04d}-{latest_due[0].month:02d}"
-                )
+                    # BOOTSTRAP-FIX: postlådan helt tom (seed misslyckades
+                    # eller städades). Ticka från månaden FÖRE anchor så
+                    # historiska månader fylls + anchor-månaden seedas.
+                    # Annars är vi stuck i evig 0-mail-loop eftersom
+                    # det här endpoint:et kräver existerande mail för att
+                    # veta var det ska börja.
+                    from ..game_engine.release_schedule import (
+                        GAME_ANCHOR_DATE,
+                    )
+                    if GAME_ANCHOR_DATE.month == 1:
+                        latest_ym = (
+                            f"{GAME_ANCHOR_DATE.year - 1:04d}-12"
+                        )
+                    else:
+                        latest_ym = (
+                            f"{GAME_ANCHOR_DATE.year:04d}-"
+                            f"{GAME_ANCHOR_DATE.month - 1:02d}"
+                        )
+                else:
+                    latest_ym = (
+                        f"{latest_due[0].year:04d}-"
+                        f"{latest_due[0].month:02d}"
+                    )
 
         # Tick alla månader mellan latest_ym+1 och current_game_ym
         if latest_ym >= current_game_ym:

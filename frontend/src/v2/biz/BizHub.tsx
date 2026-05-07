@@ -110,9 +110,10 @@ export function BizHub() {
           .reduce((acc, t) => acc + t.amount_excl_vat, 0);
         const open = invs.filter((i) => i.status === "sent").length;
         const paid = invs.filter((i) => i.status === "paid").length;
-        const today = new Date().toISOString().slice(0, 10);
+        // is_overdue beräknas backend-side mot SPEL-tid · använd
+        // INTE `new Date()` här, då hamnar vi i real-tid (maj 2026).
         const overdue = invs.filter(
-          (i) => i.status === "sent" && i.due_on < today,
+          (i) => i.status === "sent" && i.is_overdue,
         ).length;
         const nextVat = vps.find((v) => v.status === "open")?.due_date || null;
 

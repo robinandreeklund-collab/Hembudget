@@ -101,6 +101,9 @@ export type CompanyInvoice = {
   paid_on: string | null;
   rot_rut_kind: "rot" | "rut" | null;
   rot_rut_amount: number | null;
+  is_overdue: boolean;
+  days_overdue: number;
+  days_until_due: number;
 };
 
 export type CompanyOwnerSalary = {
@@ -307,6 +310,13 @@ export const bizApi = {
     }),
   markInvoicePaid: (id: number) =>
     call<CompanyInvoice>(`/v2/foretag/invoices/${id}/mark-paid`, {
+      method: "POST",
+    }),
+  sendInvoiceReminder: (id: number) =>
+    call<{
+      invoice_id: number; reminder_no: number; fee: number;
+      new_due_on: string; summary: string;
+    }>(`/v2/foretag/invoices/${id}/send-reminder`, {
       method: "POST",
     }),
 
