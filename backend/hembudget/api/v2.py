@@ -545,10 +545,16 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             )
 
             # Pending sociala events i scope-DB (max 5 visas på Hub)
+            # Filtrera bort events vars deadline redan passerat — seed-
+            # flödet skapar historiska events (jan-april) som annars
+            # syns som 'pending' i flera månader efter student-skapandet.
             from ..db.models import StudentEvent as _SE_hub
             pending_se = (
                 s.query(_SE_hub)
-                .filter(_SE_hub.status == "pending")
+                .filter(
+                    _SE_hub.status == "pending",
+                    _SE_hub.deadline >= today,
+                )
                 .order_by(_SE_hub.deadline.asc())
                 .limit(5)
                 .all()
@@ -581,6 +587,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 .filter(
                     _CEI_hub.to_student_id == target_sid,
                     _CEI_hub.status == "pending",
+                    _CEI_hub.deadline >= _date.today(),
                 )
                 .order_by(_CEI_hub.deadline.asc())
                 .limit(5)

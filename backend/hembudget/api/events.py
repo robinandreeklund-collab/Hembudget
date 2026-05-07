@@ -63,10 +63,22 @@ def _to_out(e: StudentEvent) -> StudentEventOut:
 @router.get("/pending")
 def list_pending(scope: Session = Depends(db)) -> dict:
     """Lista alla events med status='pending' inom deadline.
-    Frontend visar i notifikations-bubblan."""
+    Frontend visar i notifikations-bubblan.
+
+    Auto-expire körs först · seed-flödet skapar events historiskt
+    (jan-april) som har passerat deadlinen redan vid student-skapandet.
+    Utan auto-expire skulle de stå kvar som 'pending' och förvirra
+    eleven med 'Karaokekväll · deadline 6 jan' när det är 7 maj.
+    """
+    from datetime import date as _d_pe
+    expire_old_events(scope)
+    today = _d_pe.today()
     rows = (
         scope.query(StudentEvent)
-        .filter(StudentEvent.status == "pending")
+        .filter(
+            StudentEvent.status == "pending",
+            StudentEvent.deadline >= today,
+        )
         .order_by(StudentEvent.deadline.asc())
         .all()
     )
