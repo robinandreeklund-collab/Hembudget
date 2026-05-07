@@ -56,7 +56,10 @@ LOCATION_CATALOG: dict[str, dict] = {
         "label": "Hemmakontor",
         "monthly_cost": 0,
         "max_employees": 0,
-        "max_concurrent_jobs": 2,
+        # Hemmakontor = du själv kan jobba på 1 kund-uppdrag i taget.
+        # Tidigare 2 vilket var orealistiskt (en person hinner inte
+        # flera uppdrag samtidigt utan lokal/anställd).
+        "max_concurrent_jobs": 1,
         "purchase_price": None,
         "is_default": True,
     },
@@ -319,26 +322,9 @@ class LoanOut(BaseModel):
 # === Helpers · Kassa ===
 
 def _kassa(s, company: Company) -> int:
-    """Approximation: alla company-tx + aktiekapital.
-
-    Alla icke-income-kinds drar från kassan, inklusive asset_purchase
-    (det är cashflow ut även om det är balansrakning, inte resultat).
-    """
-    txs = (
-        s.query(CompanyTransaction)
-        .filter(CompanyTransaction.company_id == company.id)
-        .all()
-    )
-    bal = 0
-    for t in txs:
-        amt = float(t.amount_excl_vat or 0)
-        if t.kind == "income":
-            bal += amt
-        else:
-            bal -= amt
-    if company.share_capital:
-        bal += float(company.share_capital)
-    return int(bal)
+    """Wrapper för compute_company_cash · kanonisk källa-av-sanning."""
+    from ..business.cash import compute_company_cash
+    return compute_company_cash(s, company)
 
 
 # === Endpoints ===
@@ -689,11 +675,16 @@ def apply_loan(
         terms["rate_with_guarantee"] if body.is_personal_guarantee
         else terms["rate_no_guarantee"]
     )
-    # Fas G · UC påverkar räntan (justering ±5 %-enheter)
+    # Fas G · UC påverkar räntan (justering ±5 %-enheter) + UC D/E
+    # avslår lånet helt om inte personlig borgen ges (då accepteras
+    # det med högre ränta · banken har då säkerhet i ägarens privata
+    # ekonomi). Brev skickas alltid till postlådan med datum + score.
+    sid = info.student_id
+    company_uc_class: str | None = None
+    company_uc_score: int = 50
     try:
         from ..school.engines import master_session
         from ..school.models import ClassCompanyShare
-        sid = info.student_id
         with session_scope() as scope_s:
             comp = _get_active_company(scope_s)
         if comp is not None and sid is not None:
@@ -707,6 +698,8 @@ def apply_loan(
                     .first()
                 )
                 if share is not None:
+                    company_uc_class = share.uc_rating
+                    company_uc_score = int(share.uc_score or 50)
                     if share.uc_rating == "AAA":
                         rate -= 0.02
                     elif share.uc_rating == "A":
@@ -718,6 +711,63 @@ def apply_loan(
                     rate = max(0.03, rate)
     except Exception:
         pass
+
+    # Skapa kreditupplysnings-brev i postlådan + ev. avslag
+    today = date.today()
+    try:
+        from ..db.models import MailItem as _MI
+        with session_scope() as ps_:
+            ps_.add(_MI(
+                sender="Företagsbanken AB",
+                sender_short="BNK",
+                sender_kind="financial",
+                sender_meta=f"Kreditupplysning företag · {today.isoformat()}",
+                mail_type="info",
+                subject=f"Kreditupplysning företag · {today.isoformat()}",
+                body_meta=(
+                    f"UC företag {company_uc_class or '?'} · "
+                    f"{company_uc_score}/100"
+                ),
+                body=(
+                    f"Hej. Vi har genomfört en kreditupplysning på "
+                    f"ditt bolag i samband med ansökan om "
+                    f"{terms['label']} på {body.principal:,} kr.\n\n".replace(",", " ") +
+                    f"Datum: {today.isoformat()}\n"
+                    f"Företags-UC: {company_uc_score}/100 "
+                    f"({company_uc_class or '?'})\n"
+                    f"Personlig borgen: "
+                    f"{'JA' if body.is_personal_guarantee else 'NEJ'}\n"
+                    f"Erbjuden ränta: {rate * 100:.1f} %\n\n"
+                    + (
+                        "Beslut: AVSLAG. Bolagets UC är för svag. "
+                        "Bygg upp omsättning, sänk försenade fakturor "
+                        "och försök igen om några veckor."
+                        if (
+                            company_uc_class == "D"
+                            and not body.is_personal_guarantee
+                        )
+                        else "Beslut: GODKÄNT. Lånet är beviljat."
+                    )
+                ),
+                amount=None,
+                due_date=None,
+                status="unhandled",
+            ))
+            ps_.commit()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "kreditupplysnings-brev kunde inte skickas",
+        )
+
+    if company_uc_class == "D" and not body.is_personal_guarantee:
+        raise HTTPException(
+            402,
+            f"Företagslån avslogs · UC företag {company_uc_score}/100 "
+            f"({company_uc_class}). Du kan godkännas med personlig "
+            "borgen (du går i borgen privat om bolaget faller). "
+            "Brev från banken har skickats till postlådan."
+        )
 
     months = terms["months"]
     monthly = _annuity_payment(body.principal, rate, months)
@@ -1036,8 +1086,84 @@ def buy_startup_kit(
             ))
         elif body.funding_method == "private_loan":
             from ..db.base import session_scope as _ps
-            from ..db.models import Loan as _PL
+            from ..db.models import Loan as _PL, MailItem as _MI
+            from ..loans.credit import compute_credit_check
+            student_id = info.student_id
             with _ps() as private_s:
+                # Kreditupplysning · privata banken kollar UC innan
+                # de godkänner lånet. Eleven får brev oavsett utfall
+                # (verkligheten: en kreditförfrågan loggas alltid).
+                annual_income = Decimal(0)
+                try:
+                    from ..school.engines import master_session
+                    from ..school.models import StudentProfile as _SP
+                    with master_session() as mdb:
+                        if student_id is not None:
+                            sp = (
+                                mdb.query(_SP)
+                                .filter(_SP.student_id == student_id)
+                                .first()
+                            )
+                            if sp and sp.gross_salary_monthly:
+                                annual_income = (
+                                    Decimal(sp.gross_salary_monthly) * 12
+                                )
+                except Exception:
+                    pass
+
+                cc = compute_credit_check(
+                    private_s,
+                    annual_income=annual_income,
+                    running_applications=0,
+                    student_id=student_id,
+                )
+
+                # Pedagogisk kreditupplysnings-mail (alltid)
+                private_s.add(_MI(
+                    sender="Företagsbanken AB",
+                    sender_short="BNK",
+                    sender_kind="financial",
+                    sender_meta=f"Kreditupplysning · {today.isoformat()}",
+                    mail_type="info",
+                    subject=f"Kreditupplysning · {today.isoformat()}",
+                    body_meta=f"UC-score {cc.uc_score_class} · {cc.uc_score_value}/100",
+                    body=(
+                        f"Hej. Vi har genomfört en kreditupplysning på "
+                        f"dig som privatperson i samband med din ansökan "
+                        f"om lån för {label}.\n\n"
+                        f"Datum: {today.isoformat()}\n"
+                        f"Total skuld: {int(cc.total_debt):,} kr\n".replace(",", " ") +
+                        f"Skuldsättningsgrad: {float(cc.debt_ratio) * 100:.0f} %\n"
+                        f"Aktiva betalningsanmärkningar: "
+                        f"{cc.payment_marks_count} st\n"
+                        f"UC-score: {cc.uc_score_value}/100 ({cc.uc_score_class})\n\n"
+                        + (
+                            "Beslut: AVSLAG. Vi kan inte erbjuda lån "
+                            "givet ditt nuvarande UC-score och historik. "
+                            "Du kan ansöka igen när betalningsanmärkningar "
+                            "rensats eller skuld minskat."
+                            if cc.uc_score_class in ("D", "E") or cc.payment_marks_count >= 3
+                            else "Beslut: GODKÄNT. Vi har beviljat lånet "
+                            "på de villkor som angavs i ansökan."
+                        )
+                    ),
+                    amount=None,
+                    due_date=None,
+                    status="unhandled",
+                ))
+
+                # Avslag · ingen Loan, inget kapital till bolaget
+                if cc.uc_score_class in ("D", "E") or cc.payment_marks_count >= 3:
+                    private_s.commit()
+                    raise HTTPException(
+                        402,
+                        f"Privatlån avslogs · UC-score {cc.uc_score_value}/100 "
+                        f"({cc.uc_score_class}), {cc.payment_marks_count} "
+                        "betalningsanmärkningar. Brev från banken har skickats "
+                        "till postlådan. Prova företagslån m. personlig borgen "
+                        "eller kontakta läraren."
+                    )
+
                 pl = _PL(
                     name=f"Lån för bolagets {label}",
                     lender="Företagsbanken AB",
@@ -1048,7 +1174,8 @@ def buy_startup_kit(
                     amortization_monthly=Decimal(str(int(cost / 60))),
                     notes=(
                         f"Lånat {cost} kr för att köpa {label} till "
-                        "bolaget. 5 år, 6 % ränta. Eleven betalar privat."
+                        f"bolaget. 5 år, 6 % ränta. UC-score "
+                        f"{cc.uc_score_value}/100 ({cc.uc_score_class})."
                     ),
                     active=True,
                 )

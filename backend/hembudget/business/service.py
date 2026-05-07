@@ -432,17 +432,9 @@ def compute_business_pentagon(
         .filter(CompanyTransaction.company_id == company.id)
         .all()
     )
-    kassa = sum(
-        (Decimal(t.amount_excl_vat or 0) for t in all_txs if t.kind == "income"),
-        Decimal(0),
-    ) - sum(
-        (Decimal(t.amount_excl_vat or 0) for t in all_txs
-         if t.kind in (
-             "expense", "salary", "vat_payment",
-             "tax_payment", "asset_purchase",
-         )),
-        Decimal(0),
-    )
+    # Kanonisk källa-av-sanning · samma siffra på Hub, Tillväxt etc.
+    from .cash import compute_company_cash as _ccc
+    kassa = Decimal(_ccc(s, company))
     likviditet = max(0, min(100, int(50 + float(kassa) / 1000)))
 
     # Axel 04 · Tidsåtgång (förenklat: 60 om aktiv, 40 annars)

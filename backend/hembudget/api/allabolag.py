@@ -204,20 +204,9 @@ def sync_class_company_share(
         profit = income - expense
         margin = (profit / income * 100.0) if income > 0 else 0.0
 
-        # Kassa = saldo på företagskonto · approximation: alla
-        # transaktioner sedan start
-        all_txs = (
-            s.query(CompanyTransaction)
-            .filter(CompanyTransaction.company_id == company.id)
-            .all()
-        )
-        kassa = sum(
-            float(t.amount_excl_vat or 0) * (1 if t.kind == "income" else -1)
-            for t in all_txs
-        )
-        # Plus eventuellt aktiekapital
-        if company.share_capital:
-            kassa += float(company.share_capital)
+        # Kassa = kanonisk helper · samma som Hub/Tillväxt visar.
+        from ..business.cash import compute_company_cash as _ccc
+        kassa = float(_ccc(s, company))
 
         # Anställda — Fas D · CompanyEmployment-räknare. Fas A: 0.
         n_employees = 0

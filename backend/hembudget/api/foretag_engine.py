@@ -536,6 +536,18 @@ def create_marketing(
     with session_scope() as s:
         co = _get_active_company(s)
 
+        # Kassa-spärr · marknadsförings-kampanjer får inte ta saldo
+        # minus. Returnera 402 så frontend kan föreslå tillväxtlån.
+        from ..business.cash import compute_company_cash as _ccc
+        bal = _ccc(s, co)
+        if bal < body.cost:
+            raise HTTPException(
+                402,
+                f"Otillräcklig kassa · {body.cost - bal} kr saknas. "
+                f"Kassan är {bal} kr · kampanjen kostar {body.cost} kr. "
+                "Ta ett tillväxtlån (Tillväxt → Lån) först.",
+            )
+
         ai_factor = None
         ai_feedback = None
         if body.copy_text and body.copy_text.strip():
@@ -1083,6 +1095,20 @@ def pay_supplier_invoice(
             raise HTTPException(404, "Faktura saknas")
         if si.status == "paid":
             raise HTTPException(400, "Redan betald")
+
+        # Kassa-spärr · att betala leverantörsfaktura får inte sänka
+        # bolaget under noll. Frivilliga betalningar ska antingen ha
+        # täckning eller skjutas upp / hanteras med tillväxtlån.
+        from ..business.cash import compute_company_cash as _ccc
+        total_due = int(si.amount_excl_vat) + int(si.vat_amount or 0)
+        bal = _ccc(s, co)
+        if bal < total_due:
+            raise HTTPException(
+                402,
+                f"Otillräcklig kassa · {total_due - bal} kr saknas. "
+                f"Kassan är {bal} kr · fakturan är {total_due} kr. "
+                "Ta ett tillväxtlån (Tillväxt → Lån) först.",
+            )
 
         si.status = "paid"
         si.paid_on = today

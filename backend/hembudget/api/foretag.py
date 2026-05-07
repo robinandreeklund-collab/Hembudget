@@ -602,6 +602,33 @@ def create_company(
 
         s.flush()
 
+        # Cash-finansierat aktiekapital · spegla insättningen som
+        # CompanyTransaction så bolagets kassa-formel ser pengarna.
+        # Tidigare använde _kassa share_capital-attributet direkt,
+        # men det skiljde sig från bank-overview som inte gjorde det
+        # → dubbla siffror i Tillväxt vs Hub. Nu gör vi alla funding-
+        # vägar symmetriska: alla resulterar i en income-tx på 25 000
+        # och share_capital-attributet är bara legal-status.
+        if (
+            body.form == "ab"
+            and body.funding_method == "cash"
+            and needed_capital > 0
+        ):
+            s.add(CompanyTransaction(
+                company_id=c.id,
+                occurred_on=date.today(),
+                kind="income",
+                category="Aktiekapital · insättning",
+                description=(
+                    f"Aktiekapital · insättning från privatkontot "
+                    f"({needed_capital} kr)"
+                ),
+                amount_excl_vat=Decimal(str(needed_capital)),
+                vat_rate=Decimal("0.0"),
+                vat_amount=Decimal(0),
+            ))
+            s.flush()
+
         # Företagslån med personlig borgen · skapas i biz-scope
         if body.form == "ab" and body.funding_method == "business_loan_pg" and needed_capital > 0:
             from ..business.models import CompanyLoan
@@ -2027,8 +2054,10 @@ def biz_bank_overview(info: TokenInfo = Depends(require_token)):
             raise HTTPException(400, "Skapa bolag först")
 
         # === Företagskontots saldo (kassa) ===
-        # Samma logik som i compute_business_pentagon: ack income -
-        # ack expense/salary/vat_payment/tax_payment.
+        # Kanonisk källa = business.cash.compute_company_cash. Samma
+        # formel används i Tillväxt, Allabolag, pentagon — så hub +
+        # tillväxt visar alltid samma siffra.
+        from ..business.cash import compute_company_cash as _ccc
         all_txs = (
             s.query(CompanyTransaction)
             .filter(CompanyTransaction.company_id == c.id)
@@ -2040,9 +2069,6 @@ def biz_bank_overview(info: TokenInfo = Depends(require_token)):
              for t in all_txs if t.kind == "income"),
             Decimal(0),
         )
-        # asset_purchase drar från KASSAN (likviditeten) men räknas
-        # INTE som resultat-kostnad. Se buy_startup_kit + tick_engine
-        # phase_f-avskrivning för pedagogiken.
         total_expense = sum(
             (Decimal(t.amount_excl_vat or 0)
              for t in all_txs
@@ -2052,7 +2078,7 @@ def biz_bank_overview(info: TokenInfo = Depends(require_token)):
              )),
             Decimal(0),
         )
-        kassa = total_income - total_expense
+        kassa = Decimal(_ccc(s, c))
 
         # === Skattekonto-saldo: summa vat_payment + tax_payment ===
         skattekonto = sum(
