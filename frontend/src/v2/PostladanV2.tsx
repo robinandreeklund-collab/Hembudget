@@ -158,25 +158,38 @@ export function PostladanV2() {
   // separat: prototypens "Övrigt" mappar till info_count + reminder.
   const ovrigtCount = summary.info_count + summary.other_count;
 
-  // === Klient-filtrering · hanterade till egen flik, övriga flikar
-  // visar AKTIVA brev (ohanterade + lästa) i ALLA månader. Tidigare
-  // försökte filtret begränsa till "nuvarande månad" men eftersom
-  // seed-flödet släpper innevarande månads brev gradvis (lönespec dag
-  // 22 etc.) blev postlådan tom under första veckan. Hanterade samlas
-  // i egen flik så listan inte växer i evighet. ===
+  // === Filter-logik per flik ===
+  // Allt        → AKTIVA brev (visa progress, dölj historik)
+  // Ohanterade  → endast status=unhandled
+  // Fakturor    → ALLA fakturor (inkl. paid) så eleven ser historik per kategori
+  // Lönespecar  → ALLA lönespecar
+  // Myndighet   → ALLA myndighetsbrev
+  // Övrigt      → ALLA reminder/info-brev
+  // Hanterade   → status=paid/exported/handled (alla månader, alla typer)
+  //
+  // Tidigare gömde jag paid-items från kategori-flikarna → de blev tomma
+  // när seed-sweep markerat allt som paid. Nu visar varje kategori-flik
+  // hela sin historik så eleven kan jämföra månader inom samma kategori.
   const HANDLED_STATUSES = new Set(["paid", "exported", "handled"]);
   let items = rawItems;
   if (tab === "handled") {
     items = rawItems.filter((m) => HANDLED_STATUSES.has(m.status));
-  } else {
-    // Övriga flikar visar bara AKTIVA brev (inte 'paid' etc.) — annars
-    // skulle hyran-2026-04-01 stanna kvar i Allt-fliken efter att
-    // sweepen markerat den paid och bara skapa brus.
+  } else if (tab === "all") {
     items = rawItems.filter((m) => !HANDLED_STATUSES.has(m.status));
   }
-  const handledCount = rawItems.filter(
-    (m) => HANDLED_STATUSES.has(m.status),
-  ).length;
+  // För Fakturor/Lönespecar/Myndighet/Övrigt/Ohanterade: visa allt
+  // backend returnerade — ingen extra filtrering. Backend filtrerar
+  // redan på mail_type så listan är korrekt scopad.
+
+  // Hanterade-räknaren ska vara KONSTANT oavsett vald flik. Backend-
+  // summaryt är dock tab-beroende eftersom backend filtrerar items
+  // före count. Vi använder summary.total_count - summary.unhandled_count
+  // som approximation när vi inte har full data, eller exakt från
+  // rawItems när tab är 'all' eller 'handled' (backend returnerar då
+  // alla mails).
+  const handledCount = (tab === "all" || tab === "handled")
+    ? rawItems.filter((m) => HANDLED_STATUSES.has(m.status)).length
+    : Math.max(0, summary.total_count - summary.unhandled_count);
 
   function fmtDateTime(iso: string | null): string {
     if (!iso) return "—";
