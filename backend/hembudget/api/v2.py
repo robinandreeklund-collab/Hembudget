@@ -295,7 +295,7 @@ def get_game_time(info: TokenInfo = Depends(require_token)) -> HubGameTime:
             full_label="Torsdag 1 januari 2026",
             short_label="1 januari",
             year_month=GAME_ANCHOR_DATE.strftime("%Y-%m"),
-            real_anchor_at=datetime.utcnow().isoformat(),
+            real_anchor_at=datetime.utcnow().isoformat() + "Z",
         )
     from ..game_engine.release_schedule import game_date_for
     with master_session() as ms:
@@ -308,7 +308,7 @@ def get_game_time(info: TokenInfo = Depends(require_token)) -> HubGameTime:
                 full_label="Torsdag 1 januari 2026",
                 short_label="1 januari",
                 year_month=GAME_ANCHOR_DATE.strftime("%Y-%m"),
-                real_anchor_at=datetime.utcnow().isoformat(),
+                real_anchor_at=datetime.utcnow().isoformat() + "Z",
             )
         gy, gm, gd = game_date_for(stu.created_at)
         gd = max(1, min(28, gd))
@@ -335,7 +335,7 @@ def get_game_time(info: TokenInfo = Depends(require_token)) -> HubGameTime:
             full_label=f"{wd} {gd} {mn} {gy}",
             short_label=f"{gd} {mn}",
             year_month=f"{gy:04d}-{gm:02d}",
-            real_anchor_at=stu.created_at.isoformat(),
+            real_anchor_at=stu.created_at.isoformat() + "Z",
             seconds_per_game_day=SECONDS_PER_GAME_DAY,
             seconds_into_current_day=sec_into_day,
             seconds_until_next_day=sec_until_next,
@@ -745,7 +745,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                     full_label=f"{wd} {gd} {mn} {gy}",
                     short_label=f"{gd} {mn}",
                     year_month=f"{gy:04d}-{gm:02d}",
-                    real_anchor_at=_stu_gt.created_at.isoformat(),
+                    real_anchor_at=_stu_gt.created_at.isoformat() + "Z",
                     seconds_per_game_day=SECONDS_PER_GAME_DAY,
                     seconds_into_current_day=sec_into_day,
                     seconds_until_next_day=sec_until_next,

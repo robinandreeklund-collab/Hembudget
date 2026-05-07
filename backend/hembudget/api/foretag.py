@@ -38,6 +38,7 @@ from ..business.models import (
     CompanyTransaction,
     CompanyVatPeriod,
 )
+from ..business.game_clock import current_game_date
 from ..business.service import (
     book_owner_salary,
     book_owner_withdrawal,
@@ -531,7 +532,7 @@ def create_company(
                 from datetime import datetime as _dt
                 private_s.add(Transaction(
                     account_id=acc.id,
-                    date=date.today(),
+                    date=current_game_date(),
                     amount=Decimal(str(-needed_capital)),
                     currency="SEK",
                     raw_description="Aktiekapital · ny AB",
@@ -549,7 +550,7 @@ def create_company(
                     name="Startup-lån (aktiekapital)",
                     lender="Företagsbanken AB",
                     principal_amount=Decimal(str(needed_capital)),
-                    start_date=date.today(),
+                    start_date=current_game_date(),
                     interest_rate=0.06,
                     binding_type="rörlig",
                     amortization_monthly=Decimal(str(int(needed_capital / 60))),
@@ -577,7 +578,7 @@ def create_company(
             name=body.name,
             org_number=body.org_number,
             form=body.form,
-            started_on=date.today(),
+            started_on=current_game_date(),
             share_capital=body.share_capital,
             vat_registered=body.vat_registered,
             vat_period=body.vat_period,
@@ -596,7 +597,7 @@ def create_company(
         # köpa via Tillväxt-vyn.
         if industry.equipment_cost_init == 0:
             c.has_base_equipment = True
-            c.base_equipment_purchased_on = date.today()
+            c.base_equipment_purchased_on = current_game_date()
         if not industry.requires_car:
             c.has_car = True  # branscher utan bilkrav räknas som "klart"
 
@@ -616,7 +617,7 @@ def create_company(
         ):
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
+                occurred_on=current_game_date(),
                 kind="income",
                 category="Aktiekapital · insättning",
                 description=(
@@ -649,13 +650,13 @@ def create_company(
                 months_left=months,
                 is_personal_guarantee=True,
                 status="active",
-                started_on=date.today(),
+                started_on=current_game_date(),
             )
             s.add(biz_loan)
             # Lånet syns som "income" på company kassan (motpost = skuld)
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
+                occurred_on=current_game_date(),
                 kind="income",
                 category="Lån · startkapital",
                 description=(
@@ -765,7 +766,7 @@ def close_company(
         if c is None:
             raise HTTPException(404, "Bolag saknas")
         c.active = False
-        c.closed_on = date.today()
+        c.closed_on = current_game_date()
         s.flush()
     return None
 
@@ -949,7 +950,7 @@ def add_invoice(
             .filter(CompanyInvoice.company_id == c.id)
             .count()
         )
-        invoice_number = f"{date.today().year}-{n_existing + 1:04d}"
+        invoice_number = f"{current_game_date().year}-{n_existing + 1:04d}"
 
         amount = Decimal(str(body.amount_excl_vat))
         vat_amount = (amount * Decimal(str(body.vat_rate))).quantize(
@@ -1017,7 +1018,7 @@ def mark_invoice_paid(
             return _invoice_to_out(inv, cust.name if cust else "?")
 
         inv.status = "paid"
-        inv.paid_on = date.today()
+        inv.paid_on = current_game_date()
 
         # Bokför som income-transaktion
         s.add(CompanyTransaction(
@@ -1413,7 +1414,7 @@ def _build_biz_axis_detail(
     factors: list[BizAxisFactor] = []
     events: list[BizAxisEvent] = []
 
-    cutoff = date.today() - __import__("datetime").timedelta(days=42)
+    cutoff = current_game_date() - __import__("datetime").timedelta(days=42)
 
     if axis == "omsattning":
         income_4w = float(metrics.get("income_4w", 0))
@@ -2125,8 +2126,8 @@ def biz_bank_overview(info: TokenInfo = Depends(require_token)):
             ),
         ]
 
-        # === Kontoutdrag · senaste 30 dgr ===
-        cutoff = date.today() - __import__("datetime").timedelta(days=30)
+        # === Kontoutdrag · senaste 30 dgr (spel-tid) ===
+        cutoff = current_game_date() - __import__("datetime").timedelta(days=30)
         recent = [t for t in all_txs if t.occurred_on >= cutoff][:25]
         tx_rows: list[BizBankTxOut] = []
         for t in recent:
@@ -2172,8 +2173,8 @@ def biz_bank_overview(info: TokenInfo = Depends(require_token)):
             float(next_vat.net_vat or 0) if next_vat else 0.0
         )
 
-        # === Egen lön denna månad ===
-        first_of_month = date.today().replace(day=1)
+        # === Egen lön denna månad (spel-månad) ===
+        first_of_month = current_game_date().replace(day=1)
         salary_this = sum(
             (Decimal(t.amount_excl_vat or 0)
              for t in all_txs

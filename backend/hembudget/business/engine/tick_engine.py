@@ -711,24 +711,8 @@ def kickstart_pipeline_only(
         return
     # Använd spel-datum (synkat med privat-tid) i stället för real-tid
     # så genererade opps får rätt datum-stämpel.
-    today = date.today()
-    try:
-        from ...school.engines import (
-            master_session as _ms_kick,
-            get_current_actor_student as _gcas_kick,
-        )
-        from ...school.models import Student as _Stu_kick
-        from ...game_engine.release_schedule import game_date_for
-        sid = _gcas_kick()
-        if sid is not None:
-            with _ms_kick() as _msess:
-                stu = _msess.get(_Stu_kick, sid)
-                if stu is not None and stu.created_at is not None:
-                    gy, gm, gd = game_date_for(stu.created_at)
-                    gd = max(1, min(28, gd))
-                    today = date(gy, gm, gd)
-    except Exception:
-        pass
+    from ..game_clock import current_game_date
+    today = current_game_date()
     for _ in range(weeks):
         try:
             company.week_no = (company.week_no or 0) + 1
@@ -806,7 +790,9 @@ def run_business_week(
     if not company.active:
         raise ValueError("Cannot tick a closed company")
 
-    today = today or date.today()
+    if today is None:
+        from ..game_clock import current_game_date
+        today = current_game_date()
     company.week_no += 1
     summary = TickSummary(week_no=company.week_no)
 
@@ -867,10 +853,26 @@ def run_business_week(
     except Exception as exc:
         log.exception("biz tick failed for company %s week %s",
                       company.id, company.week_no)
-        tick_row.status = "failed"
-        tick_row.error = str(exc)[:1000]
-        tick_row.completed_at = datetime.utcnow()
-        s.flush()
+        # VIKTIGT: tick_row är på samma session `s` som alla phases.
+        # När exceptionen propageras → session_scope rollback:ar HELA
+        # sessionen, inkl. tick_row. Resultatet: vi kan ALDRIG se vad
+        # som failade. Persistera failure-raden i en SEPARAT session
+        # innan re-raise, så att tick-status-endpoint kan visa felet.
+        try:
+            from ...db.base import session_scope as _ss_audit
+            with _ss_audit() as _audit_s:
+                _audit_row = BusinessTickJob(
+                    company_id=company.id,
+                    week_no=company.week_no,
+                    status="failed",
+                    error=str(exc)[:1000],
+                    completed_at=datetime.utcnow(),
+                )
+                _audit_s.add(_audit_row)
+        except Exception:
+            log.exception(
+                "kunde inte persistera tick-failure i separat session",
+            )
         raise
 
     return summary
@@ -916,44 +918,37 @@ def auto_tick_if_due(s: Session, *, company: Company) -> int:
     # kalender som privat (anchor 2026-01-01, 1 real-timme = 1 spel-
     # vecka). Annars hamnar biz-transaktioner med real-tid (maj 2026)
     # medan privat står på spel-tid (jan 2026).
-    game_today = None
-    try:
-        from ...school.engines import (
-            master_session as _ms_at, get_current_actor_student as _gcas_at,
-        )
-        from ...school.models import Student as _Stu_at
-        from ...game_engine.release_schedule import game_date_for
-        sid = _gcas_at()
-        if sid is not None:
-            with _ms_at() as _msess:
-                stu = _msess.get(_Stu_at, sid)
-                if stu is not None and stu.created_at is not None:
-                    gy, gm, gd = game_date_for(stu.created_at)
-                    gd = max(1, min(28, gd))
-                    game_today = date(gy, gm, gd)
-    except Exception:
-        pass
+    from ..game_clock import current_game_date
+    game_today = current_game_date()
 
+    n_done = 0
     for _ in range(n):
         try:
             run_business_week(s, company=company, today=game_today)
+            n_done += 1
         except Exception:
             log.exception(
-                "auto_tick: vecka %s misslyckades · fortsätter",
+                "auto_tick: vecka %s misslyckades · stoppar",
                 company.week_no + 1,
             )
+            # VIKTIGT: vi kan INTE bara avancera last_auto_tick_at som om
+            # ticken kördes — då hamnar offerter "i evig kö" eftersom
+            # phase_a aldrig får chansen att besluta dem och vi inte
+            # försöker igen vid nästa request. Lämna last_auto_tick_at
+            # ofall för att försöka igen direkt på nästa endpoint-läsning.
             break
-    # Avancera tidsstämpeln med exakt n*intervall · inte "now". Då blir
-    # nästa läsning idempotent (om ingen ny timme passerat) och
-    # återstående delvis-timme räknas mot nästa intervall.
+    # Avancera tidsstämpeln med antalet faktiska lyckade tickar (n_done),
+    # inte n. Om allt failade lämnar vi last_auto_tick_at orörd så vi
+    # fortsätter försöka tills underliggande bug är fixad.
     from datetime import timedelta as _td
-    company.last_auto_tick_at = last + _td(
-        hours=n * AUTO_TICK_INTERVAL_HOURS,
-    )
+    if n_done > 0:
+        company.last_auto_tick_at = last + _td(
+            hours=n_done * AUTO_TICK_INTERVAL_HOURS,
+        )
 
     # Sync till Allabolag-cachen (master-DB) så klassens scoreboard
     # uppdateras. Fail-soft: om sync krashar fortsätter ändå auto-tick.
-    if n > 0:
+    if n_done > 0:
         try:
             from ...school.engines import (
                 master_session as _ms,
@@ -978,7 +973,7 @@ def auto_tick_if_due(s: Session, *, company: Company) -> int:
                 "auto_tick: Allabolag-sync misslyckades för company=%s",
                 company.id,
             )
-    return n
+    return n_done
 
 
 # ===== Cross-engine: tids-stress + Maria-prompt (Sprint 8) =====
@@ -1332,7 +1327,9 @@ def deliver_job(
     Sätter quality_score, skapar CompanyInvoice (om create_invoice=True),
     uppdaterar avg_quality och reputation.
     """
-    today = today or date.today()
+    if today is None:
+        from ..game_clock import current_game_date
+        today = current_game_date()
     if job.status not in ("in_progress",):
         raise ValueError("Job is not in_progress")
 

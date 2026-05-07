@@ -8,6 +8,7 @@ from typing import Optional
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from .game_clock import current_game_date
 from .models import (
     Company,
     CompanyInvoice,
@@ -320,7 +321,7 @@ def file_vat_period(
             input_vat=Decimal(str(calc["input_vat"])),
             net_vat=Decimal(str(calc["net_vat"])),
             status="filed",
-            filed_on=date.today(),
+            filed_on=current_game_date(),
         )
         s.add(existing)
     else:
@@ -328,7 +329,7 @@ def file_vat_period(
         existing.input_vat = Decimal(str(calc["input_vat"]))
         existing.net_vat = Decimal(str(calc["net_vat"]))
         existing.status = "filed"
-        existing.filed_on = date.today()
+        existing.filed_on = current_game_date()
 
     # Bokför moms-betalning som expense (om netto > 0)
     if calc["net_vat"] > 0:
@@ -366,7 +367,7 @@ def compute_business_pentagon(
 
     För MVP räknar vi från CompanyTransaction:s 4-veckors-fönster.
     """
-    today = today or date.today()
+    today = today or current_game_date()
     four_weeks_ago = today - __import__("datetime").timedelta(days=28)
     twelve_weeks_ago = today - __import__("datetime").timedelta(days=84)
 

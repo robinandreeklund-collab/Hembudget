@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from ..business.engine import auto_tick_if_due, run_business_week
 from ..business.engine.tick_engine import deliver_job
+from ..business.game_clock import current_game_date
 from ..business.models import (
     BusinessDecision,
     BusinessTickJob,
@@ -184,6 +185,8 @@ class TickStatusOut(BaseModel):
     seconds_until_next_tick: int
     week_no: int
     open_quotes_count: int
+    last_tick_status: Optional[str] = None  # "done" | "failed" | None
+    last_tick_error: Optional[str] = None
 
 
 @router.get("/tick-status", response_model=TickStatusOut)
@@ -219,6 +222,24 @@ def get_tick_status(info: TokenInfo = Depends(require_token)):
             )
             .count()
         )
+        # Senaste BusinessTickJob för debug — om den senaste failade
+        # vet vi att alla auto-tick-försök kraschar och quotes inte
+        # avgörs trots att timmar passerat.
+        last_status = None
+        last_error = None
+        try:
+            last_job = (
+                s.query(BusinessTickJob)
+                .filter(BusinessTickJob.company_id == co.id)
+                .order_by(BusinessTickJob.id.desc())
+                .first()
+            )
+            if last_job is not None:
+                last_status = last_job.status
+                last_error = last_job.error
+        except Exception:
+            pass
+
         return TickStatusOut(
             last_auto_tick_at=last_at.isoformat() if last_at else None,
             next_tick_at=next_at.isoformat(),
@@ -226,6 +247,8 @@ def get_tick_status(info: TokenInfo = Depends(require_token)):
             seconds_until_next_tick=seconds_until,
             week_no=int(co.week_no or 0),
             open_quotes_count=open_quotes,
+            last_tick_status=last_status,
+            last_tick_error=last_error,
         )
 
 
@@ -347,7 +370,7 @@ def submit_quote(
             offered_delivery_days=body.offered_delivery_days,
             pitch_text=body.pitch_text,
             pitch_quality=pitch_quality,
-            submitted_on=date.today(),
+            submitted_on=current_game_date(),
         )
         s.add(q)
         opp.status = "quoted"
@@ -413,7 +436,7 @@ class DeliverOut(BaseModel):
 
 
 def _to_job_out(j: Job) -> JobOut:
-    today = date.today()
+    today = current_game_date()
     days_total = max(1, (j.expected_complete_on - j.started_on).days)
     elapsed = max(0, (today - j.started_on).days)
     days_remaining = (j.expected_complete_on - today).days
@@ -589,7 +612,7 @@ def create_marketing(
 ):
     """Skapa kampanj. Bokför kostnaden direkt + AI-bedöm copy om text finns."""
     _require_student(info)
-    today = date.today()
+    today = current_game_date()
     with session_scope() as s:
         co = _get_active_company(s)
 
@@ -854,7 +877,7 @@ def buy_marketing_package(
     if pkg is None:
         raise HTTPException(404, "Paketet finns inte")
 
-    today = date.today()
+    today = current_game_date()
     with session_scope() as s:
         co = _get_active_company(s)
 
@@ -989,7 +1012,7 @@ def create_decision(
     """Skapa beslut. Tillämpar capacity/reputation-delta direkt + bokför
     eventuell engångskostnad."""
     _require_student(info)
-    today = date.today()
+    today = current_game_date()
     with session_scope() as s:
         co = _get_active_company(s)
         # Kassa-spärr · engångskostnad + första veckans löpande kost
@@ -1074,7 +1097,7 @@ def end_decision(
         if not d.active:
             return
         d.active = False
-        d.ends_on = date.today()
+        d.ends_on = current_game_date()
         # Reverse capacity-delta
         if d.capacity_delta:
             co.delivery_capacity = max(
@@ -1144,7 +1167,7 @@ def pay_supplier_invoice(
 ):
     """Betala leverantörsfaktura · skapar CompanyTransaction expense."""
     _require_student(info)
-    today = date.today()
+    today = current_game_date()
     with session_scope() as s:
         co = _get_active_company(s)
         si = (
@@ -1324,7 +1347,10 @@ def class_overview(
                             n_with_company += 1
                             rep_total += co.reputation
                             rep_count += 1
-                            today = date.today()
+                            from ..business.game_clock import (
+                                current_game_date_for_student,
+                            )
+                            today = current_game_date_for_student(stu.id)
                             cutoff = today - timedelta(weeks=4)
 
                             # Omsättning + vinst senaste 4 v
@@ -1440,8 +1466,8 @@ def teacher_send_supplier_invoice(
         master_session, scope_context, scope_for_student,
     )
     from ..school.models import Student
+    from ..business.game_clock import current_game_date_for_student
 
-    today = date.today()
     n_created = 0
     n_skipped_no_co = 0
     n_skipped_not_mine = 0
@@ -1466,6 +1492,7 @@ def teacher_send_supplier_invoice(
                             n_skipped_no_co += 1
                             continue
 
+                        today = current_game_date_for_student(sid)
                         si = SupplierInvoice(
                             company_id=co.id,
                             sender_name=body.sender_name,

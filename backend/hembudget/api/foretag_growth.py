@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .deps import TokenInfo, require_token
+from ..business.game_clock import current_game_date
 from ..business.models import (
     Company,
     CompanyAsset,
@@ -216,7 +217,7 @@ def compute_capacity(s, company: Company) -> dict:
     _ensure_default_location_and_equipment(s, company)
     loc = _get_active_location(s, company.id)
     eq = _get_active_equipment(s, company.id)
-    today = date.today()
+    today = current_game_date()
 
     in_progress = (
         s.query(Job)
@@ -456,7 +457,7 @@ def upgrade_location(
             # Bokför som expense
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
+                occurred_on=current_game_date(),
                 kind="expense",
                 category="Lokal · köp",
                 description=f"Köpte {meta['label']}",
@@ -480,7 +481,7 @@ def upgrade_location(
         existing = _get_active_location(s, c.id)
         if existing is not None:
             existing.is_active = False
-            existing.ended_on = date.today()
+            existing.ended_on = current_game_date()
         # Skapa ny
         s.add(CompanyLocation(
             company_id=c.id,
@@ -554,7 +555,7 @@ def buy_equipment(
         if cost > 0:
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
+                occurred_on=current_game_date(),
                 kind="expense",
                 category="Utrustning",
                 description=f"Köpte {meta['label']}",
@@ -592,7 +593,7 @@ def rent_mcp(
             raise HTTPException(400, "Inget aktivt bolag")
         if _kassa(s, c) < total:
             raise HTTPException(400, "Otillräcklig kassa för MCP")
-        today = date.today()
+        today = current_game_date()
         ends = today + timedelta(weeks=body.weeks)
         s.add(CompanyMcpRental(
             company_id=c.id,
@@ -713,7 +714,7 @@ def apply_loan(
         pass
 
     # Skapa kreditupplysnings-brev i postlådan + ev. avslag
-    today = date.today()
+    today = current_game_date()
     try:
         from ..db.models import MailItem as _MI
         with session_scope() as ps_:
@@ -788,13 +789,13 @@ def apply_loan(
             months_left=months,
             is_personal_guarantee=body.is_personal_guarantee,
             status="active",
-            started_on=date.today(),
+            started_on=current_game_date(),
         )
         s.add(loan)
         # Pengar in på kassan som income (kategori = "Lån")
         s.add(CompanyTransaction(
             company_id=c.id,
-            occurred_on=date.today(),
+            occurred_on=current_game_date(),
             kind="income",
             category="Lån",
             description=f"{terms['label']} · {body.principal} kr",
@@ -871,13 +872,13 @@ def pay_loan(
 
         loan.outstanding -= amort
         loan.months_left = max(0, loan.months_left - 1)
-        loan.last_payment_on = date.today()
+        loan.last_payment_on = current_game_date()
         if loan.outstanding <= 0 or loan.months_left == 0:
             loan.status = "repaid"
 
         s.add(CompanyTransaction(
             company_id=c.id,
-            occurred_on=date.today(),
+            occurred_on=current_game_date(),
             kind="expense",
             category="Lån · ränta",
             description=f"Ränta {loan.lender}",
@@ -888,7 +889,7 @@ def pay_loan(
         if amort > 0:
             s.add(CompanyTransaction(
                 company_id=c.id,
-                occurred_on=date.today(),
+                occurred_on=current_game_date(),
                 kind="expense",
                 category="Lån · amortering",
                 description=f"Amortering {loan.lender}",
@@ -1003,7 +1004,7 @@ def buy_startup_kit(
         )
         useful_life = 60 if body.item == "base_equipment" else 120
         vat_amount = int(cost * 0.25)
-        today = date.today()
+        today = current_game_date()
 
         # Tillgångsregister-post · skapas oavsett funding-metod
         asset = CompanyAsset(
@@ -1207,10 +1208,10 @@ def buy_startup_kit(
         # Sätt flaggan
         if body.item == "base_equipment":
             c.has_base_equipment = True
-            c.base_equipment_purchased_on = date.today()
+            c.base_equipment_purchased_on = current_game_date()
         else:
             c.has_car = True
-            c.car_purchased_on = date.today()
+            c.car_purchased_on = current_game_date()
 
         s.flush()
 

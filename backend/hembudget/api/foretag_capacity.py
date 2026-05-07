@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 
 from .deps import TokenInfo, require_token
+from ..business.game_clock import current_game_date
 from ..business.models import (
     Company, CompanyMcpRental, Job,
 )
@@ -184,7 +185,7 @@ def compute_time_capacity(
     employee_hours = n_employees * EMPLOYEE_HOURS_PER_WEEK
 
     # MCP
-    today = date.today()
+    today = current_game_date()
     n_mcp = (
         s.query(CompanyMcpRental)
         .filter(

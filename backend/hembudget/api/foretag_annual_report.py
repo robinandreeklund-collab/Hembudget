@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .deps import TokenInfo, require_token
+from ..business.game_clock import current_game_date
 from ..business.models import (
     Company,
     CompanyAnnualReport,
@@ -174,7 +175,7 @@ def preview_annual_report(
     """Visa förhandsvisning av årsbokslut INNAN inlämning. Eleven ser
     siffrorna och kan dubbelkolla mot bokföringen."""
     _require_student(info)
-    year = fiscal_year or date.today().year
+    year = fiscal_year or current_game_date().year
     with session_scope() as s:
         c = _get_active_company(s)
         if c is None:
@@ -231,7 +232,7 @@ def submit_annual_report(
 
         # Block: inte tillåtet att skicka in nuvarande år (måste vara
         # kalenderår som är slut)
-        today = date.today()
+        today = current_game_date()
         if body.fiscal_year >= today.year:
             raise HTTPException(
                 400,

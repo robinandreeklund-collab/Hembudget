@@ -588,6 +588,8 @@ export type TickStatus = {
   seconds_until_next_tick: number;
   week_no: number;
   open_quotes_count: number;
+  last_tick_status: "done" | "failed" | "running" | null;
+  last_tick_error: string | null;
 };
 
 export const bizEngineApi = {

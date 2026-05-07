@@ -153,6 +153,40 @@ export function BizOfferter() {
     >
       {err && <div className="biz-error">{err}</div>}
 
+      {tick && tick.last_tick_status === "failed" && tick.last_tick_error && (
+        <div style={{
+          padding: "14px 18px",
+          marginBottom: 16,
+          background: "rgba(220,76,43,0.10)",
+          border: "1px solid rgba(220,76,43,0.45)",
+          borderLeft: "3px solid #dc4c2b",
+          borderRadius: 8,
+        }}>
+          <div style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+            color: "#fda594", marginBottom: 6,
+          }}>
+            ⚠ TICK MISSLYCKADES · OFFERTER AVGÖRS INTE
+          </div>
+          <div style={{
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 13.5, color: "#fff", marginBottom: 4,
+          }}>
+            Senaste auto-tick kraschade. Därför ligger offerterna kvar.
+          </div>
+          <pre style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 11.5,
+            color: "#fda594",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            margin: 0,
+            lineHeight: 1.5,
+          }}>{tick.last_tick_error}</pre>
+        </div>
+      )}
+
       {tick && (
         <div style={{
           padding: "12px 16px",
