@@ -116,6 +116,14 @@ def _create_salary_for(
     )
 
     sender_label = "Arbetsgivaren" + (" (partner)" if is_partner else "")
+    # received_at = SPEL-datetime · annars stämplas alla seedade mail
+    # med real-tid (utcnow) → eleven ser "7 maj" i postlådan trots
+    # att lönespec gäller januari. Vi använder pay_d - 3 dgr (lönespec
+    # arriverar 2-3 dgr före lön i verkligheten) som naive datetime.
+    from datetime import datetime as _dt_sp, timedelta as _td_sp
+    spec_arrival = _dt_sp.combine(
+        pay_d - _td_sp(days=3), _dt_sp.min.time(),
+    ).replace(hour=9)
     mail = MailItem(
         sender=sender_label,
         sender_short="WORK",
@@ -129,6 +137,7 @@ def _create_salary_for(
         due_date=pay_d,
         status="unhandled",
         released_at=mail_released_at,
+        received_at=spec_arrival,
     )
     s.add(mail)
 

@@ -152,6 +152,13 @@ def _build_mail(
         due_date=occurred_on if (cost or 0) > 0 else None,
         status="unhandled",
         released_at=released_at,
+        # received_at = SPEL-tid · annars stämplas alla event-mail med
+        # real-tid (utcnow) vid seed-körning och eleven ser "7 maj"
+        # i postlådan trots att händelsen är i januari.
+        received_at=__import__("datetime").datetime.combine(
+            occurred_on,
+            __import__("datetime").time(10, 0),
+        ),
     )
 
 

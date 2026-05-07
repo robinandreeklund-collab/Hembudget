@@ -1057,8 +1057,11 @@ def test_v2_budget_with_categories_and_actuals(fx) -> None:
 
     _seed_scope(sid, seed)
 
+    # Query för exakt samma månad som vi seeded — annars defaultar
+    # endpoint:en till spel-tid (jan 2026) medan testet seedade i
+    # real-tid. Vi vill testa logiken inte tids-konvertering.
     r = client.get(
-        "/v2/budget",
+        f"/v2/budget?month={ym}",
         headers={"Authorization": f"Bearer {stu}"},
     )
     assert r.status_code == 200, r.text
@@ -1136,8 +1139,9 @@ def test_v2_budget_fixed_category_status(fx) -> None:
 
     _seed_scope(sid, seed)
 
+    # Explicit month-param · annars defaultar endpoint:en till spel-tid
     r = client.get(
-        "/v2/budget",
+        f"/v2/budget?month={ym}",
         headers={"Authorization": f"Bearer {stu}"},
     )
     assert r.status_code == 200, r.text
@@ -1191,9 +1195,10 @@ def test_v2_budget_update_category(fx) -> None:
     assert r.status_code == 200, r.text
     assert r.json()["planned"] == 5000
 
-    # Verifiera via GET
+    # Verifiera via GET · explicit month-param eftersom endpoint:en
+    # defaultar till spel-tid (jan 2026) men vi seedade i real-tid.
     r = client.get(
-        "/v2/budget",
+        f"/v2/budget?month={ym}",
         headers={"Authorization": f"Bearer {stu}"},
     )
     cats = {c["category_name"]: c for c in r.json()["categories"]}
@@ -1299,9 +1304,9 @@ def test_v2_budget_delete_row(fx) -> None:
     )
     cat_id = r.json()["category_id"]
 
-    # Verifiera att raden finns i /v2/budget
+    # Verifiera att raden finns i /v2/budget (explicit ym)
     r2 = client.get(
-        "/v2/budget",
+        f"/v2/budget?month={ym}",
         headers={"Authorization": f"Bearer {stu}"},
     )
     names = [c["category_name"] for c in r2.json()["categories"]]
@@ -1314,9 +1319,9 @@ def test_v2_budget_delete_row(fx) -> None:
     )
     assert r3.status_code == 204, r3.text
 
-    # /v2/budget ska inte längre lista raden
+    # /v2/budget ska inte längre lista raden (explicit ym)
     r4 = client.get(
-        "/v2/budget",
+        f"/v2/budget?month={ym}",
         headers={"Authorization": f"Bearer {stu}"},
     )
     names = [c["category_name"] for c in r4.json()["categories"]]

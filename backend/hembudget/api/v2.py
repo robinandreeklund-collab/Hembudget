@@ -271,8 +271,20 @@ class HubResponse(BaseModel):
 
 
 def _current_year_month() -> str:
-    today = _date.today()
-    return f"{today.year:04d}-{today.month:02d}"
+    """Returnerar elevens nuvarande SPEL-månad (synkat med privat-tid).
+
+    Tidigare returnerade detta real-tid (date.today()) → pentagon-axel,
+    bokföring och postlåda visade "2026-05" trots att eleven är på
+    "2026-02" i spel-tiden. Vi använder business.game_clock.current_game_date
+    som löser nuvarande elev från ContextVar och faller tillbaka till
+    real-tid om scope saknas (test/kickstart).
+    """
+    try:
+        from ..business.game_clock import current_game_date
+        d = current_game_date()
+    except Exception:
+        d = _date.today()
+    return f"{d.year:04d}-{d.month:02d}"
 
 
 @router.get("/game-time", response_model=HubGameTime)
@@ -2196,6 +2208,13 @@ def get_mail(
     if info.role == "student" and info.student_id is not None:
         try:
             _auto_tick_private_months_if_due(info.student_id)
+        except Exception:
+            pass
+        # Migrationsfix · äldre mail stämplades med utcnow → "7 maj"
+        # överallt. Normaliserar received_at till spel-tid baserat på
+        # due_date. Cache-gated 10 min så billig.
+        try:
+            _normalize_mail_received_at_if_seed_stamped(info.student_id)
         except Exception:
             pass
         try:
@@ -17525,6 +17544,106 @@ def _auto_tick_private_months_if_due(student_id: int) -> int:
         )
         return 0
 
+
+_RECEIVED_AT_NORMALIZED: dict[int, float] = {}
+_RECEIVED_AT_NORMALIZE_TTL = 600.0  # 10 min · idempotent
+
+
+def _normalize_mail_received_at_if_seed_stamped(student_id: int) -> int:
+    """Migrationsfix · stäm ihop MailItem.received_at med spel-tid.
+
+    Kontext: tidigare seed-flöden stämplade alla MailItems med
+    server_default=func.now() (= real-tid när seed kördes). Resultatet
+    blev att postlådan visade "Senaste utskick 7 maj 19:39" och
+    fakturadatum "7 maj 2026" på ALLA mail trots att de gällde januari.
+
+    Två normaliseringsfall:
+    A. due_date satt → sätt received_at = due_date - 14d (3d för lönespec)
+       så fakturadatum/lönespec-datum visas i samma månad som due_date.
+    B. due_date saknas (info-mail) → konvertera real-tid → spel-tid via
+       real_to_game_datetime(student.created_at, m.received_at). Då
+       hamnar info-mail som "Du kan nu driva eget" på rätt spel-vecka.
+
+    Idempotent · normaliserar bara om received_at är "far off" (>60d
+    från due_date eller >30d efter aktuell spel-tid). Cache-gated 10 min.
+    """
+    import time as _t_norm
+    last = _RECEIVED_AT_NORMALIZED.get(student_id, 0.0)
+    if _t_norm.time() - last < _RECEIVED_AT_NORMALIZE_TTL:
+        return 0
+    _RECEIVED_AT_NORMALIZED[student_id] = _t_norm.time()
+
+    try:
+        from datetime import (
+            datetime as _dt_n, timedelta as _td_n, time as _time_n,
+        )
+        from ..db.models import MailItem as _MI_n
+        from ..school.engines import (
+            scope_context as _sctx_n, scope_for_student as _sfs_n,
+        )
+        from ..game_engine.release_schedule import (
+            real_to_game_datetime as _r2g_n, game_date_for as _gdf_n,
+        )
+
+        with master_session() as ms:
+            stu = ms.get(Student, student_id)
+            if stu is None or stu.created_at is None:
+                return 0
+            scope_key = _sfs_n(stu)
+            stu_created_at = stu.created_at
+
+        # Beräkna nuvarande spel-tid · för cutoff i fall B
+        try:
+            gy_now, gm_now, gd_now = _gdf_n(stu_created_at)
+            now_game = _dt_n(gy_now, gm_now, max(1, min(28, gd_now)))
+        except Exception:
+            now_game = None
+
+        n_normalized = 0
+        with _sctx_n(scope_key):
+            with session_scope() as s:
+                rows = s.query(_MI_n).all()
+                for m in rows:
+                    if m.received_at is None:
+                        continue
+                    if m.due_date is not None:
+                        # Fall A · faktura/lönespec
+                        diff_days = abs(
+                            (m.received_at.date() - m.due_date).days
+                        )
+                        if diff_days <= 60:
+                            continue
+                        offset_days = (
+                            3 if m.mail_type == "salary_slip" else 14
+                        )
+                        arrival_d = m.due_date - _td_n(days=offset_days)
+                        m.received_at = _dt_n.combine(
+                            arrival_d, _time_n(8, 30),
+                        )
+                        n_normalized += 1
+                    else:
+                        # Fall B · info-mail utan due_date
+                        if now_game is None:
+                            continue
+                        # Är received_at i framtiden enligt spel-tid?
+                        if m.received_at <= now_game + _td_n(days=30):
+                            continue
+                        try:
+                            game_dt = _r2g_n(stu_created_at, m.received_at)
+                            m.received_at = game_dt
+                            n_normalized += 1
+                        except Exception:
+                            continue
+        return n_normalized
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_normalize_mail_received_at: failed för student %s",
+            student_id,
+        )
+        return 0
+
+
 # Eskaleringssteg · (min_days_overdue, level, kind, fee, label, pent_safety, pent_economy)
 _DUNNING_STEPS = [
     (5,  1, "påminnelse",  60,  "Påminnelse",                       -2, 0),
@@ -19070,12 +19189,38 @@ def _gather_axis_events_for(
 
 
 def _short_date_label(dt: Optional[datetime]) -> str:
+    """Formattera real-tid-datetime som SPEL-tid-label ('14 jan').
+
+    Pentagon-händelser, lärar-tick-historik och liknande lagrar dt
+    som datetime.utcnow() (real-tid) men eleven förväntar sig spel-tid
+    eftersom hela appen agerar som om "nu" är jan/feb 2026, inte maj.
+
+    Konvertering: 1 real-timme = 1 spel-vecka sedan student.created_at.
+    Faller tillbaka till real-tid-formatering om scope/elev saknas.
+    """
     if dt is None:
         return "—"
     months = [
         "jan", "feb", "mar", "apr", "maj", "jun",
         "jul", "aug", "sep", "okt", "nov", "dec",
     ]
+    # Försök konvertera real-tid → spel-tid via student.created_at
+    try:
+        from ..school.engines import (
+            get_current_actor_student as _gcas_sd,
+        )
+        from ..game_engine.release_schedule import (
+            real_to_game_datetime as _r2g,
+        )
+        sid = _gcas_sd()
+        if sid is not None:
+            with master_session() as _ms_sd:
+                _stu_sd = _ms_sd.get(Student, sid)
+                if _stu_sd is not None and _stu_sd.created_at is not None:
+                    g_dt = _r2g(_stu_sd.created_at, dt)
+                    return f"{g_dt.day} {months[g_dt.month - 1]}"
+    except Exception:
+        pass
     return f"{dt.day} {months[dt.month - 1]}"
 
 

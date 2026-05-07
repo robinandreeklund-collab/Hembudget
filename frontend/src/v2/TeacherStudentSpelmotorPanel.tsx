@@ -39,6 +39,8 @@ type TickRun = {
 type PentagonEvent = {
   id: number;
   occurred_at: string;
+  occurred_at_game: string | null;  // spel-tid ISO
+  occurred_at_label: string | null;  // "14 jan 09:30"
   axis: string;
   requested_delta: number;
   applied_delta: number;
@@ -470,7 +472,9 @@ export function TeacherStudentSpelmotorPanel({ studentId }: { studentId: number 
                   >
                     {REASON_LABEL[p.reason_kind] || p.reason_kind}
                     {p.explanation && ` · ${p.explanation}`}
-                    <span style={{ marginLeft: 6 }}>{SHORT_DATE(p.occurred_at)}</span>
+                    <span style={{ marginLeft: 6 }}>
+                      {p.occurred_at_label || SHORT_DATE(p.occurred_at)}
+                    </span>
                   </div>
                 </div>
               );

@@ -760,6 +760,18 @@ def generate_fixed_expenses(
             if release_base is not None
             else None
         )
+        # received_at = SPEL-datetime så postlådan visar "5 jan" inte
+        # "7 maj" (real-tid när seed kördes). Naive datetime baserat på
+        # billens spel-dag i month-månaden. Fakturor anländer typiskt
+        # ~14 dgr innan due_date i verkligheten — justera bakåt så
+        # eleven ser etablerad post-historik.
+        from datetime import (
+            datetime as _dt_fe, timedelta as _td_fe,
+        )
+        receive_d = due - _td_fe(days=14)
+        receive_at_spel = _dt_fe.combine(
+            receive_d, _dt_fe.min.time(),
+        ).replace(hour=8)
         mail = MailItem(
             sender=bill.sender,
             sender_short=bill.sender_short,
@@ -777,6 +789,7 @@ def generate_fixed_expenses(
             ocr_reference=ocr_val,
             invoice_data=inv,
             released_at=released_at,
+            received_at=receive_at_spel,
         )
         s.add(mail)
         s.flush()
