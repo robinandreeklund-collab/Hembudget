@@ -15,6 +15,7 @@ import { V2Banner } from "./V2Banner";
 import { useAutoStartIntroGuide } from "./guides/GuideContext";
 import { PentagonFlipCard } from "./PentagonFlipCard";
 import { BizSummaryCard } from "./biz/BizSummaryCard";
+import { GameTimeWidget } from "./GameTimeWidget";
 import "./hub.css";
 
 const SEK = (n: number) =>
@@ -161,40 +162,7 @@ export function HubV2() {
         <header className="hub-head">
           <div>
             {hub.game_time && (
-              <div style={{
-                marginBottom: 18,
-                fontFamily: "Source Serif 4, Georgia, serif",
-              }}>
-                <div style={{
-                  fontFamily: "JetBrains Mono, monospace",
-                  fontSize: 10.5, fontWeight: 700, letterSpacing: 1.6,
-                  color: "rgba(255,255,255,0.5)",
-                  textTransform: "uppercase",
-                  marginBottom: 6,
-                }}>
-                  ● SPEL-TID
-                </div>
-                <div style={{
-                  fontSize: 38, fontWeight: 700,
-                  color: "#fff",
-                  letterSpacing: -0.6,
-                  lineHeight: 1.1,
-                }}>
-                  {hub.game_time.full_label}
-                </div>
-                <div style={{
-                  fontFamily: "JetBrains Mono, monospace",
-                  fontSize: 11,
-                  color: "rgba(255,255,255,0.55)",
-                  letterSpacing: 0.5,
-                  marginTop: 8,
-                  lineHeight: 1.5,
-                }}>
-                  1 timme = 1 vecka i karaktärens liv · synkat med
-                  företagsdelen. Lön kommer ~3 h efter månadsstart, ny
-                  månad var ~4 h.
-                </div>
-              </div>
+              <GameTimeWidget gameTime={hub.game_time} />
             )}
             <span className="hub-pill">Privatekonomi som händer</span>
             <h1 className="hub-h1">

@@ -85,6 +85,9 @@ export type HubGameTime = {
   short_label: string;
   year_month: string;
   real_anchor_at: string;
+  seconds_per_game_day: number;
+  seconds_into_current_day: number;
+  seconds_until_next_day: number;
 };
 
 export type HubData = {

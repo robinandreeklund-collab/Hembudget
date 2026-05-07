@@ -249,6 +249,10 @@ class HubGameTime(BaseModel):
     short_label: str  # "7 maj"
     year_month: str  # "2026-05"
     real_anchor_at: str  # student.created_at ISO
+    # Real-tid sekunder · för UI-countdown och progress-bar
+    seconds_per_game_day: int = 514  # SECONDS_PER_GAME_DAY
+    seconds_into_current_day: int = 0  # 0..seconds_per_game_day-1
+    seconds_until_next_day: int = 514  # countdown till nästa spel-dag
 
 
 class HubResponse(BaseModel):
@@ -318,6 +322,13 @@ def get_game_time(info: TokenInfo = Depends(require_token)) -> HubGameTime:
         ]
         wd = weekdays[game_d.weekday()]
         mn = months[gm - 1]
+        # Sekunder in i nuvarande spel-dag · för UI-countdown
+        from ..game_engine.release_schedule import SECONDS_PER_GAME_DAY
+        elapsed_real = max(
+            0.0, (datetime.utcnow() - stu.created_at).total_seconds(),
+        )
+        sec_into_day = int(elapsed_real % SECONDS_PER_GAME_DAY)
+        sec_until_next = SECONDS_PER_GAME_DAY - sec_into_day
         return HubGameTime(
             iso_date=game_d.isoformat(),
             weekday_label=wd,
@@ -325,6 +336,9 @@ def get_game_time(info: TokenInfo = Depends(require_token)) -> HubGameTime:
             short_label=f"{gd} {mn}",
             year_month=f"{gy:04d}-{gm:02d}",
             real_anchor_at=stu.created_at.isoformat(),
+            seconds_per_game_day=SECONDS_PER_GAME_DAY,
+            seconds_into_current_day=sec_into_day,
+            seconds_until_next_day=sec_until_next,
         )
 
 
@@ -716,6 +730,15 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 ]
                 wd = weekdays[game_d.weekday()]
                 mn = months[gm - 1]
+                from ..game_engine.release_schedule import (
+                    SECONDS_PER_GAME_DAY,
+                )
+                elapsed_real = max(
+                    0.0,
+                    (datetime.utcnow() - _stu_gt.created_at).total_seconds(),
+                )
+                sec_into_day = int(elapsed_real % SECONDS_PER_GAME_DAY)
+                sec_until_next = SECONDS_PER_GAME_DAY - sec_into_day
                 game_time = HubGameTime(
                     iso_date=game_d.isoformat(),
                     weekday_label=wd,
@@ -723,6 +746,9 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                     short_label=f"{gd} {mn}",
                     year_month=f"{gy:04d}-{gm:02d}",
                     real_anchor_at=_stu_gt.created_at.isoformat(),
+                    seconds_per_game_day=SECONDS_PER_GAME_DAY,
+                    seconds_into_current_day=sec_into_day,
+                    seconds_until_next_day=sec_until_next,
                 )
     except Exception:
         import logging
