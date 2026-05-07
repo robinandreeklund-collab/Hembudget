@@ -17,22 +17,58 @@ import { BizActionModal, parseBizError, type BizActionModalProps } from "./BizAc
 import { TimeCapacityBreakdown, useTimeCapacity } from "./TimeCapacityWidget";
 
 
-// Hjälpare · gör HTTP 402-fel → snygg modal istället för rå alert.
-// Komponentinstanser kallar handleBizErr(e) i sina catch-block.
-let _bizErrSetter:
+// Hjälpare · gör HTTP 402-fel + alla confirm()/alert() → snygg modal
+// istället för native popup. Komponentinstanser kallar handleBizErr(e)
+// i catch och bizConfirm({...}) för bekräftelser.
+let _bizModalSetter:
   | ((p: BizActionModalProps | null) => void)
   | null = null;
-function setBizErrorModalSetter(
+function setBizModalSetterFn(
   fn: ((p: BizActionModalProps | null) => void) | null,
 ) {
-  _bizErrSetter = fn;
+  _bizModalSetter = fn;
 }
 function handleBizErr(e: unknown) {
   const props = parseBizError(e);
-  if (_bizErrSetter) {
-    _bizErrSetter(props);
+  if (_bizModalSetter) {
+    _bizModalSetter(props);
   } else {
+    // eslint-disable-next-line no-alert
     alert(props.message);
+  }
+}
+function showBizError(title: string, message: string) {
+  if (_bizModalSetter) {
+    _bizModalSetter({
+      kind: "kassa_low",
+      title, message,
+      onClose: () => undefined,
+    });
+  } else {
+    // eslint-disable-next-line no-alert
+    alert(`${title}\n\n${message}`);
+  }
+}
+function bizConfirm(params: {
+  title: string;
+  message: string;
+  primaryCtaLabel: string;
+  onConfirm: () => void;
+}) {
+  if (_bizModalSetter) {
+    _bizModalSetter({
+      kind: "confirm",
+      title: params.title,
+      message: params.message,
+      primaryCtaLabel: params.primaryCtaLabel,
+      onConfirm: params.onConfirm,
+      onClose: () => undefined,
+    });
+  } else {
+    // eslint-disable-next-line no-alert
+    if (confirm(`${params.title}\n\n${params.message}`)) {
+      params.onConfirm();
+    }
   }
 }
 
@@ -121,10 +157,10 @@ export function BizTillvaxt() {
   const [errorModal, setErrorModal] = useState<BizActionModalProps | null>(null);
 
   // Registrera setter så barn-komponenter kan trigga modalen via
-  // handleBizErr() utan att passera prop genom hela trädet.
+  // handleBizErr()/bizConfirm() utan att passera prop genom hela trädet.
   useEffect(() => {
-    setBizErrorModalSetter(setErrorModal);
-    return () => setBizErrorModalSetter(null);
+    setBizModalSetterFn(setErrorModal);
+    return () => setBizModalSetterFn(null);
   }, []);
 
   function refresh() {
@@ -302,35 +338,50 @@ export function BizTillvaxt() {
 
 function LocationCard({ loc, kassa, onUpgraded }: { loc: LocationItem; kassa: number; onUpgraded: () => void }) {
   const [busy, setBusy] = useState(false);
-  async function rent() {
+  function rent() {
     if (loc.is_current) return;
-    if (!confirm(`Hyra ${loc.label} för ${SEK(loc.monthly_cost)} kr/mån?`)) return;
-    setBusy(true);
-    try {
-      await api("/v2/foretag/growth/locations/upgrade", {
-        method: "POST",
-        body: JSON.stringify({ location_kind: loc.kind, is_purchase: false }),
-      });
-      onUpgraded();
-    } catch (e) { handleBizErr(e); }
-    finally { setBusy(false); }
+    bizConfirm({
+      title: `Hyra ${loc.label}?`,
+      message: `${SEK(loc.monthly_cost)} kr/mån. Första månadens buffert dras direkt från kassan.`,
+      primaryCtaLabel: `Hyr · ${SEK(loc.monthly_cost)} kr/mån →`,
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await api("/v2/foretag/growth/locations/upgrade", {
+            method: "POST",
+            body: JSON.stringify({ location_kind: loc.kind, is_purchase: false }),
+          });
+          onUpgraded();
+        } catch (e) { handleBizErr(e); }
+        finally { setBusy(false); }
+      },
+    });
   }
-  async function buy() {
+  function buy() {
     if (!loc.purchase_price) return;
     if (kassa < loc.purchase_price) {
-      alert(`Otillräcklig kassa (saknas ${SEK(loc.purchase_price - kassa)} kr). Ta ett företagslån först.`);
+      showBizError(
+        "Du saknar pengar i kassan.",
+        `Otillräcklig kassa · ${SEK(loc.purchase_price - kassa)} kr saknas. Kassan är ${SEK(kassa)} kr · lokalen kostar ${SEK(loc.purchase_price)} kr. Ta ett tillväxtlån (Tillväxt → Lån) först.`,
+      );
       return;
     }
-    if (!confirm(`Köpa ${loc.label} för ${SEK(loc.purchase_price)} kr?`)) return;
-    setBusy(true);
-    try {
-      await api("/v2/foretag/growth/locations/upgrade", {
-        method: "POST",
-        body: JSON.stringify({ location_kind: loc.kind, is_purchase: true }),
-      });
-      onUpgraded();
-    } catch (e) { handleBizErr(e); }
-    finally { setBusy(false); }
+    bizConfirm({
+      title: `Köpa ${loc.label}?`,
+      message: `${SEK(loc.purchase_price)} kr · engångskostnad. Lokalen blir er anläggningstillgång och skrivs av över tid.`,
+      primaryCtaLabel: `Köp · ${SEK(loc.purchase_price)} kr →`,
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await api("/v2/foretag/growth/locations/upgrade", {
+            method: "POST",
+            body: JSON.stringify({ location_kind: loc.kind, is_purchase: true }),
+          });
+          onUpgraded();
+        } catch (e) { handleBizErr(e); }
+        finally { setBusy(false); }
+      },
+    });
   }
 
   return (
@@ -373,13 +424,27 @@ function LocationCard({ loc, kassa, onUpgraded }: { loc: LocationItem; kassa: nu
 
 function EquipmentCard({ eq, kassa, onBought }: { eq: EquipmentItem; kassa: number; onBought: () => void }) {
   const [busy, setBusy] = useState(false);
-  async function buy() {
+  function buy() {
     if (eq.is_current) return;
     if (eq.purchase_price > 0 && kassa < eq.purchase_price) {
-      alert(`Otillräcklig kassa (saknas ${SEK(eq.purchase_price - kassa)} kr).`);
+      showBizError(
+        "Du saknar pengar i kassan.",
+        `Otillräcklig kassa · ${SEK(eq.purchase_price - kassa)} kr saknas. Kassan är ${SEK(kassa)} kr · utrustningen kostar ${SEK(eq.purchase_price)} kr. Ta ett tillväxtlån (Tillväxt → Lån) först.`,
+      );
       return;
     }
-    if (!confirm(`Köpa ${eq.label}? ${eq.purchase_price > 0 ? SEK(eq.purchase_price) + " kr" : "Gratis"}`)) return;
+    bizConfirm({
+      title: `Köpa ${eq.label}?`,
+      message: eq.purchase_price > 0
+        ? `${SEK(eq.purchase_price)} kr · engångskostnad. Utrustningen aktiveras som inventarier och skrivs av månadsvis.`
+        : "Gratis · ingen kostnad.",
+      primaryCtaLabel: eq.purchase_price > 0
+        ? `Köp · ${SEK(eq.purchase_price)} kr →`
+        : "Aktivera →",
+      onConfirm: () => doBuy(),
+    });
+  }
+  async function doBuy() {
     setBusy(true);
     try {
       await api("/v2/foretag/growth/equipment/buy", {
@@ -420,14 +485,20 @@ function EquipmentCard({ eq, kassa, onBought }: { eq: EquipmentItem; kassa: numb
 
 function LoanCard({ loan, onRepaid }: { loan: Loan; onRepaid: () => void }) {
   const [busy, setBusy] = useState(false);
-  async function pay() {
-    if (!confirm(`Betala 1 månads-rate (${SEK(loan.monthly_payment)} kr)?`)) return;
-    setBusy(true);
-    try {
-      await api(`/v2/foretag/growth/loans/${loan.id}/pay`, { method: "POST" });
-      onRepaid();
-    } catch (e) { handleBizErr(e); }
-    finally { setBusy(false); }
+  function pay() {
+    bizConfirm({
+      title: `Betala 1 månads-rate?`,
+      message: `${SEK(loan.monthly_payment)} kr dras från företagskassan. Räntan + amortering bokförs separat så du ser kostnaden.`,
+      primaryCtaLabel: `Betala · ${SEK(loan.monthly_payment)} kr →`,
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await api(`/v2/foretag/growth/loans/${loan.id}/pay`, { method: "POST" });
+          onRepaid();
+        } catch (e) { handleBizErr(e); }
+        finally { setBusy(false); }
+      },
+    });
   }
   return (
     <div style={cardStyle}>
@@ -470,7 +541,13 @@ function McpModal({ kassa, onClose }: { kassa: number; onClose: (ok: boolean) =>
   const [busy, setBusy] = useState(false);
   const cost = 48000 * weeks;
   async function submit() {
-    if (kassa < cost) { alert(`Otillräcklig kassa (saknas ${SEK(cost - kassa)} kr)`); return; }
+    if (kassa < cost) {
+      showBizError(
+        "Du saknar pengar i kassan.",
+        `Otillräcklig kassa · ${SEK(cost - kassa)} kr saknas. Kassan är ${SEK(kassa)} kr · MCP-frilans kostar ${SEK(cost)} kr för ${weeks} v. Ta ett tillväxtlån (Tillväxt → Lån) först.`,
+      );
+      return;
+    }
     setBusy(true);
     try {
       await api("/v2/foretag/growth/mcp/rent", {
@@ -678,16 +755,23 @@ const errorBoxStyle: React.CSSProperties = {
 function TimeCapacitySection({ onRefresh }: { onRefresh: () => void }) {
   const { data, refresh } = useTimeCapacity();
   if (!data) return null;
-  async function quit() {
-    if (!confirm(
-      "Säga upp privat-jobbet?\n\nKonsekvens: Trygghet -15 i pentagon.\n"
-      + "Bonus: +44 h/v till bolaget."
-    )) return;
-    try {
-      await api("/v2/foretag/capacity/quit-private-job", { method: "POST" });
-      refresh();
-      onRefresh();
-    } catch (e) { handleBizErr(e); }
+  function quit() {
+    bizConfirm({
+      title: "Säga upp privat-jobbet?",
+      message:
+        "Konsekvens: Trygghet -15 i pentagon (Maslow-bortfall · " +
+        "stadig inkomst försvinner).\n\n" +
+        "Bonus: +44 h/v frigjorda för bolaget.\n\n" +
+        "Detta går inte att ångra.",
+      primaryCtaLabel: "Ja, säg upp →",
+      onConfirm: async () => {
+        try {
+          await api("/v2/foretag/capacity/quit-private-job", { method: "POST" });
+          refresh();
+          onRefresh();
+        } catch (e) { handleBizErr(e); }
+      },
+    });
   }
   return (
     <div style={{ marginBottom: 18 }}>
@@ -849,29 +933,45 @@ function DecisionsTab() {
   }
   useEffect(() => { refresh(); }, []);
 
-  async function add(preset: typeof DECISION_PRESETS[number]) {
-    if (!confirm(`Aktivera "${preset.title}"? Månadskostnad: ${SEK(preset.monthly_cost)} kr`)) return;
-    setBusy(true);
-    try {
-      await api("/v2/foretag/decisions", {
-        method: "POST",
-        body: JSON.stringify({
-          kind: preset.kind,
-          title: preset.title,
-          monthly_cost: preset.monthly_cost,
-        }),
-      });
-      refresh();
-    } catch (e) { handleBizErr(e); }
-    finally { setBusy(false); }
+  function add(preset: typeof DECISION_PRESETS[number]) {
+    bizConfirm({
+      title: `Aktivera "${preset.title}"?`,
+      message: preset.monthly_cost > 0
+        ? `Månadskostnad: ${SEK(preset.monthly_cost)} kr · ${preset.desc}`
+        : preset.desc,
+      primaryCtaLabel: preset.monthly_cost > 0
+        ? `Aktivera · ${SEK(preset.monthly_cost)} kr/mån →`
+        : "Aktivera →",
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await api("/v2/foretag/decisions", {
+            method: "POST",
+            body: JSON.stringify({
+              kind: preset.kind,
+              title: preset.title,
+              monthly_cost: preset.monthly_cost,
+            }),
+          });
+          refresh();
+        } catch (e) { handleBizErr(e); }
+        finally { setBusy(false); }
+      },
+    });
   }
 
-  async function endDecision(id: number) {
-    if (!confirm("Avsluta detta beslut?")) return;
-    try {
-      await api(`/v2/foretag/decisions/${id}`, { method: "DELETE" });
-      refresh();
-    } catch (e) { handleBizErr(e); }
+  function endDecision(id: number) {
+    bizConfirm({
+      title: "Avsluta detta beslut?",
+      message: "Den löpande månadskostnaden upphör. Tidigare bokförda kostnader stannar i historiken.",
+      primaryCtaLabel: "Ja, avsluta →",
+      onConfirm: async () => {
+        try {
+          await api(`/v2/foretag/decisions/${id}`, { method: "DELETE" });
+          refresh();
+        } catch (e) { handleBizErr(e); }
+      },
+    });
   }
 
   const active = decisions.filter((d) => d.active);
@@ -975,28 +1075,38 @@ function MarketingTab({ kassa, onBought }: { kassa: number; onBought: () => void
   }
   useEffect(() => { refresh(); }, []);
 
-  async function buy(pkg: MarketingPackage) {
+  function buy(pkg: MarketingPackage) {
     if (kassa < pkg.cost) {
-      if (!confirm(
-        `Otillräcklig kassa (saknas ${SEK(pkg.cost - kassa)} kr). ` +
-        `Detta blir en negativ post på företagskontot. Fortsätta?`
-      )) return;
-    } else if (!confirm(
-      `Köpa "${pkg.title}" för ${SEK(pkg.cost)} kr?\n\n` +
-      `Pipeline-boost: ${pkg.pipeline_boost.toFixed(2)}× i ${pkg.duration_weeks} v\n` +
-      `Rykte: +${pkg.reputation_bump} omedelbart`
-    )) return;
-
-    setBusy(pkg.key);
-    try {
-      await api("/v2/foretag/marketing/packages/buy", {
-        method: "POST",
-        body: JSON.stringify({ key: pkg.key }),
-      });
-      refresh();
-      onBought();
-    } catch (e) { handleBizErr(e); }
-    finally { setBusy(null); }
+      // Backend returnerar 402 om vi försöker, vilket triggar samma
+      // BizActionModal med 'kassa_low'-stil och Tillväxtlån-CTA.
+      // Visa bara felet direkt utan att försöka — eleven slipper
+      // ett bortkastat API-anrop.
+      showBizError(
+        "Du saknar pengar i kassan.",
+        `Otillräcklig kassa · ${SEK(pkg.cost - kassa)} kr saknas. Kassan är ${SEK(kassa)} kr · paketet kostar ${SEK(pkg.cost)} kr. Ta ett tillväxtlån (Tillväxt → Lån) först.`,
+      );
+      return;
+    }
+    bizConfirm({
+      title: `Köpa "${pkg.title}"?`,
+      message:
+        `${SEK(pkg.cost)} kr · engångskostnad.\n\n` +
+        `Pipeline-boost: ${pkg.pipeline_boost.toFixed(2)}× i ${pkg.duration_weeks} v\n` +
+        `Rykte: +${pkg.reputation_bump} omedelbart`,
+      primaryCtaLabel: `Köp · ${SEK(pkg.cost)} kr →`,
+      onConfirm: async () => {
+        setBusy(pkg.key);
+        try {
+          await api("/v2/foretag/marketing/packages/buy", {
+            method: "POST",
+            body: JSON.stringify({ key: pkg.key }),
+          });
+          refresh();
+          onBought();
+        } catch (e) { handleBizErr(e); }
+        finally { setBusy(null); }
+      },
+    });
   }
 
   return (
