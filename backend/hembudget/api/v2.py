@@ -17630,6 +17630,8 @@ def _seed_initial_student_data(
                     # 'handled' utan kontoavdrag — fail-safe).
                     if m.mail_type == "reminder":
                         m.status = "handled"
+                        # Säkerställ omedelbar synlighet
+                        m.released_at = None
                         continue
                     # Endast invoices vars due_date passerats betalas
                     # här (fakturor som ska komma framöver behåller
@@ -17639,6 +17641,11 @@ def _seed_initial_student_data(
                         and m.due_date >= today_sweep
                     ):
                         continue
+                    # Säkerställ att historiska mails är synliga direkt
+                    # — annars gömmer _released_filter dem tills release_
+                    # at-tiden passerats (t.ex. lönespec dag 22 efter
+                    # student-skapandet i bakgrunden).
+                    m.released_at = None
                     if m.amount is None:
                         m.status = "paid"
                         continue
@@ -17652,7 +17659,14 @@ def _seed_initial_student_data(
                         .filter(_Tx_sweep.hash == tx_hash)
                         .first()
                     )
-                    if existing is None and lonekonto is not None:
+                    if (
+                        existing is None
+                        and lonekonto is not None
+                        and m.due_date is not None
+                    ):
+                        # Skippa autogiro-tx för mails utan due_date —
+                        # Transaction.date är NOT NULL och vi vill inte
+                        # crasha hela sweepen för en konstig rad.
                         s.add(_Tx_sweep(
                             account_id=lonekonto.id,
                             date=m.due_date,
