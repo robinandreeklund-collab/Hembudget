@@ -78,6 +78,15 @@ export type HubEventItem = {
   declinable: boolean;
 };
 
+export type HubGameTime = {
+  iso_date: string;
+  weekday_label: string;
+  full_label: string;
+  short_label: string;
+  year_month: string;
+  real_anchor_at: string;
+};
+
 export type HubData = {
   student_id: number;
   character: HubCharacter;
@@ -90,6 +99,7 @@ export type HubData = {
   total_balance: number;
   accounts_count: number;
   pending_events: HubEventItem[];
+  game_time: HubGameTime | null;
 };
 
 // === Events / sociala händelser (V2) ===

@@ -241,6 +241,16 @@ class HubEventItem(BaseModel):
     declinable: bool
 
 
+class HubGameTime(BaseModel):
+    """Spel-tid · 1 real-timme = 1 spel-vecka. Synkat med biz-tick."""
+    iso_date: str  # "2026-05-07"
+    weekday_label: str  # "Torsdag"
+    full_label: str  # "Torsdag 7 maj 2026"
+    short_label: str  # "7 maj"
+    year_month: str  # "2026-05"
+    real_anchor_at: str  # student.created_at ISO
+
+
 class HubResponse(BaseModel):
     student_id: int
     character: HubCharacter
@@ -253,6 +263,7 @@ class HubResponse(BaseModel):
     total_balance: float
     accounts_count: int
     pending_events: list[HubEventItem] = Field(default_factory=list)
+    game_time: Optional[HubGameTime] = None
 
 
 def _current_year_month() -> str:
@@ -313,9 +324,13 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 target_sid,
             )
 
-        # Auto-tick: eskalera obetalda fakturor (cachat 60s per elev).
-        # Säkert att kalla varje hub-load eftersom helpern är cache-gated
-        # och idempotent. Tysta fel — ska aldrig påverka hub-vyn.
+        # Auto-tick · eskalera obetalda fakturor + tick fram nya
+        # spel-månader när real-tid passerar. Båda cachat per elev,
+        # idempotent. Tysta fel — får aldrig påverka hub-vyn.
+        try:
+            _auto_tick_private_months_if_due(target_sid)
+        except Exception:
+            pass
         try:
             _run_dunning_for_student(target_sid)
         except Exception:
@@ -616,6 +631,46 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         pass
     pending_events.sort(key=lambda e: e.days_until_deadline)
 
+    # === Spel-tid · 1 real-timme = 1 spel-vecka =================
+    # Beräkna nuvarande spel-datum baserat på student.created_at och
+    # real-tid. Frontend visar det stort i hub-headern.
+    game_time = None
+    try:
+        from ..game_engine.release_schedule import game_date_for
+        with master_session() as _ms_gt:
+            _stu_gt = _ms_gt.get(Student, target_sid)
+            if _stu_gt is not None and _stu_gt.created_at is not None:
+                anchor_ym = (
+                    f"{_stu_gt.created_at.year:04d}-"
+                    f"{_stu_gt.created_at.month:02d}"
+                )
+                gy, gm, gd = game_date_for(_stu_gt.created_at, anchor_ym)
+                gd = max(1, min(28, gd))  # safety för Python-date
+                from datetime import date as _d_gt
+                game_d = _d_gt(gy, gm, gd)
+                weekdays = ["Måndag", "Tisdag", "Onsdag", "Torsdag",
+                            "Fredag", "Lördag", "Söndag"]
+                months = [
+                    "januari", "februari", "mars", "april", "maj",
+                    "juni", "juli", "augusti", "september", "oktober",
+                    "november", "december",
+                ]
+                wd = weekdays[game_d.weekday()]
+                mn = months[gm - 1]
+                game_time = HubGameTime(
+                    iso_date=game_d.isoformat(),
+                    weekday_label=wd,
+                    full_label=f"{wd} {gd} {mn} {gy}",
+                    short_label=f"{gd} {mn}",
+                    year_month=f"{gy:04d}-{gm:02d}",
+                    real_anchor_at=_stu_gt.created_at.isoformat(),
+                )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "get_hub: game_time-beräkning misslyckades",
+        )
+
     return HubResponse(
         student_id=target_sid,
         character=char,
@@ -628,6 +683,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         total_balance=total_balance,
         pending_events=pending_events,
         accounts_count=accounts_count,
+        game_time=game_time,
     )
 
 
@@ -2048,7 +2104,14 @@ def get_mail(
     """
     # Auto-tick · eskalera obetalda fakturor innan vi listar mail
     # så eleven ser nya reminder-mail i samma load. Cachat 60s.
+    # Plus auto-tick nya privata månader (1 real-timme = 1 spel-vecka)
+    # — när eleven driver karaktären framåt seedar vi nästa månad så
+    # postlådan fortsätter fyllas.
     if info.role == "student" and info.student_id is not None:
+        try:
+            _auto_tick_private_months_if_due(info.student_id)
+        except Exception:
+            pass
         try:
             _run_dunning_for_student(info.student_id)
         except Exception:
@@ -17041,6 +17104,150 @@ _seed_semaphore = _threading_seed.Semaphore(_SEED_CONCURRENCY)
 
 _dunning_cache: dict[int, float] = {}  # student_id → last-run-ts
 _DUNNING_CACHE_TTL = 60.0  # sekunder
+
+# Auto-tick-månader · cacha 5 min så vi inte tickar samma månad
+# flera gånger per request-burst.
+_auto_tick_month_cache: dict[int, float] = {}
+_AUTO_TICK_MONTH_TTL = 300.0  # 5 min
+
+
+def _auto_tick_private_months_if_due(student_id: int) -> int:
+    """Tick fram saknade privat-månader baserat på speltid sedan
+    student.created_at. Eleven driver karaktären framåt: 1 real-timme
+    = 1 spel-vecka, så efter ~4 real-timmar har en ny månad startat.
+
+    Idempotent · cachat så endast 1 körning per 5 min/elev. Tysta
+    fel — får aldrig ta ner request:en.
+
+    Returnerar antal månader som tickats.
+    """
+    import time as _t_at
+    last = _auto_tick_month_cache.get(student_id, 0.0)
+    if _t_at.time() - last < _AUTO_TICK_MONTH_TTL:
+        return 0
+    _auto_tick_month_cache[student_id] = _t_at.time()
+
+    try:
+        from datetime import datetime as _dt_at, timedelta as _td_at
+        from ..game_engine.release_schedule import game_year_month
+        from ..game_engine.profile_generator import generate_profile
+        from ..game_engine.monthly_engine import tick_month
+        from ..school.engines import (
+            scope_context as _sctx_at, scope_for_student as _sfs_at,
+        )
+        from ..db.models import MailItem as _MI_at
+
+        with master_session() as ms:
+            stu = ms.get(Student, student_id)
+            if stu is None:
+                return 0
+            created_at = stu.created_at
+            display_name = stu.display_name or "Elev"
+            sp = (
+                ms.query(StudentProfile)
+                .filter(StudentProfile.student_id == student_id)
+                .first()
+            )
+            starting_level = (
+                getattr(stu, "v2_level", None) or 1
+            )
+            partner_model = (
+                getattr(stu, "v2_partner_model", None) or "solo"
+            )
+            spend_profile = (
+                getattr(stu, "v2_spend_profile", None) or "balanserad"
+            )
+
+        if created_at is None:
+            return 0
+        anchor_ym = f"{created_at.year:04d}-{created_at.month:02d}"
+        current_game_ym = game_year_month(created_at, anchor_ym)
+
+        # Hitta senast tickade ym = max year_month från MailItem.due_date
+        scope_key = _sfs_at(stu)
+        with _sctx_at(scope_key):
+            with session_scope() as s:
+                latest_due = (
+                    s.query(_MI_at.due_date)
+                    .filter(_MI_at.due_date.isnot(None))
+                    .order_by(_MI_at.due_date.desc())
+                    .first()
+                )
+                if latest_due is None or latest_due[0] is None:
+                    return 0
+                latest_ym = (
+                    f"{latest_due[0].year:04d}-{latest_due[0].month:02d}"
+                )
+
+        # Tick alla månader mellan latest_ym+1 och current_game_ym
+        if latest_ym >= current_game_ym:
+            return 0  # inget nytt att ticka
+
+        # Bygg list över year_months att ticka (max 12 per körning så
+        # vi inte hänger en request om en elev varit borta länge)
+        ly, lm = (int(p) for p in latest_ym.split("-"))
+        cy, cm = (int(p) for p in current_game_ym.split("-"))
+        to_tick: list[str] = []
+        ny, nm = ly, lm
+        while True:
+            nm += 1
+            if nm > 12:
+                nm = 1
+                ny += 1
+            if (ny, nm) > (cy, cm):
+                break
+            to_tick.append(f"{ny:04d}-{nm:02d}")
+            if len(to_tick) >= 12:
+                break
+
+        if not to_tick:
+            return 0
+
+        # Bygg profile (samma seed som vid skapandet)
+        profile = generate_profile(
+            seed=student_id,
+            archetype="random",
+            starting_level=starting_level,
+            name=display_name,
+            partner_model=partner_model,
+        )
+
+        # Hämta student-objektet i master för tick_month
+        with master_session() as ms2:
+            stu_full = ms2.get(Student, student_id)
+            if stu_full is None:
+                return 0
+
+            for ym in to_tick:
+                try:
+                    tick_month(
+                        stu_full,
+                        profile,
+                        ym,
+                        spend_profile=spend_profile,
+                        starting_level=starting_level,
+                    )
+                    # Auto-betala fakturor i den månaden — eleven har
+                    # passerat den i speltid, så autogiro har hunnit dra
+                    # alla löpande utgifter
+                    _auto_pay_historical_invoices(stu_full, ym)
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "_auto_tick_private_months_if_due: tick %s "
+                        "failed för student %s",
+                        ym, student_id,
+                    )
+                    break
+
+        return len(to_tick)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_auto_tick_private_months_if_due failed för student %s",
+            student_id,
+        )
+        return 0
 
 # Eskaleringssteg · (min_days_overdue, level, kind, fee, label, pent_safety, pent_economy)
 _DUNNING_STEPS = [
