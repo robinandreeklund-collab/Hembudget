@@ -13,7 +13,28 @@
 import { useEffect, useState } from "react";
 import { api } from "@/api/client";
 import { BizActorShell } from "./BizActorShell";
+import { BizActionModal, parseBizError, type BizActionModalProps } from "./BizActionModal";
 import { TimeCapacityBreakdown, useTimeCapacity } from "./TimeCapacityWidget";
+
+
+// Hjälpare · gör HTTP 402-fel → snygg modal istället för rå alert.
+// Komponentinstanser kallar handleBizErr(e) i sina catch-block.
+let _bizErrSetter:
+  | ((p: BizActionModalProps | null) => void)
+  | null = null;
+function setBizErrorModalSetter(
+  fn: ((p: BizActionModalProps | null) => void) | null,
+) {
+  _bizErrSetter = fn;
+}
+function handleBizErr(e: unknown) {
+  const props = parseBizError(e);
+  if (_bizErrSetter) {
+    _bizErrSetter(props);
+  } else {
+    alert(props.message);
+  }
+}
 
 
 type Overview = {
@@ -97,6 +118,14 @@ export function BizTillvaxt() {
   const [tab, setTab] = useState<"location" | "equipment" | "loans" | "decisions" | "marketing">("location");
   const [showLoanApply, setShowLoanApply] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
+  const [errorModal, setErrorModal] = useState<BizActionModalProps | null>(null);
+
+  // Registrera setter så barn-komponenter kan trigga modalen via
+  // handleBizErr() utan att passera prop genom hela trädet.
+  useEffect(() => {
+    setBizErrorModalSetter(setErrorModal);
+    return () => setBizErrorModalSetter(null);
+  }, []);
 
   function refresh() {
     Promise.all([
@@ -260,6 +289,12 @@ export function BizTillvaxt() {
 
       {showMcp && <McpModal kassa={overview.kassa} onClose={(ok) => { setShowMcp(false); if (ok) refresh(); }} />}
       {showLoanApply && <LoanApplyModal onClose={(ok) => { setShowLoanApply(false); if (ok) refresh(); }} />}
+      {errorModal && (
+        <BizActionModal
+          {...errorModal}
+          onClose={() => setErrorModal(null)}
+        />
+      )}
     </BizActorShell>
   );
 }
@@ -277,7 +312,7 @@ function LocationCard({ loc, kassa, onUpgraded }: { loc: LocationItem; kassa: nu
         body: JSON.stringify({ location_kind: loc.kind, is_purchase: false }),
       });
       onUpgraded();
-    } catch (e) { alert(`Fel: ${(e as Error).message || e}`); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(false); }
   }
   async function buy() {
@@ -294,7 +329,7 @@ function LocationCard({ loc, kassa, onUpgraded }: { loc: LocationItem; kassa: nu
         body: JSON.stringify({ location_kind: loc.kind, is_purchase: true }),
       });
       onUpgraded();
-    } catch (e) { alert(`Fel: ${(e as Error).message || e}`); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(false); }
   }
 
@@ -352,7 +387,7 @@ function EquipmentCard({ eq, kassa, onBought }: { eq: EquipmentItem; kassa: numb
         body: JSON.stringify({ equipment_kind: eq.kind }),
       });
       onBought();
-    } catch (e) { alert(`Fel: ${(e as Error).message || e}`); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(false); }
   }
   return (
@@ -391,7 +426,7 @@ function LoanCard({ loan, onRepaid }: { loan: Loan; onRepaid: () => void }) {
     try {
       await api(`/v2/foretag/growth/loans/${loan.id}/pay`, { method: "POST" });
       onRepaid();
-    } catch (e) { alert(`Fel: ${(e as Error).message || e}`); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(false); }
   }
   return (
@@ -443,7 +478,7 @@ function McpModal({ kassa, onClose }: { kassa: number; onClose: (ok: boolean) =>
         body: JSON.stringify({ weeks }),
       });
       onClose(true);
-    } catch (e) { alert(`Fel: ${(e as Error).message || e}`); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(false); }
   }
   return (
@@ -499,7 +534,7 @@ function LoanApplyModal({ onClose }: { onClose: (ok: boolean) => void }) {
         }),
       });
       onClose(true);
-    } catch (e) { alert(`Fel: ${(e as Error).message || e}`); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(false); }
   }
 
@@ -652,7 +687,7 @@ function TimeCapacitySection({ onRefresh }: { onRefresh: () => void }) {
       await api("/v2/foretag/capacity/quit-private-job", { method: "POST" });
       refresh();
       onRefresh();
-    } catch (e) { alert((e as Error).message); }
+    } catch (e) { handleBizErr(e); }
   }
   return (
     <div style={{ marginBottom: 18 }}>
@@ -697,7 +732,7 @@ function StartupKitSection({ onRefresh }: { onRefresh: () => void }) {
       });
       refresh();
       onRefresh();
-    } catch (e) { alert((e as Error).message); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(false); }
   }
 
@@ -827,7 +862,7 @@ function DecisionsTab() {
         }),
       });
       refresh();
-    } catch (e) { alert((e as Error).message); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(false); }
   }
 
@@ -836,7 +871,7 @@ function DecisionsTab() {
     try {
       await api(`/v2/foretag/decisions/${id}`, { method: "DELETE" });
       refresh();
-    } catch (e) { alert((e as Error).message); }
+    } catch (e) { handleBizErr(e); }
   }
 
   const active = decisions.filter((d) => d.active);
@@ -960,7 +995,7 @@ function MarketingTab({ kassa, onBought }: { kassa: number; onBought: () => void
       });
       refresh();
       onBought();
-    } catch (e) { alert(`Fel: ${(e as Error).message || e}`); }
+    } catch (e) { handleBizErr(e); }
     finally { setBusy(null); }
   }
 

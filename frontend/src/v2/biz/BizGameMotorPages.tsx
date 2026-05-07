@@ -807,22 +807,37 @@ export function BizOfferter() {
 function QuoteModal({
   opp, onClose,
 }: { opp: Opportunity; onClose: (refreshed: boolean) => void }) {
-  const [price, setPrice] = useState(opp.market_price.toString());
-  const [days, setDays] = useState(opp.expected_delivery_days.toString());
-  const [pitch, setPitch] = useState("");
+  // Vy-läge när eleven redan har lämnat offert: visa SUBMITTED värden
+  // i stället för defaults så pris/dagar matchar det som faktiskt
+  // skickades. Tidigare fyllde input-fälten alltid på market_price/
+  // expected_delivery_days vilket gjorde att eleven trodde att deras
+  // egna värden inte sparades.
+  const isReadOnly = opp.has_quote;
+  const initialPrice = (opp.has_quote && opp.quote_offered_price !== null)
+    ? opp.quote_offered_price.toString()
+    : opp.market_price.toString();
+  const initialDays = (opp.has_quote && opp.quote_offered_delivery_days !== null)
+    ? opp.quote_offered_delivery_days.toString()
+    : opp.expected_delivery_days.toString();
+  const initialPitch = (opp.has_quote && opp.quote_pitch_text) || "";
+
+  const [price, setPrice] = useState(initialPrice);
+  const [days, setDays] = useState(initialDays);
+  const [pitch, setPitch] = useState(initialPitch);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<Quote | null>(null);
   const [impact, setImpact] = useState<import("./TimeCapacityWidget").ImpactPreview | null>(null);
 
-  // Hämta tier-prediktion vid mount
+  // Hämta tier-prediktion vid mount (bara om vi kan svara)
   useEffect(() => {
+    if (isReadOnly) return;
     import("@/api/client").then(({ api }) =>
       api<import("./TimeCapacityWidget").ImpactPreview>(
         `/v2/foretag/capacity/preview-impact/${opp.id}`,
       ).then(setImpact).catch(() => undefined)
     );
-  }, [opp.id]);
+  }, [opp.id, isReadOnly]);
 
   async function submit() {
     setErr(null);
@@ -860,8 +875,55 @@ function QuoteModal({
         }}
       >
         <h2 style={{ color: "white", marginTop: 0 }}>
-          Lämna offert · {opp.customer_name}
+          {isReadOnly ? "Din offert · " : "Lämna offert · "}{opp.customer_name}
         </h2>
+        {isReadOnly && (
+          <div style={{
+            padding: "10px 14px", marginBottom: 14,
+            background:
+              opp.status === "won"
+                ? "rgba(110,231,183,0.08)"
+                : opp.status === "lost"
+                  ? "rgba(220,76,43,0.06)"
+                  : "rgba(99,102,241,0.06)",
+            border: `1px solid ${
+              opp.status === "won"
+                ? "rgba(110,231,183,0.30)"
+                : opp.status === "lost"
+                  ? "rgba(220,76,43,0.30)"
+                  : "rgba(99,102,241,0.25)"
+            }`,
+            borderRadius: 6,
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 11, fontWeight: 700, letterSpacing: 1.4,
+            color: opp.status === "won"
+              ? "#6ee7b7"
+              : opp.status === "lost"
+                ? "#fda594"
+                : "#c7d2fe",
+          }}>
+            {opp.status === "won"
+              ? "✓ DU VANN · uppdraget är ett pågående jobb (öppna /v2/foretag/jobb)"
+              : opp.status === "lost"
+                ? "✗ DU FÖRLORADE · se motivering nedan"
+                : "● VÄNTAR · kunden har inte beslutat än"}
+          </div>
+        )}
+        {isReadOnly && opp.quote_decision_explanation && (
+          <div style={{
+            padding: "12px 14px", marginBottom: 14,
+            background: "rgba(0,0,0,0.20)",
+            borderLeft: `2px solid ${opp.status === "won" ? "#6ee7b7" : "#fda594"}`,
+            borderRadius: 4,
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontStyle: "italic",
+            fontSize: 13.5,
+            color: "rgba(255,255,255,0.85)",
+            lineHeight: 1.55,
+          }}>
+            {opp.quote_decision_explanation}
+          </div>
+        )}
         <div
           style={{
             background: "rgba(99,102,241,0.06)",
@@ -923,40 +985,52 @@ function QuoteModal({
         {result === null ? (
           <>
             <label style={{ color: "white", display: "block", marginTop: 12 }}>
-              Ditt pris (kr exkl moms)
+              {isReadOnly ? "Pris du erbjöd" : "Ditt pris (kr exkl moms)"}
               <input
                 type="number"
                 value={price}
                 onChange={e => setPrice(e.target.value)}
-                style={inputStyle}
+                style={{
+                  ...inputStyle,
+                  opacity: isReadOnly ? 0.7 : 1,
+                  background: isReadOnly ? "rgba(255,255,255,0.04)" : (inputStyle as React.CSSProperties).background,
+                }}
+                readOnly={isReadOnly}
               />
             </label>
             <label style={{ color: "white", display: "block", marginTop: 12 }}>
-              Leveranstid (dagar)
+              {isReadOnly ? "Leveranstid du erbjöd (dagar)" : "Leveranstid (dagar)"}
               <input
                 type="number"
                 value={days}
                 onChange={e => setDays(e.target.value)}
-                style={inputStyle}
+                style={{
+                  ...inputStyle,
+                  opacity: isReadOnly ? 0.7 : 1,
+                }}
+                readOnly={isReadOnly}
               />
             </label>
             <label style={{ color: "white", display: "block", marginTop: 12 }}>
-              Din pitch (frivilligt — höjer dina chanser)
+              {isReadOnly ? "Din pitch" : "Din pitch (frivilligt — höjer dina chanser)"}
               <textarea
                 value={pitch}
                 onChange={e => setPitch(e.target.value)}
                 rows={4}
-                placeholder="Vad gör just er bra? Varför ska kunden välja er?"
-                style={{ ...inputStyle, fontFamily: "inherit" }}
+                placeholder={isReadOnly ? "Ingen pitch lämnad." : "Vad gör just er bra? Varför ska kunden välja er?"}
+                style={{ ...inputStyle, fontFamily: "inherit", opacity: isReadOnly ? 0.7 : 1 }}
+                readOnly={isReadOnly}
               />
             </label>
             {err && <div style={{ color: "#fda594", marginTop: 8 }}>{err}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button onClick={submit} disabled={submitting} style={btnPrimary}>
-                {submitting ? "Skickar…" : "Skicka offert"}
-              </button>
+              {!isReadOnly && (
+                <button onClick={submit} disabled={submitting} style={btnPrimary}>
+                  {submitting ? "Skickar…" : "Skicka offert"}
+                </button>
+              )}
               <button onClick={() => onClose(false)} style={btnGhost}>
-                Avbryt
+                {isReadOnly ? "Stäng" : "Avbryt"}
               </button>
             </div>
           </>

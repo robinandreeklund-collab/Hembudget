@@ -15,7 +15,7 @@
  *
  * All data live från /v2/postladan.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   v2Api,
@@ -92,18 +92,29 @@ export function PostladanV2() {
   const [tab, setTab] = useState<TabKey>("all");
   const navigate = useNavigate();
 
+  // Stale-response-skydd · när eleven bläddrar snabbt mellan flikarna
+  // hinner gamla in-flight-fetches komma tillbaka EFTER att tab bytts.
+  // Då skriver setData över med fel-tabbens filtrerade data och listan
+  // blinkar tom/ofullständig. Använder en epoch som ökar vid varje
+  // tab-byte och bara accepterar svar från senaste epochen.
+  const epochRef = useRef(0);
+
   function load(currentTab: TabKey) {
+    const myEpoch = ++epochRef.current;
     v2Api
       .postladan(TAB_TO_FILTER[currentTab])
-      .then(setData)
-      .catch((e) => setError(String((e as Error)?.message || e)));
+      .then((d) => {
+        if (myEpoch !== epochRef.current) return;  // stale, kasta
+        setData(d);
+      })
+      .catch((e) => {
+        if (myEpoch !== epochRef.current) return;
+        setError(String((e as Error)?.message || e));
+      });
   }
 
   useEffect(() => {
     load(tab);
-    // Realtid via polling. Sänkt från 15 s → 30 s eftersom 15 s
-    // räknades med 30+ andra polling-loops i samma session och
-    // fyllde Cloud SQL-poolen vid 30+ samtidiga användare.
     const interval = setInterval(() => load(tab), 30000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,32 +158,21 @@ export function PostladanV2() {
   // separat: prototypens "Övrigt" mappar till info_count + reminder.
   const ovrigtCount = summary.info_count + summary.other_count;
 
-  // === Klient-filtrering · nuvarande månad + hanterade ===
-  // Postlådan blir snabbt 30+ brev. Visa endast brev från innevarande
-  // månad i ALLA-, ohanterade- och kategori-flikar. Hanterade samlas
-  // i egen flik. Eleven slipper scrolla genom historik.
+  // === Klient-filtrering · hanterade till egen flik, övriga flikar
+  // visar AKTIVA brev (ohanterade + lästa) i ALLA månader. Tidigare
+  // försökte filtret begränsa till "nuvarande månad" men eftersom
+  // seed-flödet släpper innevarande månads brev gradvis (lönespec dag
+  // 22 etc.) blev postlådan tom under första veckan. Hanterade samlas
+  // i egen flik så listan inte växer i evighet. ===
   const HANDLED_STATUSES = new Set(["paid", "exported", "handled"]);
-  const now = new Date();
-  const curYear = now.getFullYear();
-  const curMonth = now.getMonth();
-  function inCurrentMonth(iso: string | null | undefined): boolean {
-    if (!iso) return false;
-    const d = new Date(iso);
-    return d.getFullYear() === curYear && d.getMonth() === curMonth;
-  }
   let items = rawItems;
   if (tab === "handled") {
-    // Hanterade-fliken visar ALLA månaders hanterade brev
     items = rawItems.filter((m) => HANDLED_STATUSES.has(m.status));
   } else {
-    // Övriga flikar: filtrera till nuvarande månad + dölj hanterade
-    // (de syns i sin egen flik). Behåll dem dock i 'all'-fliken om
-    // de hör till nuvarande månad så eleven ser månadens helhet.
-    items = rawItems.filter((m) => {
-      if (!inCurrentMonth(m.received_at)) return false;
-      if (tab !== "all" && HANDLED_STATUSES.has(m.status)) return false;
-      return true;
-    });
+    // Övriga flikar visar bara AKTIVA brev (inte 'paid' etc.) — annars
+    // skulle hyran-2026-04-01 stanna kvar i Allt-fliken efter att
+    // sweepen markerat den paid och bara skapa brus.
+    items = rawItems.filter((m) => !HANDLED_STATUSES.has(m.status));
   }
   const handledCount = rawItems.filter(
     (m) => HANDLED_STATUSES.has(m.status),

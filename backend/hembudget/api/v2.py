@@ -17054,7 +17054,7 @@ def _run_dunning_for_student(student_id: int) -> None:
     från tester / batch-jobb.
     """
     import time as _t_dun
-    from datetime import date as _d_dun, timedelta as _td_dun
+    from datetime import date as _d_dun, datetime as _dt_dun, timedelta as _td_dun
     last = _dunning_cache.get(student_id, 0.0)
     if _t_dun.time() - last < _DUNNING_CACHE_TTL:
         return
@@ -17066,6 +17066,25 @@ def _run_dunning_for_student(student_id: int) -> None:
         get_current_scope as _gcs_dun,
     )
     from ..school.models import Student as _Stu_dun
+
+    # Spärr · skippa dunning för helt nya elever. Seed-flödet skapar
+    # 4 mån historiska fakturor som auto-betalas, men sker async via
+    # bakgrundsjobb — ifall eleven hinner öppna postlådan innan
+    # seed-sweepen klar skulle dunning eskalera oseedade-betalda
+    # invoices till inkasso/kronofogden direkt → eleven startar med
+    # massa anmärkningar. 12 timmars buffer ger seed-jobbet tid.
+    try:
+        with master_session() as _ms_dun:
+            stu_dun = _ms_dun.get(_Stu_dun, student_id)
+            if stu_dun is not None and stu_dun.created_at is not None:
+                age_h = (
+                    _dt_dun.utcnow() - stu_dun.created_at
+                ).total_seconds() / 3600.0
+                if age_h < 12.0:
+                    return
+    except Exception:
+        pass
+
     scope_key = _gcs_dun()
     if not scope_key:
         with master_session() as ms:
@@ -17556,6 +17575,104 @@ def _seed_initial_student_data(
                 "failed för %s",
                 student.id,
             )
+
+    # === Steg 2d · CATCH-ALL · säkerställ att INGA seedade invoices
+    # eller reminders är överliggande. Eleven får ALDRIG starta med
+    # betalningsanmärkningar/inkasso/kronofogden som triggades av seed-
+    # data. Three-step belt-and-suspenders:
+    #   1. Markera ALLA overdue invoice/reminder-mail som paid/handled
+    #      (sweepar både fakturor från fixed_expenses-seed och dunning-
+    #      skapade reminders som hängde på dem).
+    #   2. Radera alla PaymentMark från seed-perioden (kronofogden-
+    #      skapade marks ska inte följa med en helt ny karaktär).
+    #   3. Skapa autogiro-transaktioner så bankkontot stämmer.
+    try:
+        from ..db.models import (
+            MailItem as _MI_sweep,
+            Account as _Acc_sweep,
+            Transaction as _Tx_sweep,
+            PaymentMark as _PM_sweep,
+        )
+        from hashlib import sha256 as _sha_sweep
+        with scope_context(scope_key):
+            with session_scope() as s:
+                today_sweep = _d.today()
+                lonekonto = (
+                    s.query(_Acc_sweep)
+                    .filter(_Acc_sweep.type == "checking")
+                    .order_by(_Acc_sweep.id.asc())
+                    .first()
+                )
+                # Sweep både invoice OCH reminder-mail (dunning genererar
+                # reminders med mail_type="reminder" — de stannade kvar
+                # som "Övrigt" → eleven började med inkasso/kronofogden)
+                stuck = (
+                    s.query(_MI_sweep)
+                    .filter(
+                        _MI_sweep.mail_type.in_(["invoice", "reminder"]),
+                        _MI_sweep.status.in_(
+                            ["unhandled", "viewed", "exported"],
+                        ),
+                    )
+                    .all()
+                )
+                for m in stuck:
+                    # Reminders saknar amount eller har påminnelseavgift
+                    # (60/180/600 kr); de bokför vi INTE (det betyder
+                    # att läraren kan se historiken men eleven är
+                    # 'handled' utan kontoavdrag — fail-safe).
+                    if m.mail_type == "reminder":
+                        m.status = "handled"
+                        continue
+                    # Endast invoices vars due_date passerats betalas
+                    # här (fakturor som ska komma framöver behåller
+                    # sin status så friktion finns kvar).
+                    if (
+                        m.due_date is not None
+                        and m.due_date >= today_sweep
+                    ):
+                        continue
+                    if m.amount is None:
+                        m.status = "paid"
+                        continue
+                    raw = (
+                        f"seedsweep|{student.id}|{m.id}|"
+                        f"{m.due_date.isoformat() if m.due_date else 'na'}"
+                    )
+                    tx_hash = _sha_sweep(raw.encode()).hexdigest()[:32]
+                    existing = (
+                        s.query(_Tx_sweep)
+                        .filter(_Tx_sweep.hash == tx_hash)
+                        .first()
+                    )
+                    if existing is None and lonekonto is not None:
+                        s.add(_Tx_sweep(
+                            account_id=lonekonto.id,
+                            date=m.due_date,
+                            amount=m.amount,
+                            currency="SEK",
+                            raw_description=f"Autogiro · {m.sender}",
+                            normalized_merchant=m.sender,
+                            hash=tx_hash,
+                            is_transfer=False,
+                            user_verified=True,
+                        ))
+                    m.status = "paid"
+
+                # Radera ALLA PaymentMark som dunning eventuellt skapade
+                # under seed-flödet. En helt ny karaktär ska inte ha
+                # betalningsanmärkningar — om läraren vill simulera det
+                # konfigurerar de explicit via lärar-verktyget.
+                s.query(_PM_sweep).delete()
+                s.commit()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_seed_initial_student_data: catch-all seed-sweep failed "
+            "för %s — eleven kan starta med en kvarliggande overdue "
+            "invoice (icke-kritiskt)",
+            student.id,
+        )
 
     # === Steg 2c · KV-startbudget (Sprint 7) ===
     # Pedagogiskt: eleven ska INTE öppna /v2/budget och se en tom
