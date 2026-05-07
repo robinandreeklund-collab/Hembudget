@@ -15,10 +15,62 @@
  * - Återställ / aktivera-toggle
  * - Variabel-hint för promptar med {employer}, {profession} etc
  */
-import { useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useState } from "react";
+import type { ErrorInfo, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/api/client";
 import { V2Banner } from "./V2Banner";
+
+
+// Error boundary · fångar runtime-krascher i kort/expansion så eleven
+// inte får helsvart sida. Visar i stället stack + reload-knapp.
+class PromptErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("AI-prompt-card kraschade:", error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          padding: 16,
+          background: "rgba(220,76,43,0.08)",
+          border: "1px solid rgba(220,76,43,0.35)",
+          borderRadius: 8,
+          color: "#fda594",
+          fontFamily: "Source Serif 4, Georgia, serif",
+        }}>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700, letterSpacing: 1.4, marginBottom: 6 }}>
+            ⚠ KORT-RENDERING KRASCHADE
+          </div>
+          <p style={{ margin: "4px 0 12px" }}>
+            {String(this.state.error.message || this.state.error)}
+          </p>
+          <button
+            onClick={() => this.setState({ error: null })}
+            style={{
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 10, fontWeight: 700, letterSpacing: 1.2,
+              padding: "6px 12px", borderRadius: 6,
+              background: "transparent",
+              border: "1px solid rgba(220,76,43,0.45)",
+              color: "#fda594", cursor: "pointer",
+            }}
+          >
+            Försök igen
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 
 type PromptTemplate = {
@@ -99,7 +151,14 @@ export function TeacherAiPromptsV2() {
       teacher_grading: [],
       content_gen: [],
     };
-    for (const sp of specs) out[sp.category].push(sp);
+    for (const sp of specs) {
+      // Defensiv: om backend skickar oväntad kategori, skapa bucket
+      // hellre än att krasha hela sidan med "Cannot read properties
+      // of undefined (reading 'push')" → white screen.
+      const cat = sp.category as string;
+      if (!out[cat]) out[cat] = [];
+      out[cat].push(sp);
+    }
     return out;
   }, [specs]);
 
@@ -242,22 +301,23 @@ export function TeacherAiPromptsV2() {
             </div>
             <div style={{ display: "grid", gap: 12 }}>
               {grouped[cat].map((sp) => (
-                <PromptCard
-                  key={sp.key}
-                  spec={sp}
-                  override={overrides[sp.key] ?? null}
-                  expanded={activeKey === sp.key}
-                  onToggle={() => setActiveKey(activeKey === sp.key ? null : sp.key)}
-                  onLocalChange={(partial) => updateLocal(sp.key, partial)}
-                  onSaved={(o) => updateLocal(sp.key, o)}
-                  onDeleted={() => {
-                    setOverrides((prev) => {
-                      const next = { ...prev };
-                      delete next[sp.key];
-                      return next;
-                    });
-                  }}
-                />
+                <PromptErrorBoundary key={sp.key}>
+                  <PromptCard
+                    spec={sp}
+                    override={overrides[sp.key] ?? null}
+                    expanded={activeKey === sp.key}
+                    onToggle={() => setActiveKey(activeKey === sp.key ? null : sp.key)}
+                    onLocalChange={(partial) => updateLocal(sp.key, partial)}
+                    onSaved={(o) => updateLocal(sp.key, o)}
+                    onDeleted={() => {
+                      setOverrides((prev) => {
+                        const next = { ...prev };
+                        delete next[sp.key];
+                        return next;
+                      });
+                    }}
+                  />
+                </PromptErrorBoundary>
               ))}
             </div>
           </section>
@@ -292,8 +352,13 @@ function PromptCard({
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
-  const [previewInput, setPreviewInput] = useState(spec.preview_input);
+  const [previewInput, setPreviewInput] = useState(spec.preview_input ?? "");
   const [previewErr, setPreviewErr] = useState<string | null>(null);
+
+  // Defensiv: backend kan skicka null/undefined för dessa fält
+  const variables = Array.isArray(spec.variables) ? spec.variables : [];
+  const templates = Array.isArray(spec.templates) ? spec.templates : [];
+  const defaultText = spec.default_text ?? "";
 
   async function save() {
     setSaveErr(null);
@@ -410,13 +475,13 @@ function PromptCard({
             {spec.description}
           </p>
 
-          {spec.variables.length > 0 && (
+          {variables.length > 0 && (
             <div style={varHintStyle}>
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, color: "#c7d2fe", letterSpacing: 1.2, marginBottom: 4 }}>
                 VARIABLER DU MÅSTE INKLUDERA
               </div>
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
-                {spec.variables.join("  ·  ")}
+                {variables.join("  ·  ")}
               </div>
               <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, marginTop: 6, fontFamily: "Source Serif 4, Georgia, serif" }}>
                 Skriv exakt så här i din anpassning · annars går prompten inte att spara.
@@ -429,7 +494,7 @@ function PromptCard({
             <div>
               <div style={blockEyeStyle}>STANDARDPROMPT (skrivskyddad)</div>
               <textarea
-                value={spec.default_text}
+                value={defaultText}
                 readOnly
                 style={{ ...textareaStyle, opacity: 0.65, minHeight: 240 }}
               />
@@ -439,17 +504,17 @@ function PromptCard({
             <div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "space-between" }}>
                 <div style={{ ...blockEyeStyle, color: "#fbbf24" }}>DIN ANPASSNING (frivillig)</div>
-                {spec.templates.length > 0 && (
+                {templates.length > 0 && (
                   <select
                     onChange={(e) => {
                       const idx = parseInt(e.target.value, 10);
-                      if (idx >= 0 && idx < spec.templates.length) {
+                      if (idx >= 0 && idx < templates.length) {
                         if (
                           customText.trim() === ""
                           || confirm("Skriv över din nuvarande anpassning?")
                         ) {
                           onLocalChange({
-                            custom_text: spec.templates[idx].text,
+                            custom_text: templates[idx].text,
                           });
                         }
                       }
@@ -459,7 +524,7 @@ function PromptCard({
                     style={selectStyle}
                   >
                     <option value="-1">Klistra in mall…</option>
-                    {spec.templates.map((t, i) => (
+                    {templates.map((t, i) => (
                       <option key={i} value={i} title={t.description}>
                         {t.name}
                       </option>
@@ -471,8 +536,8 @@ function PromptCard({
                 value={customText}
                 onChange={(e) => onLocalChange({ custom_text: e.target.value })}
                 placeholder={
-                  spec.variables.length > 0
-                    ? `Skriv din variant här. Glöm inte: ${spec.variables.join(", ")}`
+                  variables.length > 0
+                    ? `Skriv din variant här. Glöm inte: ${variables.join(", ")}`
                     : "Skriv din variant här. Lämnar du tomt används standard."
                 }
                 style={{ ...textareaStyle, minHeight: 240, borderColor: hasOverride ? "rgba(99,102,241,0.45)" : undefined }}

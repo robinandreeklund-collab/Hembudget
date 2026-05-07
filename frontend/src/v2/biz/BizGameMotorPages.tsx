@@ -43,6 +43,10 @@ export function BizOfferter() {
   const [err, setErr] = useState<string | null>(null);
   const [editing, setEditing] = useState<Opportunity | null>(null);
   const [kit, setKit] = useState<StartupKitStatus | null>(null);
+  // Pagination · 44 nya offertförfrågningar bara över natten gör listan
+  // helt omöjlig att skrolla. Max 5 per sida.
+  const NYA_PAGE_SIZE = 5;
+  const [nyaPage, setNyaPage] = useState(0);
 
   function refresh() {
     bizEngineApi.listOpportunities(undefined)
@@ -192,8 +196,16 @@ export function BizOfferter() {
                 <a
                   key={o.id}
                   className="biz-table-grid-row"
-                  href="#"
+                  href={o.status === "won" ? "/v2/foretag/jobb" : "#"}
                   onClick={(e) => {
+                    // Vunnen offert · klicka leder till jobb-vyn med
+                    // live-countdown istället för att öppna offert-modal
+                    // igen. 'Skicka offert' är meningslöst för en vunnen
+                    // affär.
+                    if (o.status === "won") {
+                      // Native nav (no preventDefault) → /v2/foretag/jobb
+                      return;
+                    }
                     e.preventDefault();
                     setEditing(o);
                   }}
@@ -266,8 +278,13 @@ export function BizOfferter() {
                     className={`biz-status ${
                       o.status === "won" ? "paid" : "sent"
                     }`}
+                    title={
+                      o.status === "won"
+                        ? "Klicka för att se progress på jobbet"
+                        : "Du har lämnat offert · väntar på kundens beslut"
+                    }
                   >
-                    {o.status === "won" ? "Vunnen" : "Pågår"}
+                    {o.status === "won" ? "Vunnen → jobb" : "Offert lämnad"}
                   </span>
                 </a>
               ))}
@@ -275,7 +292,12 @@ export function BizOfferter() {
           )}
 
           {/* === Nya offertförfrågningar === */}
-          {nya.length > 0 && (
+          {nya.length > 0 && (() => {
+            const totalPages = Math.max(1, Math.ceil(nya.length / NYA_PAGE_SIZE));
+            const safePage = Math.min(nyaPage, totalPages - 1);
+            const start = safePage * NYA_PAGE_SIZE;
+            const pageItems = nya.slice(start, start + NYA_PAGE_SIZE);
+            return (
             <>
               <div
                 className="section-eye"
@@ -285,6 +307,11 @@ export function BizOfferter() {
                   ? "ny offertförfrågan"
                   : "nya offertförfrågningar"}{" "}
                 · väntar på din offert
+                {totalPages > 1 && (
+                  <span style={{ marginLeft: 12, color: "rgba(255,255,255,0.55)", fontSize: 10, letterSpacing: 0.6 }}>
+                    visar {start + 1}–{Math.min(start + NYA_PAGE_SIZE, nya.length)} av {nya.length}
+                  </span>
+                )}
               </div>
               {/* Detaljerade offert-kort istället för en mager radlista —
                * eleven måste se VAD jobbet gäller (jobbeskrivning,
@@ -301,7 +328,7 @@ export function BizOfferter() {
                   paddingBottom: 12,
                 }}
               >
-                {nya.map((o) => (
+                {pageItems.map((o) => (
                   <a
                     key={o.id}
                     href="#"
@@ -425,8 +452,48 @@ export function BizOfferter() {
                   </a>
                 ))}
               </div>
+              {totalPages > 1 && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  marginTop: 14, justifyContent: "center",
+                  fontFamily: "JetBrains Mono, monospace", fontSize: 11,
+                }}>
+                  <button
+                    onClick={() => setNyaPage(Math.max(0, safePage - 1))}
+                    disabled={safePage === 0}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      color: safePage === 0 ? "rgba(255,255,255,0.3)" : "#c7d2fe",
+                      padding: "6px 12px", borderRadius: 6,
+                      cursor: safePage === 0 ? "default" : "pointer",
+                      fontWeight: 700, letterSpacing: 1.2,
+                    }}
+                  >
+                    ← FÖREGÅENDE
+                  </button>
+                  <span style={{ color: "rgba(255,255,255,0.55)", padding: "0 8px" }}>
+                    Sida {safePage + 1} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setNyaPage(Math.min(totalPages - 1, safePage + 1))}
+                    disabled={safePage >= totalPages - 1}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      color: safePage >= totalPages - 1 ? "rgba(255,255,255,0.3)" : "#c7d2fe",
+                      padding: "6px 12px", borderRadius: 6,
+                      cursor: safePage >= totalPages - 1 ? "default" : "pointer",
+                      fontWeight: 700, letterSpacing: 1.2,
+                    }}
+                  >
+                    NÄSTA →
+                  </button>
+                </div>
+              )}
             </>
-          )}
+            );
+          })()}
 
           {/* === Levererat / avslutat ===
            * Pedagogiskt kort istället för enrad — vid förlorad offert SKA
