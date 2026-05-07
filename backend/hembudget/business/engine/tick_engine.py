@@ -709,7 +709,26 @@ def kickstart_pipeline_only(
     """
     if not company.active:
         return
+    # Använd spel-datum (synkat med privat-tid) i stället för real-tid
+    # så genererade opps får rätt datum-stämpel.
     today = date.today()
+    try:
+        from ...school.engines import (
+            master_session as _ms_kick,
+            get_current_actor_student as _gcas_kick,
+        )
+        from ...school.models import Student as _Stu_kick
+        from ...game_engine.release_schedule import game_date_for
+        sid = _gcas_kick()
+        if sid is not None:
+            with _ms_kick() as _msess:
+                stu = _msess.get(_Stu_kick, sid)
+                if stu is not None and stu.created_at is not None:
+                    gy, gm, gd = game_date_for(stu.created_at)
+                    gd = max(1, min(28, gd))
+                    today = date(gy, gm, gd)
+    except Exception:
+        pass
     for _ in range(weeks):
         try:
             company.week_no = (company.week_no or 0) + 1
@@ -892,9 +911,32 @@ def auto_tick_if_due(s: Session, *, company: Company) -> int:
     if n_due <= 0:
         return 0
     n = min(n_due, AUTO_TICK_MAX_CATCHUP_WEEKS)
+
+    # Beräkna SPEL-datum för respektive tick · biz ska gå genom samma
+    # kalender som privat (anchor 2026-01-01, 1 real-timme = 1 spel-
+    # vecka). Annars hamnar biz-transaktioner med real-tid (maj 2026)
+    # medan privat står på spel-tid (jan 2026).
+    game_today = None
+    try:
+        from ...school.engines import (
+            master_session as _ms_at, get_current_actor_student as _gcas_at,
+        )
+        from ...school.models import Student as _Stu_at
+        from ...game_engine.release_schedule import game_date_for
+        sid = _gcas_at()
+        if sid is not None:
+            with _ms_at() as _msess:
+                stu = _msess.get(_Stu_at, sid)
+                if stu is not None and stu.created_at is not None:
+                    gy, gm, gd = game_date_for(stu.created_at)
+                    gd = max(1, min(28, gd))
+                    game_today = date(gy, gm, gd)
+    except Exception:
+        pass
+
     for _ in range(n):
         try:
-            run_business_week(s, company=company)
+            run_business_week(s, company=company, today=game_today)
         except Exception:
             log.exception(
                 "auto_tick: vecka %s misslyckades · fortsätter",

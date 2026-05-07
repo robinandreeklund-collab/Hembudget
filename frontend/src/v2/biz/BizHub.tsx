@@ -22,6 +22,7 @@ import {
 } from "./api";
 import { BizPentagon as BizPentagonChart } from "./BizPentagon";
 import { BizPentagonFlipCard } from "./BizPentagonFlipCard";
+import { GameTimeWidget } from "../GameTimeWidget";
 import { TimeCapacityBar, useTimeCapacity } from "./TimeCapacityWidget";
 import { api } from "@/api/client";
 import "./biz.css";
@@ -66,6 +67,7 @@ export function BizHub() {
   const [pentagon, setPentagon] = useState<BizPentagon | null>(null);
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gameTime, setGameTime] = useState<import("../api").HubGameTime | null>(null);
   const [stats, setStats] = useState<HubStats>({
     income: 0,
     expense: 0,
@@ -87,6 +89,11 @@ export function BizHub() {
 
   useEffect(() => {
     if (allowed !== true) return;
+    // Hämta spel-tid · samma som privat-hubben så datum/animering
+    // matchar mellan vyerna.
+    import("../api").then(({ v2Api }) =>
+      v2Api.gameTime().then(setGameTime).catch(() => undefined)
+    );
     Promise.all([
       bizApi.getCompany(),
       bizApi.listTransactions(500),
@@ -155,6 +162,9 @@ export function BizHub() {
       {/* === 1. HUB-HEAD: rubrik + biz-char-card === */}
       <div className="biz-hub-head">
         <div>
+          {gameTime && (
+            <GameTimeWidget gameTime={gameTime} />
+          )}
           <span className="biz-pill">
             Företaget · {company.industry_label || "enskild firma"}
             {pentagon ? ` · vinst ${pentagon.metrics.margin_4w_pct.toFixed(0)}%` : ""}
@@ -192,9 +202,6 @@ export function BizHub() {
         <BizCharCard company={company} pentagon={pentagon} stats={stats} />
       </div>
 
-      {/* === 1.5 TIDS-KAPACITET · alltid synlig på hubben === */}
-      <CapacityBanner />
-
       {/* === 2. PENTAGON-STAGE · klickbara axlar → flip-kort === */}
       {pentagon && (
         <BizPentagonFlipCard
@@ -208,6 +215,9 @@ export function BizHub() {
           }
         />
       )}
+
+      {/* === 2.5 TIDS-KAPACITET · under pentagon (matchar privat-layout) === */}
+      <CapacityBanner />
 
       {/* === 3. EVENT-CARD · senaste händelse === */}
       {latestInvoice && (

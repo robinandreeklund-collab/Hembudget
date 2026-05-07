@@ -918,8 +918,15 @@ def buy_marketing_package(
 
 
 class DecisionIn(BaseModel):
+    # Alias-vänligt mönster · både UI-naturliga ('employee', 'leasing')
+    # och tekniska ('hire_part_time', 'car_lease') accepteras. Frontend-
+    # presetet skickar 'employee'/'leasing' men gamla tester kan
+    # fortfarande använda de tekniska namnen.
     kind: str = Field(
-        pattern="^(hire_part_time|wellness|car_lease|insurance|new_office)$"
+        pattern=(
+            "^(employee|hire_full_time|hire_part_time|wellness|"
+            "leasing|car_lease|insurance|new_office)$"
+        )
     )
     title: str = Field(min_length=2, max_length=200)
     monthly_cost: int = Field(ge=0, default=0)

@@ -178,7 +178,11 @@ export function HubV2() {
           <article className="hub-char-card">
             <div className="hub-char-eye">
               {(() => {
-                const d = new Date();
+                // Använd spel-tid (game_time.iso_date) i stället för
+                // browser-Date(). Annars visar character-cardet 'torsdag
+                // · maj' när spel-tiden är jan 2026.
+                const refIso = hub.game_time?.iso_date;
+                const d = refIso ? new Date(refIso + "T12:00:00") : new Date();
                 const day = d.toLocaleDateString("sv-SE", { weekday: "long" });
                 const month = d.toLocaleDateString("sv-SE", { month: "long" });
                 return `${day} · ${month}`;
