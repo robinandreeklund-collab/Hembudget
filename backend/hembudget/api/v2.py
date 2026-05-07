@@ -17856,10 +17856,16 @@ def _seed_initial_student_data(
                     if m.amount is None:
                         m.status = "paid"
                         continue
-                    raw = (
-                        f"seedsweep|{student.id}|{m.id}|"
-                        f"{m.due_date.isoformat() if m.due_date else 'na'}"
+                    # Använd SAMMA hash-format som _auto_pay_historical_
+                    # invoices så båda funktionerna dedupliceras mot
+                    # varandra. Tidigare hade catch-all-sweepen sitt
+                    # eget 'seedsweep|...' format → samma faktura fick
+                    # två autogiro-transaktioner (en per format).
+                    ym_for_hash = (
+                        f"{m.due_date.year:04d}-{m.due_date.month:02d}"
+                        if m.due_date else "na"
                     )
+                    raw = f"autopaid|{student.id}|{ym_for_hash}|{m.id}"
                     tx_hash = _sha_sweep(raw.encode()).hexdigest()[:32]
                     existing = (
                         s.query(_Tx_sweep)
