@@ -1298,12 +1298,12 @@ function Step8Budget({ charName }: { charName: string }) {
     };
   }, []);
 
-  // Visa endast variabla utgifter — fasta utgifter (hyra, försäkring,
-  // el etc.) har eleven inte själv kontroll över i månadsskala. Vi
-  // filtrerar också bort inkomster.
-  const editableRows = (budget?.categories || []).filter(
-    (c) => !c.is_income && !c.is_fixed,
-  );
+  // Visa ALLA non-income-kategorier · variabla går att ändra direkt,
+  // fasta (hyra, el, försäkring etc.) syns som read-only så eleven
+  // får en helhetsbild av månadsbudgeten redan i onboardingen.
+  const allRows = (budget?.categories || []).filter((c) => !c.is_income);
+  const editableRows = allRows.filter((c) => !c.is_fixed);
+  const fixedRows = allRows.filter((c) => c.is_fixed);
 
   async function saveRow(categoryId: number, valueStr: string) {
     const parsed = Number.parseInt(valueStr, 10);
@@ -1377,7 +1377,7 @@ function Step8Budget({ charName }: { charName: string }) {
         >
           Laddar budgeten…
         </div>
-      ) : editableRows.length === 0 ? (
+      ) : editableRows.length === 0 && fixedRows.length === 0 ? (
         <div
           style={{
             padding: "20px 0",
@@ -1386,8 +1386,25 @@ function Step8Budget({ charName }: { charName: string }) {
             fontSize: 11,
           }}
         >
-          Ingen variabel utgift att justera än — det är OK, du kan
-          sätta dem manuellt i /v2/budget senare.
+          Budgeten håller på att seedas (KV-schabloner). Om det här
+          står kvar efter en stund: gå till /v2/budget och tryck
+          "Skapa månads-budget" så fylls den i.
+        </div>
+      ) : editableRows.length === 0 ? (
+        <div style={{
+          padding: "12px 16px",
+          margin: "16px 0",
+          background: "rgba(99,102,241,0.06)",
+          border: "1px solid rgba(99,102,241,0.20)",
+          borderRadius: 6,
+          fontFamily: "var(--serif)",
+          fontSize: 13,
+          color: "rgba(255,255,255,0.78)",
+          lineHeight: 1.55,
+        }}>
+          Inga variabla utgifter att justera än — bara fasta utgifter
+          (visas nedan). Du kan lägga till mat, kläder och nöje i{" "}
+          <em>/v2/budget</em> när du loggat in.
         </div>
       ) : (
         <div
@@ -1536,6 +1553,37 @@ function Step8Budget({ charName }: { charName: string }) {
             );
           })}
         </div>
+      )}
+
+      {fixedRows.length > 0 && (
+        <>
+          <div style={{
+            fontSize: 9.5, letterSpacing: "1.4px", textTransform: "uppercase",
+            color: "var(--text-dim)", fontFamily: "var(--mono)",
+            marginTop: 18, marginBottom: 8,
+          }}>
+            ● FASTA UTGIFTER · kan inte ändras månadsvis
+          </div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 110px",
+            columnGap: 16, rowGap: 6,
+            fontFamily: "var(--mono)", fontSize: 11,
+            opacity: 0.7,
+          }}>
+            {fixedRows.map((c) => (
+              <div key={c.category_id} style={{ display: "contents" }}>
+                <div>
+                  <span style={{ marginRight: 6 }}>{c.icon}</span>
+                  {c.category_name}
+                </div>
+                <div style={{ textAlign: "right", color: "rgba(255,255,255,0.65)" }}>
+                  {SEK(c.planned)} kr
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       <div

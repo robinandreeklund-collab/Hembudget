@@ -51,7 +51,8 @@ type TabKey =
   | "invoice"
   | "salary_slip"
   | "authority"
-  | "other";
+  | "other"
+  | "handled";
 
 const TAB_TO_FILTER: Record<
   TabKey,
@@ -63,6 +64,7 @@ const TAB_TO_FILTER: Record<
   salary_slip: "salary_slip",
   authority: "authority",
   other: "other",
+  handled: undefined,  // klient-filter på status
 };
 
 const MAIL_TYPE_LABEL: Record<V2MailType, string> = {
@@ -139,11 +141,42 @@ export function PostladanV2() {
     );
   }
 
-  const { summary, items } = data;
+  const { summary, items: rawItems } = data;
   // "Övrigt" = allt utöver invoice/salary_slip/authority/info (typiskt
   // reminder). Räknat på backend som other_count + info-tabben är
   // separat: prototypens "Övrigt" mappar till info_count + reminder.
   const ovrigtCount = summary.info_count + summary.other_count;
+
+  // === Klient-filtrering · nuvarande månad + hanterade ===
+  // Postlådan blir snabbt 30+ brev. Visa endast brev från innevarande
+  // månad i ALLA-, ohanterade- och kategori-flikar. Hanterade samlas
+  // i egen flik. Eleven slipper scrolla genom historik.
+  const HANDLED_STATUSES = new Set(["paid", "exported", "handled"]);
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth();
+  function inCurrentMonth(iso: string | null | undefined): boolean {
+    if (!iso) return false;
+    const d = new Date(iso);
+    return d.getFullYear() === curYear && d.getMonth() === curMonth;
+  }
+  let items = rawItems;
+  if (tab === "handled") {
+    // Hanterade-fliken visar ALLA månaders hanterade brev
+    items = rawItems.filter((m) => HANDLED_STATUSES.has(m.status));
+  } else {
+    // Övriga flikar: filtrera till nuvarande månad + dölj hanterade
+    // (de syns i sin egen flik). Behåll dem dock i 'all'-fliken om
+    // de hör till nuvarande månad så eleven ser månadens helhet.
+    items = rawItems.filter((m) => {
+      if (!inCurrentMonth(m.received_at)) return false;
+      if (tab !== "all" && HANDLED_STATUSES.has(m.status)) return false;
+      return true;
+    });
+  }
+  const handledCount = rawItems.filter(
+    (m) => HANDLED_STATUSES.has(m.status),
+  ).length;
 
   function fmtDateTime(iso: string | null): string {
     if (!iso) return "—";
@@ -333,6 +366,17 @@ export function PostladanV2() {
             href="#"
           >
             Övrigt <span className="count">{ovrigtCount}</span>
+          </a>
+          <a
+            className={`mail-tab${tab === "handled" ? " active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setTab("handled");
+            }}
+            href="#"
+            title="Allt som är betalt, exporterat eller annars klart · alla månader"
+          >
+            Hanterade <span className="count">{handledCount}</span>
           </a>
         </div>
 

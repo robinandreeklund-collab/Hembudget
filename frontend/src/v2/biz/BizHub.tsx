@@ -609,7 +609,8 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [form, setForm] = useState<"enskild_firma" | "ab">("enskild_firma");
-  const [vatReg, setVatReg] = useState(true);
+  // VAT auto-triggas av tick-engine när 12-mån oms närmar sig 80k
+  const vatReg = false;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showCapitalDialog, setShowCapitalDialog] = useState(false);
@@ -874,17 +875,28 @@ function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
             </select>
           </label>
 
-          <label
+          {/* Momsregistrering hanteras automatiskt — Skatteverket
+              skickar brev när bolagets 12-månaders omsättning närmar
+              sig 80 000 kr. Eleven slipper ta ställning i onboardingen
+              och får i stället en pedagogisk händelse i postlådan när
+              det blir aktuellt. */}
+          <div
             className="biz-field"
-            style={{ display: "flex", alignItems: "center", gap: 10 }}
+            style={{
+              padding: "10px 14px",
+              background: "rgba(99,102,241,0.06)",
+              border: "1px solid rgba(99,102,241,0.20)",
+              borderRadius: 6,
+              fontSize: 12.5,
+              color: "rgba(255,255,255,0.78)",
+              fontFamily: "Source Serif 4, Georgia, serif",
+              lineHeight: 1.5,
+            }}
           >
-            <input
-              type="checkbox"
-              checked={vatReg}
-              onChange={(e) => setVatReg(e.target.checked)}
-            />
-            <span>Momsregistrera (krävs vid omsättning &gt; 80 000 kr/år)</span>
-          </label>
+            <strong style={{ color: "#c7d2fe" }}>Moms.</strong> Du
+            börjar utan momsregistrering. Skatteverket hör av sig
+            automatiskt när omsättningen närmar sig 80 000 kr/år.
+          </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
             <button

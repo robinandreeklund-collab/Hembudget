@@ -474,9 +474,14 @@ def create_company(
             from ..db.base import session_scope as _ps_check
             with _ps_check() as private_s:
                 from ..db.models import Account, Transaction
+                # order_by(id) så vi alltid plockar det FÖRSTA löne-
+                # kontot (det Monthly Engine seedade) — inte ett senare
+                # tillagt secondary checking. Annars riskerar bal-
+                # beräkningen läsa fel konto.
                 acc = (
                     private_s.query(Account)
                     .filter(Account.type == "checking")
+                    .order_by(Account.id.asc())
                     .first()
                 )
                 if acc is None:
@@ -484,12 +489,19 @@ def create_company(
                         400,
                         "Privat-konto saknas · kontakta lärare",
                     )
-                bal = sum(
+                # Saldo = opening_balance + Σ(transaktioner). Tidigare
+                # missades opening_balance, vilket gjorde att buffer-
+                # check feltolkade ett konto med 37 729 kr som 25 229 kr
+                # (12 500 kr opening_balance saknades) → dialog
+                # tvingade fram lån-väg, eleven såg ingen privat-debit.
+                ob = float(acc.opening_balance or 0)
+                tx_sum = sum(
                     float(t.amount or 0)
                     for t in private_s.query(Transaction).filter(
                         Transaction.account_id == acc.id
                     ).all()
                 )
+                bal = ob + tx_sum
                 # Hård spärr · saknar pengarna helt
                 if bal < needed_capital:
                     raise HTTPException(

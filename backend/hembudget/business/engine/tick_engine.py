@@ -820,6 +820,9 @@ def run_business_week(
         _phase_g_employment_decision_check(
             s, company=company, summary=summary,
         )
+        _phase_vat_threshold_check(
+            s, company=company, today=today, summary=summary,
+        )
         _phase_h_milestone_mails(
             s, company=company, summary=summary,
         )
@@ -1054,6 +1057,115 @@ def _phase_g_employment_decision_check(
         f"Maria-säg-upp-prompt skickad ({biz_h}h biz · {overload}v "
         "överbelastning)",
     )
+
+
+def _phase_vat_threshold_check(
+    s: Session, *, company: Company, today: date, summary: TickSummary,
+) -> None:
+    """Pedagogisk auto-trigger av momsregistrering.
+
+    Skattereglerna: bolag MÅSTE vara momsregistrerat när 12-månaders
+    rullande omsättning passerar 80 000 kr. Innan tröskeln är det
+    frivilligt (kan göras för att få ingående moms tillbaka).
+
+    I simuleringen vill vi inte tvinga eleven ta ställning vid bolags-
+    start (när oms är 0). I stället:
+      * Vid 60 000 kr → varnings-mail från Skatteverket: 'närmar sig
+        gränsen, börja förbered registrering'.
+      * Vid 80 000 kr → mail + auto-flippar vat_registered=True.
+
+    Idempotent: kollar mail med stable subject så vi inte spammar varje
+    vecka när tröskeln redan passerats.
+    """
+    if company.vat_registered:
+        return  # redan registrerat, inget att göra
+
+    from ..models import CompanyTransaction as _Tx
+    from ...db.models import MailItem
+
+    cutoff_12m = today - timedelta(days=365)
+    income_12m = (
+        s.query(_Tx)
+        .filter(
+            _Tx.company_id == company.id,
+            _Tx.kind == "income",
+            _Tx.occurred_on >= cutoff_12m,
+        )
+        .all()
+    )
+    revenue_12m = sum(float(t.amount_excl_vat or 0) for t in income_12m)
+
+    if revenue_12m >= 80000:
+        # Auto-registrera + skicka mail
+        existing = (
+            s.query(MailItem)
+            .filter(MailItem.subject == "Momsregistrering · automatisk")
+            .first()
+        )
+        if existing is None:
+            s.add(MailItem(
+                sender="Skatteverket",
+                sender_short="SKV",
+                sender_kind="agency",
+                sender_meta="Momsregistrering",
+                mail_type="info",
+                subject="Momsregistrering · automatisk",
+                body_meta=f"12 mån omsättning: {int(revenue_12m):,} kr".replace(",", " "),
+                body=(
+                    "Hej. Ditt bolag har passerat 80 000 kr i rullande "
+                    "12-månaders omsättning. Enligt momslagen är "
+                    "registrering nu obligatoriskt — vi har lagt upp "
+                    "momsnummer åt dig automatiskt.\n\n"
+                    "Detta påverkar din verksamhet:\n"
+                    "· Du ska lägga 25 % moms på fakturor till privat-"
+                    "kunder och 6/12/25 % beroende på bransch på "
+                    "andra kunder.\n"
+                    "· Du får tillbaka ingående moms på dina kostnader "
+                    "(t.ex. 25 % på utrustning) i din momsdeklaration.\n"
+                    "· Momsperiod: kvartal (kan ändras).\n\n"
+                    "Hälsningar / Skatteverket"
+                ),
+                amount=None,
+                due_date=None,
+                status="unhandled",
+            ))
+            company.vat_registered = True
+            summary.notes.append(
+                f"Auto-momsreg · 12-mån oms {int(revenue_12m)} kr ≥ 80 000 kr"
+            )
+    elif revenue_12m >= 60000:
+        # Varnings-mail · obligatoriskt om 20k till
+        existing = (
+            s.query(MailItem)
+            .filter(MailItem.subject == "Närmar sig moms-gränsen")
+            .first()
+        )
+        if existing is None:
+            s.add(MailItem(
+                sender="Skatteverket",
+                sender_short="SKV",
+                sender_kind="agency",
+                sender_meta="Information",
+                mail_type="info",
+                subject="Närmar sig moms-gränsen",
+                body_meta=f"12 mån omsättning: {int(revenue_12m):,} kr".replace(",", " "),
+                body=(
+                    f"Ditt bolag har {int(revenue_12m):,} kr i rullande "
+                    "12-månaders omsättning. Vid 80 000 kr blir moms-"
+                    "registrering obligatoriskt — vi registrerar dig "
+                    "automatiskt då.\n\n"
+                    "Du kan registrera dig FRIVILLIGT redan nu om du vill "
+                    "kunna dra av ingående moms på dina kostnader. "
+                    "Hör av dig om du vill det.\n\n"
+                    "Hälsningar / Skatteverket"
+                ).replace(",", " "),
+                amount=None,
+                due_date=None,
+                status="unhandled",
+            ))
+            summary.notes.append(
+                f"Moms-varning · 12-mån oms {int(revenue_12m)} kr"
+            )
 
 
 def _phase_h_milestone_mails(
