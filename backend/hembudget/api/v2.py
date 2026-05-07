@@ -19034,10 +19034,16 @@ def _build_student_notifications(
                     ))
 
                 # 5. Pending sociala events (StudentEvent · pending status)
+                # Filtrera deadline >= today så historiska seed-events
+                # (jan-apr) inte triggar notiser som leder till tom
+                # Händelser-vy. Konsistent med /v2/events/pending.
                 from ..db.models import StudentEvent as _SE_notif
                 pending_events = (
                     s.query(_SE_notif)
-                    .filter(_SE_notif.status == "pending")
+                    .filter(
+                        _SE_notif.status == "pending",
+                        _SE_notif.deadline >= now.date(),
+                    )
                     .order_by(_SE_notif.deadline.asc())
                     .limit(8)
                     .all()
@@ -19091,6 +19097,7 @@ def _build_student_notifications(
             .filter(
                 _CEI.to_student_id == sid,
                 _CEI.status == "pending",
+                _CEI.deadline >= now.date(),
             )
             .order_by(_CEI.deadline.asc())
             .limit(8)
