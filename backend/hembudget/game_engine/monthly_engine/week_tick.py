@@ -289,7 +289,19 @@ def _check_and_create_run(
         if existing is not None and existing.status == "completed":
             return True, existing.id
         if existing is not None:
-            # in_progress eller failed — rensa partiell state INNAN retry
+            # Anti-race · om en annan tråd just nu kör samma tick
+            # (in_progress, startad inom 5 min) ska vi INTE purge:a
+            # och retrya. Då skulle vi rensa partiella data medan
+            # andra tråden skapar dem → race + dubbletter.
+            if existing.status == "in_progress":
+                age_sec = (
+                    datetime.utcnow() - existing.started_at
+                ).total_seconds() if existing.started_at else 1e9
+                if age_sec < 300:
+                    # Skipped: en annan tråd håller på, skippa
+                    # tyst (returnera 'skipped'-flagga)
+                    return True, existing.id
+            # in_progress > 5 min eller failed — rensa partiell state
             existing.status = "in_progress"
             existing.started_at = datetime.utcnow()
             existing.error_message = None
@@ -316,7 +328,13 @@ def _check_and_create_run(
 
 def _purge_partial_tick_data(student: Student, year_month: str) -> None:
     """Rensa transaktioner + mail + events skapade av ett FAILED tick-run
-    så vi kan köra om idempotent. year_month = "YYYY-MM"."""
+    så vi kan köra om idempotent. year_month = "YYYY-MM".
+
+    Filtrerar på Transaction.date och MailItem.due_date eftersom de
+    motsvarar SPEL-månaden. received_at = real-tid när tick körde,
+    INTE relevant för att hitta mails från en historisk spel-månad
+    (kan ha skapats real-tid 2026-05 men ha due_date 2025-10).
+    """
     from datetime import date as _d
     from ...db.models import (
         Account as _Acc, MailItem as _Mail, Transaction as _Tx,
@@ -343,7 +361,18 @@ def _purge_partial_tick_data(student: Student, year_month: str) -> None:
                 s.query(_Tx).filter(
                     _Tx.date >= start, _Tx.date < end,
                 ).delete(synchronize_session=False)
+                # Mail · använd due_date för fakturor/lönespec så vi
+                # fångar mails från spel-månaden oavsett när de blev
+                # 'levererade' i real-tid. Mails utan due_date (info-
+                # brev, sociala events) rensas bara om received_at
+                # inom real-period (gamla beteendet).
                 s.query(_Mail).filter(
+                    _Mail.due_date.isnot(None),
+                    _Mail.due_date >= start,
+                    _Mail.due_date < end,
+                ).delete(synchronize_session=False)
+                s.query(_Mail).filter(
+                    _Mail.due_date.is_(None),
                     _Mail.received_at >= datetime.combine(
                         start, datetime.min.time(),
                     ),
