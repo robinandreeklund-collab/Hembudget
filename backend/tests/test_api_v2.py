@@ -10651,3 +10651,38 @@ def test_forbrukning_shows_el_history_after_seed(fx):
         f"Förväntade el-readings från seed (Tibber-fakturor). "
         f"Total readings: {len(readings)}"
     )
+
+
+def test_pending_events_auto_recovers_without_startup_hook(fx):
+    """Backstop · om startup-hooken inte hann seeda templates vid
+    student-skapande SKA /events/pending fortfarande returnera events
+    via defensiv template-seedning + auto-tick i endpointet.
+
+    Repro: användaren rapporterade 'fortfarande inga sociala events'
+    trots tidigare fix. Orsak: existerande elev hade kört seed-flödet
+    INNAN templates seedats (eller med gamla idempotency-buggen) →
+    StudentEvent-tabellen var tom → /events/pending = 0 = tomma feed
+    för alltid.
+    """
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Töm StudentEvent-tabellen för att simulera den buggade seed-runen
+    from hembudget.db.models import StudentEvent
+
+    def wipe(s):
+        s.query(StudentEvent).delete()
+        s.commit()
+    _scope_run(sid, wipe)
+
+    # Anropa /events/pending — backstop ska köra tick + skapa events
+    r = client.get(
+        "/events/pending",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["count"] > 0, (
+        f"Backstop ska skapa events när feed är tom. Svar: {data}"
+    )

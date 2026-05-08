@@ -90,6 +90,17 @@ def list_pending(scope: Session = Depends(db)) -> dict:
             _auto_tick_private_months_if_due(sid)
     except Exception:
         pass
+
+    # Defensiv template-seedning · om startup-hooken har failat eller
+    # eleven kommer in innan templates seedats finns det 0 templates
+    # i master → tick_for_student returnerar 0 events → eleven får
+    # ALDRIG sociala förslag. Säkerställ att master har templates här.
+    try:
+        with master_session() as ms:
+            seed_event_templates(ms)
+    except Exception:
+        pass
+
     today = current_game_date()
     expire_old_events(scope, today=today)
     rows = (
@@ -101,6 +112,46 @@ def list_pending(scope: Session = Depends(db)) -> dict:
         .order_by(StudentEvent.deadline.asc())
         .all()
     )
+
+    # Backstop · om 0 pending events finns kör vi en explicit tick för
+    # innevarande spel-vecka. Säkerhetsnät för fall där seed:ens tick
+    # av anchor-månaden misslyckades (t.ex. templates ej seedade än
+    # vid student-skapande, eller idempotency-bug i tidigare commit
+    # som gjorde att bara oct-events skapades och alla expirerade).
+    # tick_for_student är idempotent per ISO-vecka så om events redan
+    # finns för nuvarande vecka skippar den utan biverkning.
+    if not rows:
+        try:
+            from ..school.engines import (
+                get_current_actor_student as _gcas_e,
+            )
+            from ..school.models import Student as _Stu_e
+            sid_e = _gcas_e()
+            if sid_e is not None:
+                with master_session() as ms_e:
+                    stu_e = ms_e.get(_Stu_e, sid_e)
+                    if stu_e is not None:
+                        tick_for_student(
+                            scope_session=scope,
+                            master_session=ms_e,
+                            student_seed=sid_e,
+                            today=today,
+                            max_events_per_tick=3,
+                        )
+                        scope.commit()
+                # Re-query · ev. nya events som skapats
+                rows = (
+                    scope.query(StudentEvent)
+                    .filter(
+                        StudentEvent.status == "pending",
+                        StudentEvent.deadline >= today,
+                    )
+                    .order_by(StudentEvent.deadline.asc())
+                    .all()
+                )
+        except Exception:
+            pass
+
     return {
         "events": [_to_out(e).model_dump() for e in rows],
         "count": len(rows),
