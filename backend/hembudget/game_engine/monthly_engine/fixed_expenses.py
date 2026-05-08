@@ -755,16 +755,21 @@ def generate_fixed_expenses(
             due=due,
         )
 
+        # Releasa fakturan när den ANLÄNDER (~14 dgr innan due), inte
+        # när den FÖRFALLER. Tidigare buggen: bill.day=3 (Tibber Jan 3)
+        # gav release_at = release_base + 2 dgr → mailet syntes först
+        # på Jan 3 (= förfallodagen) i spel-tid. Eleven hade ingen tid
+        # att betala. Nu släpps på receive_day = max(1, due_day - 14)
+        # så mail om Jan-3-faktura är synligt redan vid start (Jan 1).
+        receive_day = max(1, bill.day - 14)
         released_at = (
-            release_at_for_day(release_base, bill.day)
+            release_at_for_day(release_base, receive_day)
             if release_base is not None
             else None
         )
-        # received_at = SPEL-datetime så postlådan visar "5 jan" inte
-        # "7 maj" (real-tid när seed kördes). Naive datetime baserat på
-        # billens spel-dag i month-månaden. Fakturor anländer typiskt
-        # ~14 dgr innan due_date i verkligheten — justera bakåt så
-        # eleven ser etablerad post-historik.
+        # received_at = SPEL-datetime så postlådan visar "20 dec" inte
+        # "7 maj" (real-tid när seed kördes). Använder due_date - 14d
+        # som "fakturadatum" (svensk standard: kund får 14-30 dgr).
         from datetime import (
             datetime as _dt_fe, timedelta as _td_fe,
         )
@@ -795,6 +800,51 @@ def generate_fixed_expenses(
         s.flush()
         created_ids.append(mail.id)
         total += bill.amount
+
+        # Skapa motsvarande UtilityReading för el/bredband/mobil/vatten
+        # så /v2/forbrukning kan visa historik. Annars syns bara
+        # fakturan i postlådan men förbrukning-aktören är tom.
+        if bill.invoice_data and bill.invoice_data.get("kind") in (
+            "el", "bredband", "mobil", "vatten",
+        ):
+            try:
+                from ...db.models import UtilityReading
+                _kind_map = {
+                    "el": ("electricity", "kWh", "energy"),
+                    "bredband": ("internet", None, "energy"),
+                    "mobil": ("mobile", None, "energy"),
+                    "vatten": ("water", "m3", "energy"),
+                }
+                meter_type, default_unit, meter_role = _kind_map[
+                    bill.invoice_data["kind"]
+                ]
+                extra = bill.invoice_data.get("extra") or {}
+                period_start_str = bill.invoice_data.get("period_start")
+                period_end_str = bill.invoice_data.get("period_end")
+                if period_start_str and period_end_str:
+                    consumption = None
+                    consumption_unit = default_unit
+                    if bill.invoice_data["kind"] == "el":
+                        consumption = Decimal(
+                            str(extra.get("kwh_total") or 0)
+                        )
+                        consumption_unit = "kWh"
+                    s.add(UtilityReading(
+                        supplier=bill.sender,
+                        meter_type=meter_type,
+                        meter_role=meter_role,
+                        period_start=date.fromisoformat(period_start_str),
+                        period_end=date.fromisoformat(period_end_str),
+                        consumption=consumption,
+                        consumption_unit=consumption_unit,
+                        cost_kr=Decimal(str(bill.amount)),
+                        source="seed",
+                        notes=f"Auto-skapad från {bill.subject}",
+                    ))
+            except Exception:
+                # UtilityReading är best-effort · ingen krasch
+                # om modellen saknar kolumn / annan miljö-skillnad.
+                pass
 
     return {
         "items_created": len(created_ids),

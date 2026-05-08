@@ -2710,7 +2710,13 @@ def create_v2_transfer(
                     f"{int(balance)} kr.",
                 )
 
-        tx_date = body.transfer_date or _date.today()
+        # Spel-tid · annars stämplas överföringar med real-tid (=
+        # maj 2026) trots att eleven är på spel-januari.
+        if body.transfer_date is not None:
+            tx_date = body.transfer_date
+        else:
+            from ..business.game_clock import current_game_date as _cgd_v2tr
+            tx_date = _cgd_v2tr()
         descr = (body.description or "").strip() \
             or f"Överföring till {dst.name}"
         # Idempotency-hash: säker även om eleven trycker två gånger
@@ -6719,12 +6725,22 @@ def get_insurance(
                     "Har barn men saknar barnförsäkring."
                 )
 
-            # Skadehändelser (12 senaste mån)
-            from datetime import date as _d_ic, timedelta as _td_ic
-            cutoff = _d_ic.today() - _td_ic(days=365)
+            # Skadehändelser (12 senaste spel-mån) · bara redan inträffade
+            # händelser. Tidigare användes _d_ic.today() (= maj 7 real-tid)
+            # vilket dels betyder att 12 mån bakåt är fel period (jämfört
+            # med spel-tid jan), dels att framtida seedade events (t.ex.
+            # 'Bilen behöver reparation 6 jan' när eleven är på Jan 2)
+            # syntes innan spel-dagen passerats.
+            from datetime import timedelta as _td_ic
+            from ..business.game_clock import current_game_date as _cgd_ic
+            today_game = _cgd_ic()
+            cutoff = today_game - _td_ic(days=365)
             claim_rows = (
                 s.query(InsuranceClaim)
-                .filter(InsuranceClaim.occurred_on >= cutoff)
+                .filter(
+                    InsuranceClaim.occurred_on >= cutoff,
+                    InsuranceClaim.occurred_on <= today_game,
+                )
                 .order_by(InsuranceClaim.occurred_on.desc())
                 .all()
             )
@@ -7268,14 +7284,18 @@ def get_utility(
         )
         total_grid = sum(float(u.grid_fee_monthly or 0) for u in active)
         has_spot = any(u.spot_pricing for u in active)
-        soon = _date.today() + _td(days=30)
+        # Spel-tid · annars filtreras readings ut för att de ligger
+        # i jan 2025-26 medan today=maj 2026 (cutoff=maj 2025).
+        from ..business.game_clock import current_game_date as _cgd_uti
+        today_game = _cgd_uti()
+        soon = today_game + _td(days=30)
         expiring = sum(
             1 for u in active
             if u.binding_end is not None and u.binding_end <= soon
         )
 
-        # Senaste 12 mån utility readings
-        cutoff = _date.today() - _td(days=365)
+        # Senaste 12 mån utility readings (spel-tid)
+        cutoff = today_game - _td(days=365)
         readings = (
             s.query(UtilityReading)
             .filter(UtilityReading.period_end >= cutoff)
@@ -7286,8 +7306,8 @@ def get_utility(
             .all()
         )
 
-        # Senaste månadens kostnad + kWh
-        last30 = _date.today() - _td(days=45)
+        # Senaste månadens kostnad + kWh (spel-tid)
+        last30 = today_game - _td(days=45)
         last_month_readings = [
             r for r in readings if r.period_end >= last30
         ]
@@ -18064,6 +18084,19 @@ def _seed_initial_student_data(
                 sp.housing_monthly = int(profile.housing.monthly_cost)
                 sp.gross_salary_monthly = int(profile.monthly_gross)
                 sp.net_salary_monthly = int(profile.monthly_net)
+                # Synca yrke + arbetsgivare så hub-character-kortet
+                # ('Klara · Elektriker') matchar löne-transaktionen
+                # ('Lön 2025-10 · Polis'). Tidigare buggen kom av att
+                # school.profile_fixtures slumpade ett yrke med sin RNG
+                # medan game_engine.profile_generator slumpade ETT ANNAT
+                # → eleven såg två olika yrken på samma karaktär.
+                # game_engine är source-of-truth.
+                sp.profession = profile.yrke_display
+                # Arbetsgivaren finns på AnstallningsAvtal (master)
+                # men sätts via en separat synk i Sprint 7. Här fyller
+                # vi i ett rimligt default så hub inte blir tomt.
+                if not sp.employer:
+                    sp.employer = profile.yrke_display + " AB"
                 sp.has_mortgage = profile.housing.type in (
                     "bostadsratt", "villa", "radhus",
                 )

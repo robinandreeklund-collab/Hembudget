@@ -10407,3 +10407,247 @@ def test_bank_user_changes_date_invoice_stays_visible(fx):
     assert upc_id in upcoming_ids, (
         f"Faktura med ändrat datum försvann från bank!"
     )
+
+
+def test_insurance_claims_dont_show_future_dates(fx):
+    """Försäkringshändelser med occurred_on i framtiden (enligt
+    spel-tid) ska INTE synas i /v2/insurance-vyn.
+
+    Repro: ny elev på spel-Jan-2. Seed-flödet skapade en 'Bilen behöver
+    reparation 6 jan' insurance-claim. Real-tid-cutoff på 365 dagar
+    bakåt visade alla händelser oavsett spel-tid → eleven såg händelse
+    daterad 6 jan trots att det är 4 dagar framåt i spel-tiden.
+    """
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Seed en framtida insurance-claim manuellt · simulera vad
+    # event_engine kan skapa under tick_month.
+    from hembudget.db.models import InsuranceClaim
+    from decimal import Decimal as _Dec
+
+    def setup(s):
+        # Spel-tid är Jan 2 · skapa en claim i framtiden (Jan 6)
+        future_claim = InsuranceClaim(
+            occurred_on=_spel_date(2026, 1, 6),
+            kind="skada",
+            title="Bilen behöver reparation",
+            description="Test · framtida händelse",
+            amount_claimed=_Dec("6184"),
+            no_policy=True,
+            status="info",
+        )
+        s.add(future_claim)
+        # Och en redan-passerad
+        past_claim = InsuranceClaim(
+            occurred_on=_spel_date(2025, 12, 28),
+            kind="skada",
+            title="Cykel stulen",
+            description="Test · passerad händelse",
+            amount_claimed=_Dec("3500"),
+            no_policy=False,
+            status="paid",
+        )
+        s.add(past_claim)
+        s.commit()
+    _scope_run(sid, setup)
+
+    r = client.get(
+        "/v2/forsakringar",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    titles = [c["title"] for c in data["claims"]]
+    assert "Bilen behöver reparation" not in titles, (
+        f"Framtida claim ska inte synas. Funna: {titles}"
+    )
+    assert "Cykel stulen" in titles, (
+        f"Passerad claim ska synas. Funna: {titles}"
+    )
+
+
+def test_profession_in_hub_matches_salary_tx_description(fx):
+    """Hub-character-kort visar 'Elektriker' men löne-transaktionen
+    säger 'Lön 2025-10 · Polis'. game_engine och school har olika
+    RNG-pooler för yrken och förra fixen synkade inte profession.
+
+    Verifiera att StudentProfile.profession matchar yrke i lön-tx
+    raw_description efter seed.
+    """
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+
+    from hembudget.db.models import Transaction
+    from hembudget.school.models import StudentProfile
+
+    # Hämta profession från master · samma som hub visar
+    with master_session() as ms:
+        sp = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == sid)
+            .first()
+        )
+        profession = sp.profession if sp else None
+    assert profession, "StudentProfile.profession ska vara satt"
+
+    # Hämta lön-tx från scope · samma som banken visar
+    def find_salary_tx(s):
+        return (
+            s.query(Transaction)
+            .filter(Transaction.raw_description.like("Lön %"))
+            .filter(~Transaction.raw_description.like("%(partner)%"))
+            .first()
+        )
+    tx = _scope_run(sid, find_salary_tx)
+    assert tx is not None, "Förväntade lön-transaktion efter seed"
+
+    # raw_description är "Lön YYYY-MM · {yrke_display}"
+    desc = tx.raw_description
+    assert profession in desc, (
+        f"Profession-mismatch: hub visar '{profession}' men "
+        f"lön-tx säger '{desc}'"
+    )
+
+
+def test_january_invoices_visible_when_student_starts(fx):
+    """Ny elev (spel-tid Jan 1) ska se ALLA jan-fakturor i postlådan
+    omedelbart, eftersom fakturadatum är 14 dgr innan due_date (= dec).
+
+    Repro: eleven såg INGA jan-fakturor förrän förfallodagen passerade.
+    Tibber Elräkning 2025-12 (förfaller 3 jan) blev synlig först på
+    spel-jan-3, dvs 17 min efter elev-skapande, trots att fakturan i
+    verkligheten skickas ut redan i december med 14 dgr betal-tid.
+
+    Buggen: released_at = release_at_for_day(release_base, bill.day)
+    där bill.day = förfallodag. Eleven fick mail samma dag som det
+    skulle betalas → ingen tid att hantera.
+    """
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Hämta postlådan via API · /v2/postladan filtrerar på
+    # released_at <= NOW. Om någon faktura med due_date i jan
+    # har released_at > NOW så är den dold.
+    r = client.get(
+        "/v2/postladan",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    visible_invoice_subjects = {
+        m["subject"]
+        for m in data["items"]
+        if m["mail_type"] == "invoice"
+        and m.get("due_date")
+        and m["due_date"].startswith("2026-01")
+    }
+    # Vi förväntar minst 3 jan-fakturor synliga (hyra, el, mobil
+    # eller liknande). I tidigare buggen var detta tomt eftersom
+    # alla väntade på sin förfallodag.
+    assert len(visible_invoice_subjects) >= 3, (
+        f"Förväntade minst 3 jan-fakturor synliga från start. "
+        f"Synliga: {visible_invoice_subjects}"
+    )
+
+
+def test_transfer_uses_game_time_for_date(fx):
+    """Överföring mellan konton ska bokföra Transaction.date i SPEL-tid
+    inte real-tid. Tidigare buggen: överföring 8 maj på elev som är i
+    spel-januari → konstigt i kontoutdrag."""
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    from hembudget.db.models import Account
+    src_id = None
+    dst_id = None
+
+    def find_accounts(s):
+        nonlocal src_id, dst_id
+        # Hitta lönekonto + sparkonto/isk
+        accs = s.query(Account).all()
+        for a in accs:
+            if a.type == "checking" and src_id is None:
+                src_id = a.id
+            elif a.type in ("savings", "isk") and dst_id is None:
+                dst_id = a.id
+    _scope_run(sid, find_accounts)
+    if src_id is None or dst_id is None:
+        # Skapa egna om seed inte gjorde det
+        from decimal import Decimal as _Dec
+
+        def create_accs(s):
+            nonlocal src_id, dst_id
+            from hembudget.db.models import Account as _A
+            c = _A(name="L", bank="B", type="checking",
+                   currency="SEK",
+                   opening_balance=_Dec("10000"))
+            sav = _A(name="S", bank="B", type="savings", currency="SEK")
+            s.add_all([c, sav])
+            s.flush()
+            src_id = c.id
+            dst_id = sav.id
+        _scope_run(sid, create_accs)
+
+    r = client.post(
+        "/v2/banken/transfer",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+        json={
+            "from_account_id": src_id,
+            "to_account_id": dst_id,
+            "amount": 500,
+            "description": "test",
+        },
+    )
+    # Endpoint kan returnera 200 eller 400 beroende på saldo · vi
+    # bryr oss bara om den lyckas alls. Saldo-fel = utanför scope.
+    if r.status_code != 200:
+        # Kontrollera att felet är saldo-relaterat (då kan vi inte
+        # validera datumet utan att seed:a saldo) — annars fail.
+        assert "saldo" in r.text.lower() or "minus" in r.text.lower(), (
+            f"Oväntat fel: {r.status_code} {r.text}"
+        )
+        return
+
+    # Verifiera Transaction.date är spel-tid (jan 2026)
+    from hembudget.db.models import Transaction
+
+    def find_transfer_tx(s):
+        return (
+            s.query(Transaction)
+            .filter(Transaction.is_transfer.is_(True))
+            .order_by(Transaction.id.desc())
+            .first()
+        )
+    tx = _scope_run(sid, find_transfer_tx)
+    assert tx is not None, "Förväntade en transfer-tx"
+    assert tx.date.year == 2026 and tx.date.month == 1, (
+        f"Transfer-tx datum ska vara jan 2026, fick {tx.date}"
+    )
+
+
+def test_forbrukning_shows_el_history_after_seed(fx):
+    """/v2/forbrukning ska visa el-historik baserat på Tibber-fakturor
+    som seedats. Tidigare buggen: fakturorna fanns i postlådan men
+    UtilityReading-tabellen var tom → 'Ingen el-historik registrerad'."""
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    r = client.get(
+        "/v2/forbrukning",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    readings = data.get("readings", [])
+    el_readings = [
+        rd for rd in readings if rd.get("meter_type") == "electricity"
+    ]
+    assert len(el_readings) > 0, (
+        f"Förväntade el-readings från seed (Tibber-fakturor). "
+        f"Total readings: {len(readings)}"
+    )
