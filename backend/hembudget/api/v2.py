@@ -416,6 +416,13 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         except Exception:
             pass
         try:
+            # Drag pengar från signerade autogiro-fakturor när
+            # förfallodag passerat (i spel-tid). Annars syns de
+            # som '1 d sen' i bank trots att eleven signerat.
+            _auto_debit_signed_upcomings_if_due(target_sid)
+        except Exception:
+            pass
+        try:
             _seed_skv_deklaration_events(target_sid)
         except Exception:
             pass
@@ -898,6 +905,14 @@ def get_bank(
     """
     if info.role != "student" or info.student_id is None:
         return _empty_bank(0)
+
+    # Drag pengar från signerade autogiro-fakturor först · annars
+    # syns banken med upcoming "1 d sen" trots att eleven signerat.
+    # Cache-gated 60s så billigt att köra inline.
+    try:
+        _auto_debit_signed_upcomings_if_due(info.student_id)
+    except Exception:
+        pass
 
     try:
         with session_scope() as s:
@@ -2228,6 +2243,12 @@ def get_mail(
     if info.role == "student" and info.student_id is not None:
         try:
             _auto_tick_private_months_if_due(info.student_id)
+        except Exception:
+            pass
+        try:
+            # Drag pengar från signerade autogiro-fakturor som
+            # förfaller i spel-tid · markerar mailet som paid.
+            _auto_debit_signed_upcomings_if_due(info.student_id)
         except Exception:
             pass
         # Migrationsfix · äldre mail stämplades med utcnow → "7 maj"
@@ -17585,6 +17606,158 @@ def _auto_tick_private_months_if_due(student_id: int) -> int:
         import logging
         logging.getLogger(__name__).exception(
             "_auto_tick_private_months_if_due failed för student %s",
+            student_id,
+        )
+        return 0
+
+
+_AUTOGIRO_DEBIT_CACHE: dict[int, float] = {}
+_AUTOGIRO_DEBIT_TTL = 60.0  # cache-gated 60s · billig nog att köra ofta
+
+
+def _auto_debit_signed_upcomings_if_due(student_id: int) -> int:
+    """Drag pengar från signerade UpcomingTransaction:s vars
+    expected_date passerat (i spel-tid).
+
+    Vid signering (autogiro=True via BankID) markerar vi en upcoming
+    som auktoriserad. När förfallodagen kommer SKA banken dra pengarna
+    automatiskt. Tidigare buggen: ingen auto-debit fanns → eleven
+    signerade på Jan 1, dag 2 visade banken '1 d sen' istället för
+    'drogs Jan 1'.
+
+    Skapar Transaction(amount=−belopp, account_id=debit_account_id),
+    sätter UpcomingTransaction.matched_transaction_id. Om saldo
+    saknas → markerar UpcomingTransaction.autogiro=False och låter
+    raden bli osignerad igen så eleven måste betala manuellt eller
+    fylla på lönekontot. Idempotent: dedup via tx.hash.
+
+    Cache-gated 60s/elev. Tysta fel — får inte ta ner request.
+    """
+    import time as _t_ad
+    last = _AUTOGIRO_DEBIT_CACHE.get(student_id, 0.0)
+    if _t_ad.time() - last < _AUTOGIRO_DEBIT_TTL:
+        return 0
+    _AUTOGIRO_DEBIT_CACHE[student_id] = _t_ad.time()
+
+    try:
+        from datetime import datetime as _dt_ad
+        from decimal import Decimal as _Dec_ad
+        from hashlib import sha256 as _sha_ad
+        from ..business.game_clock import (
+            current_game_date_for_student as _cgdfs,
+        )
+        from ..school.engines import (
+            scope_context as _sctx_ad, scope_for_student as _sfs_ad,
+        )
+        from ..school.models import Student as _Stu_ad
+
+        with master_session() as ms:
+            stu = ms.get(_Stu_ad, student_id)
+            if stu is None:
+                return 0
+            scope_key = _sfs_ad(stu)
+
+        today_game = _cgdfs(student_id)
+        n_debited = 0
+        with _sctx_ad(scope_key):
+            with session_scope() as s:
+                # Hitta signerade upcomings vars förfallodag passerat
+                # och som ännu inte är matchade mot Transaction.
+                due = (
+                    s.query(UpcomingTransaction)
+                    .filter(
+                        UpcomingTransaction.autogiro.is_(True),
+                        UpcomingTransaction.matched_transaction_id.is_(None),
+                        UpcomingTransaction.expected_date <= today_game,
+                    )
+                    .all()
+                )
+                if not due:
+                    return 0
+
+                # Default-konto för debit · första checking om upcoming
+                # inte explicit pekar på ett.
+                default_acc = (
+                    s.query(Account)
+                    .filter(Account.type == "checking")
+                    .order_by(Account.id.asc())
+                    .first()
+                )
+                if default_acc is None:
+                    return 0
+
+                for u in due:
+                    acc_id = u.debit_account_id or default_acc.id
+                    # Saldo-kontroll · går vi minus → markera failed
+                    # (autogiro-False) så eleven får signera om eller
+                    # fylla på kontot manuellt.
+                    bal_q = s.query(
+                        __import__("sqlalchemy").func.coalesce(
+                            __import__("sqlalchemy").func.sum(
+                                Transaction.amount,
+                            ), 0,
+                        ),
+                    ).filter(Transaction.account_id == acc_id)
+                    base = s.get(Account, acc_id)
+                    bal = (
+                        (_Dec_ad(str(base.opening_balance or 0)))
+                        + (_Dec_ad(str(bal_q.scalar() or 0)))
+                    )
+                    if bal < u.amount:
+                        # Otillräckligt saldo · släpp signaturen så
+                        # raden blir osignerad och eleven kan agera
+                        u.autogiro = False
+                        continue
+
+                    # Idempotent hash · samma signering får aldrig
+                    # skapa två transaktioner.
+                    raw = (
+                        f"autogiro|{student_id}|{u.id}|"
+                        f"{u.expected_date.isoformat()}|{u.amount}"
+                    )
+                    tx_hash = _sha_ad(raw.encode()).hexdigest()[:32]
+                    existing = (
+                        s.query(Transaction)
+                        .filter(Transaction.hash == tx_hash)
+                        .first()
+                    )
+                    if existing is not None:
+                        # Redan dragen tidigare körning · matcha
+                        u.matched_transaction_id = existing.id
+                        continue
+
+                    tx = Transaction(
+                        account_id=acc_id,
+                        date=u.expected_date,
+                        amount=-_Dec_ad(str(u.amount)),
+                        currency="SEK",
+                        raw_description=f"Autogiro · {u.name}",
+                        normalized_merchant=u.name,
+                        hash=tx_hash,
+                        is_transfer=False,
+                        user_verified=True,
+                    )
+                    s.add(tx)
+                    s.flush()
+                    u.matched_transaction_id = tx.id
+
+                    # Om upcoming länkar till en MailItem → markera
+                    # mailet som paid också (annars dyker faktura
+                    # upp som ohanterad i postlådan trots dragning).
+                    related_mail = (
+                        s.query(MailItem)
+                        .filter(MailItem.upcoming_id == u.id)
+                        .first()
+                    )
+                    if related_mail is not None:
+                        related_mail.status = "paid"
+                    n_debited += 1
+                s.commit()
+        return n_debited
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_auto_debit_signed_upcomings_if_due failed för student %s",
             student_id,
         )
         return 0

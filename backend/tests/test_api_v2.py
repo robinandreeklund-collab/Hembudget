@@ -10686,3 +10686,83 @@ def test_pending_events_auto_recovers_without_startup_hook(fx):
     assert data["count"] > 0, (
         f"Backstop ska skapa events när feed är tom. Svar: {data}"
     )
+
+
+def test_signed_upcoming_auto_debits_when_due(fx):
+    """Eleven signerar en faktura via BankID på Jan 1. När spel-tiden
+    passerar förfallodagen ska autogiro DRA pengarna från lönekontot
+    och markera fakturan som paid.
+
+    Repro: användaren signerade på Jan 1, dag 2 visade banken
+    'Norrköping Bostäder · 1 d sen' istället för betald. Ingen
+    auto-debit-mekanism fanns kopplad till spel-tid.
+    """
+    client, tch, *_ = fx
+    # Töm 60s-cache så test:en kan köra direkt efter andra tester
+    from hembudget.api.v2 import _AUTOGIRO_DEBIT_CACHE
+    _AUTOGIRO_DEBIT_CACHE.clear()
+
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Skapa en signerad UpcomingTransaction med expected_date = Jan 1
+    # (= förfluten i spel-tid Jan 1+, blir aktuell direkt vid första
+    # bank-anrop)
+    from hembudget.db.models import (
+        UpcomingTransaction, Transaction, Account,
+    )
+    from decimal import Decimal as _Dec
+
+    upc_id = None
+    checking_id = None
+
+    def setup(s):
+        nonlocal upc_id, checking_id
+        # Hitta lönekonto
+        acc = (
+            s.query(Account)
+            .filter(Account.type == "checking")
+            .first()
+        )
+        assert acc is not None, "Seed bör skapa lönekonto"
+        checking_id = acc.id
+        # Säkerställ saldo
+        acc.opening_balance = _Dec("10000")
+
+        upc = UpcomingTransaction(
+            kind="bill",
+            name="Stockholmshem",
+            amount=_Dec("3000"),
+            expected_date=_spel_date(2026, 1, 1),
+            debit_account_id=acc.id,
+            autogiro=True,  # signerad
+            bankgiro="5050-1144",
+        )
+        s.add(upc)
+        s.commit()
+        upc_id = upc.id
+    _scope_run(sid, setup)
+    assert upc_id is not None
+
+    # Anropa /v2/bank · auto-debit ska köra
+    r = client.get(
+        "/v2/bank",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r.status_code == 200, r.text
+
+    # Verifiera att Transaction skapades
+    def check(s):
+        upc = s.get(UpcomingTransaction, upc_id)
+        assert upc is not None
+        assert upc.matched_transaction_id is not None, (
+            f"UpcomingTransaction skulle ha matchats mot en Transaction "
+            f"efter auto-debit. autogiro={upc.autogiro}, "
+            f"matched={upc.matched_transaction_id}"
+        )
+        tx = s.get(Transaction, upc.matched_transaction_id)
+        assert tx is not None
+        assert tx.amount == _Dec("-3000")
+        assert tx.account_id == checking_id
+        assert "Autogiro" in (tx.raw_description or "")
+    _scope_run(sid, check)
