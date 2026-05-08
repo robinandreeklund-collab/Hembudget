@@ -201,6 +201,10 @@ export type BankUpcoming = {
   is_paid: boolean;
   mail_id: number | null;
   is_signed: boolean;
+  // Spel-dagar tills förfall · negativa = förfluten. Räknas backend-
+  // side mot current_game_date() så frontend slipper jämföra mot
+  // real-tid (= maj 2026 medan spel-tid är jan).
+  days_until_expected: number;
 };
 
 export type BankSummary = {
@@ -213,6 +217,9 @@ export type BankSummary = {
   transactions_count: number;
   next_release_at: string | null;
   pending_count: number;
+  // Spel-tid · ISO. Frontend använder detta som "today" för
+  // datum-jämförelser (DAYS_UNTIL etc.) istället för new Date().
+  today_game: string | null;
 };
 
 export type BankData = {

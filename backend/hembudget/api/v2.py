@@ -828,6 +828,10 @@ class BankUpcoming(BaseModel):
     # eleven har exporterat fakturan från postlådan men ännu inte
     # signerat den (BankID-signering eller markera-betald).
     is_signed: bool = False
+    # Antal SPEL-dagar tills förfall · negativa = förfluten. Beräknas
+    # backend-side mot current_game_date() så frontend slipper räkna
+    # mot real-tid (= maj 2026 medan spel-tid är jan).
+    days_until_expected: int = 0
 
 
 class BankSummary(BaseModel):
@@ -842,6 +846,9 @@ class BankSummary(BaseModel):
     # None = inga pending. Frontend kan visa "Nästa transaktion om 2 h".
     next_release_at: Optional[datetime] = None
     pending_count: int = 0
+    # Spel-tid · ISO-datum (synkat med privat). Frontend använder
+    # detta för "dagar kvar"-beräkningar istället för new Date().
+    today_game: Optional[_date] = None
 
 
 class BankResponse(BaseModel):
@@ -894,7 +901,14 @@ def get_bank(
 
     try:
         with session_scope() as s:
-            today = _date.today()
+            # Spel-tid · synkat med privat-tid via business.game_clock.
+            # Tidigare användes _date.today() (= maj 2026 real-tid)
+            # vilket gjorde att osignerade fakturor med spel-januari-
+            # förfallodag försvann ur bank-vyn (filtret 'expected_date
+            # >= today' matchade inget) och nyexporterade fakturor
+            # auto-flyttades till maj 22 istället för spel-tid + 7 d.
+            from ..business.game_clock import current_game_date as _cgd_bank
+            today = _cgd_bank()
             month_start = _date(today.year, today.month, 1)
 
             # 1. Konton + saldo
@@ -1015,6 +1029,10 @@ def get_bank(
                 # eller pre-konfigurerat. False = exporterat från
                 # postlådan men ännu inte signerat (visas som
                 # 'Osignerade' i banken).
+                days_until_exp = (
+                    (u.expected_date - today).days
+                    if u.expected_date else 0
+                )
                 upcoming.append(BankUpcoming(
                     id=u.id,
                     name=u.name,
@@ -1028,6 +1046,7 @@ def get_bank(
                     is_paid=paid,
                     mail_id=mail_by_upcoming.get(u.id),
                     is_signed=bool(u.autogiro) or paid,
+                    days_until_expected=days_until_exp,
                 ))
 
             # 4. Månads-summa
@@ -1082,6 +1101,7 @@ def get_bank(
                         next_pending_tx[0] if next_pending_tx else None
                     ),
                     pending_count=int(pending_tx_count or 0),
+                    today_game=today,
                 ),
                 accounts=accounts_out,
                 recent_transactions=recent_tx,
@@ -2572,14 +2592,19 @@ def export_mail_to_bank(
                     amount=float(existing.amount),
                 )
 
-        expected = body.expected_date or m.due_date or _date.today()
+        expected = body.expected_date or m.due_date
+        if expected is None:
+            from ..business.game_clock import current_game_date as _cgd_exp
+            expected = _cgd_exp()
         # Om eleven exporterar en faktura med förfluten due-date,
-        # flytta auto till idag + 7 dagar så banken hinner signera
+        # flytta auto till spel-idag + 7 dagar så banken hinner signera
         # och autogiro fungerar (annars hamnar den i 'past' och
         # försvinner från bankens upcoming-vy).
-        if expected < _date.today():
+        from ..business.game_clock import current_game_date as _cgd_today
+        today_game = _cgd_today()
+        if expected < today_game:
             from datetime import timedelta as _td_exp
-            expected = _date.today() + _td_exp(days=7)
+            expected = today_game + _td_exp(days=7)
         amount_abs = abs(Decimal(str(m.amount)))
 
         upc = UpcomingTransaction(

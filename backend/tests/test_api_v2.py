@@ -10221,3 +10221,189 @@ def test_pending_events_endpoint_returns_january_events(fx):
         assert deadline.startswith("2026-01") or deadline.startswith("2026-02"), (
             f"Event-deadline borde vara jan/feb 2026, fick: {deadline}"
         )
+
+
+# === Bug · banken hanterar spel-tid =================================
+
+
+def test_bank_export_uses_game_time_for_expected_date(fx):
+    """Eleven exporterar en faktura från postlådan till banken.
+    expected_date ska sättas i SPEL-tid (synkat med privat).
+
+    Repro: eleven exporterade en faktura med spel-Jan-15 due-date.
+    Backend gjorde 'if expected < date.today()' → flyttade till
+    'date.today() + 7' = May 22 → upcoming hamnade på fel datum.
+    """
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Hitta första osignerade januari-faktura i postlådan
+    from hembudget.db.models import MailItem, UpcomingTransaction
+
+    target_mail_id = None
+    target_due = None
+
+    def find_jan_invoice(s):
+        nonlocal target_mail_id, target_due
+        m = (
+            s.query(MailItem)
+            .filter(
+                MailItem.mail_type == "invoice",
+                MailItem.status == "unhandled",
+                MailItem.amount.isnot(None),
+                MailItem.due_date >= _spel_date(2026, 1, 1),
+                MailItem.due_date <= _spel_date(2026, 1, 31),
+            )
+            .order_by(MailItem.due_date.asc())
+            .first()
+        )
+        if m is None:
+            return
+        target_mail_id = m.id
+        target_due = m.due_date
+    _scope_run(sid, find_jan_invoice)
+    assert target_mail_id is not None, (
+        "Förväntade en unhandled jan-faktura i postlådan"
+    )
+    assert target_due is not None
+
+    # Exportera till banken
+    r = client.post(
+        f"/v2/postladan/{target_mail_id}/export-to-bank",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+        json={},
+    )
+    assert r.status_code == 200, r.text
+    upc_id = r.json()["upcoming_id"]
+    expected_date_iso = r.json()["expected_date"]
+    # expected_date ska vara DUE_DATE (jan 2026) ELLER spel-today + 7
+    # om due_date var i förfluten relativt spel-tid. Aldrig i maj!
+    assert expected_date_iso.startswith("2026-01") or expected_date_iso.startswith("2026-02"), (
+        f"Bank-export gav fel datum '{expected_date_iso}' "
+        f"(förväntade jan/feb 2026, due_date var {target_due})"
+    )
+
+    # Verifiera UpcomingTransaction i scope
+    def check_upc(s):
+        upc = s.get(UpcomingTransaction, upc_id)
+        assert upc is not None
+        assert upc.expected_date.year == 2026
+        assert upc.expected_date.month in (1, 2), (
+            f"upc.expected_date.month = {upc.expected_date.month}, "
+            f"förväntade 1 eller 2"
+        )
+    _scope_run(sid, check_upc)
+
+
+def test_bank_endpoint_shows_unsigned_invoice_with_january_date(fx):
+    """Efter export ska osignerade fakturor synas i bank-vyn även när
+    deras expected_date är i januari (spel-tid). Tidigare buggade vi
+    bort dem eftersom bank-filter använde real-today (= maj 2026)."""
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Exportera en jan-faktura
+    from hembudget.db.models import MailItem
+    target_mail_id = None
+
+    def find(s):
+        nonlocal target_mail_id
+        m = (
+            s.query(MailItem)
+            .filter(
+                MailItem.mail_type == "invoice",
+                MailItem.status == "unhandled",
+                MailItem.amount.isnot(None),
+                MailItem.due_date >= _spel_date(2026, 1, 1),
+            )
+            .first()
+        )
+        if m is not None:
+            target_mail_id = m.id
+    _scope_run(sid, find)
+    assert target_mail_id is not None
+
+    r = client.post(
+        f"/v2/postladan/{target_mail_id}/export-to-bank",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+        json={},
+    )
+    assert r.status_code == 200, r.text
+    upc_id = r.json()["upcoming_id"]
+
+    # Hämta bank · ska hitta upcoming i listan
+    bank_r = client.get(
+        "/v2/bank",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert bank_r.status_code == 200, bank_r.text
+    data = bank_r.json()
+    upcoming_ids = [u["id"] for u in data["upcoming_bills"]]
+    assert upc_id in upcoming_ids, (
+        f"Osignerad faktura {upc_id} ska synas i bank, fick: "
+        f"{upcoming_ids}"
+    )
+    # Verifiera today_game-fält + days_until_expected
+    summary = data["summary"]
+    assert summary["today_game"] is not None
+    assert summary["today_game"].startswith("2026-01"), (
+        f"today_game ska vara jan 2026: {summary['today_game']}"
+    )
+
+
+def test_bank_user_changes_date_invoice_stays_visible(fx):
+    """Eleven ändrar förfallodag på en osignerad faktura → den ska
+    inte försvinna från banken. Tidigare buggade vi bort den eftersom
+    PATCH satte t.ex. Jan 15 men bank-filter använde real-today (maj)
+    → 'expected_date >= today' matchade inte."""
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Exportera + ändra datum
+    from hembudget.db.models import MailItem
+    target_mail_id = None
+
+    def find(s):
+        nonlocal target_mail_id
+        m = (
+            s.query(MailItem)
+            .filter(
+                MailItem.mail_type == "invoice",
+                MailItem.status == "unhandled",
+                MailItem.amount.isnot(None),
+                MailItem.due_date >= _spel_date(2026, 1, 1),
+            )
+            .first()
+        )
+        if m is not None:
+            target_mail_id = m.id
+    _scope_run(sid, find)
+    assert target_mail_id is not None
+
+    r = client.post(
+        f"/v2/postladan/{target_mail_id}/export-to-bank",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+        json={},
+    )
+    upc_id = r.json()["upcoming_id"]
+
+    # Ändra datum till Jan 20
+    patch_r = client.patch(
+        f"/v2/upcoming/{upc_id}",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+        json={"expected_date": "2026-01-20"},
+    )
+    assert patch_r.status_code == 200, patch_r.text
+
+    # Bank ska fortfarande visa den
+    bank_r = client.get(
+        "/v2/bank",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    upcoming_ids = [u["id"] for u in bank_r.json()["upcoming_bills"]]
+    assert upc_id in upcoming_ids, (
+        f"Faktura med ändrat datum försvann från bank!"
+    )
