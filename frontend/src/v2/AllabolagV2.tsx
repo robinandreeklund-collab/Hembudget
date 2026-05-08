@@ -264,7 +264,8 @@ function CompanyRow({ row, rank }: { row: AllabolagRow; rank: number }) {
   })();
 
   return (
-    <div
+    <Link
+      to={`/v2/allabolag/${row.company_id_in_scope}`}
       style={{
         display: "grid",
         gridTemplateColumns: "44px 1.4fr 0.9fr repeat(4, 0.8fr)",
@@ -278,6 +279,18 @@ function CompanyRow({ row, rank }: { row: AllabolagRow; rank: number }) {
             : "rgba(15,21,37,0.45)",
         border: `1px solid ${row.is_mine ? "rgba(251,191,36,0.35)" : "rgba(255,255,255,0.08)"}`,
         borderRadius: 10,
+        textDecoration: "none",
+        cursor: "pointer",
+        transition: "transform 120ms ease, border-color 120ms ease",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(199,210,254,0.4)";
+        (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = row.is_mine
+          ? "rgba(251,191,36,0.35)" : "rgba(255,255,255,0.08)";
+        (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(0)";
       }}
     >
       <div style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: medal ? 22 : 18, fontWeight: 700, color: medal ? "#fff" : "rgba(255,255,255,0.4)", textAlign: "center" }}>
@@ -340,7 +353,7 @@ function CompanyRow({ row, rank }: { row: AllabolagRow; rank: number }) {
           {row.n_invoices_open}{row.n_invoices_overdue > 0 ? ` · ${row.n_invoices_overdue} sena` : ""}
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
