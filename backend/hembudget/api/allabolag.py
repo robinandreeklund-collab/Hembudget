@@ -174,14 +174,21 @@ def sync_class_company_share(
             .filter(CompanyInvoice.company_id == company.id)
             .all()
         )
-        today = date.today()
+        # KRITISKT: använd spel-tid, inte real-tid. Allabolag visade
+        # tidigare alla fakturor som "sena" och 0 kr omsättning eftersom
+        # spel-datum (typ 2026-03-21) är 7+ veckor efter real-datum
+        # (2026-05-08) → real-tids-cutoff 30 dagar bakåt missade ALLA
+        # spel-transaktioner och alla due_on fakturor jämfördes mot
+        # framtid-tid som "sena".
+        from ..business.game_clock import current_game_date_for_student
+        today = current_game_date_for_student(student_id)
         n_open = sum(1 for i in invs if i.status == "sent")
         n_overdue = sum(
             1 for i in invs
             if i.status == "sent" and i.due_on < today
         )
 
-        # 4-veckors-aggregat · senaste ~30 dagar
+        # 4-veckors-aggregat · senaste ~30 dagar (i spel-tid)
         from datetime import timedelta
         cutoff = today - timedelta(days=30)
         txs = (

@@ -148,7 +148,15 @@ def compute_time_capacity(
         PRODUCTIVE_HOURS_PER_PERSON_WEEK - student_hours_used_for_private,
     )
 
-    # Anställda · läs via master-DB
+    # Anställda · TVÅ källor:
+    # 1. CompanyEmployment (master DB) · skapas när annan elev söker
+    #    klassens jobbannons och blir godkänd. Ger ett namn.
+    # 2. Company.delivery_capacity (scope DB) · skapas när eleven
+    #    själv köper "Anställ heltid"-besluten i Tillväxt-fliken.
+    #    Inkrementeras i foretag_engine.py (BusinessDecision-flödet).
+    #    Default 1 = ägaren själv, så fiktiva anställda = capacity − 1.
+    # Tidigare bug: capacity läste BARA källa #1 → fiktiva anställda från
+    # Tillväxt-flödet gav ingen kapacitets-bonus i tids-modellen.
     n_employees = 0
     employee_names: list[str] = []
     try:
@@ -182,6 +190,15 @@ def compute_time_capacity(
                     employee_names = [s.display_name for s in students]
     except Exception:
         log.exception("compute_time_capacity: kunde inte räkna anställda")
+
+    # Lägg till fiktiva anställda från Tillväxt-besluten (Company.
+    # delivery_capacity - 1). Real-student-anställda räknas redan ovan.
+    fictional_employees = max(0, int(company.delivery_capacity or 1) - 1)
+    if fictional_employees > 0:
+        n_employees += fictional_employees
+        employee_names.append(
+            f"+{fictional_employees} fiktiv{'a' if fictional_employees > 1 else ''}"
+        )
     employee_hours = n_employees * EMPLOYEE_HOURS_PER_WEEK
 
     # MCP
