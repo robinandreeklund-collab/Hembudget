@@ -156,13 +156,38 @@ def init_master_engine() -> Engine:
     is_sqlite = url.startswith("sqlite:")
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
-        # Postgres: pre-ping så stale connections från Cloud SQL inte
-        # smäller. Cloud SQL db-f1-micro har max ~25 connections totalt.
-        # Vi delar mellan master + shared-scope + Postgres internal, så
-        # håll pools små: 2+3=5 per engine = 10 totalt med headroom.
+        # Postgres connection pool sizing.
+        #
+        # Master engine läses från MASSA olika ställen per request:
+        # current_game_date_for_student, _auto_debit_signed_upcomings,
+        # _normalize_mail_received_at, dunning, events backstop, etc.
+        # Tidigare pool_size=2 max_overflow=3 (=5 max) räckte för 1
+        # samtidig användare men kraschade omedelbart med två (lärare
+        # + elev). QueuePool-timeout-fel i Cloud Run loggarna (69
+        # förekomster på 1 timme).
+        #
+        # Ökat till 10+10 (=20 max). Cloud SQL db-g1-small har 50
+        # connections totalt — med en Cloud Run-instans åt gången
+        # (Cloud SQL-tier är liten, scaling typiskt 1-2 instanser
+        # under skol-timmar) är 20 + 16 (scope) + Postgres-internal
+        # = 36-40 inom budget. Vid hög skalning byt till PgBouncer
+        # eller större DB-tier.
+        #
+        # pool_timeout=15: fail-fast vid pool-exhaustion istället för
+        # default 30 s. Eleven får 500 snabbt och kan reload:a.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=3,
+            pool_pre_ping=True,
+            pool_size=10,
+            max_overflow=10,
             pool_recycle=1800,
+            pool_timeout=15,
+            connect_args={
+                "connect_timeout": 5,
+                "application_name": (
+                    f"hembudget-master@"
+                    f"{__import__('os').environ.get('K_REVISION', 'local')}"
+                ),
+            },
         )
     engine = create_engine(url, **engine_kwargs)
 
