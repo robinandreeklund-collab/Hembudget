@@ -425,8 +425,51 @@ class JobOut(BaseModel):
 
 
 class DeliverIn(BaseModel):
+    """Bakåtkompat · gamla klienter kunde slidra quality_score 0-100.
+
+    Nya klienter ska istället göra POST /jobs/{id}/submit-delivery-quiz
+    med svar på 3 quiz-frågor. Den endpointen räknar quality_score
+    automatiskt från svaren och kan inte fuskas.
+    """
     quality_score: int = Field(ge=0, le=100)
     create_invoice: bool = True
+
+
+class QuizQuestionOut(BaseModel):
+    id: int
+    category: str
+    text: str
+    # Alternativ visas i randomiserad ordning (a/b/c) så eleven inte
+    # kan gissa "a är alltid bra".
+    options: list[dict]  # [{"key": "a", "text": "...", "level": "good"}]
+
+
+class QuizOut(BaseModel):
+    job_id: int
+    questions: list[QuizQuestionOut]
+
+
+class QuizSubmitIn(BaseModel):
+    # Lista med 3 svar · varje svar är "good"/"mid"/"bad"
+    answers: list[str] = Field(min_length=3, max_length=3)
+    create_invoice: bool = True
+
+
+class QuizFeedbackItem(BaseModel):
+    question_id: int
+    question_text: str
+    your_answer_level: str  # "good"/"mid"/"bad"
+    your_answer_text: str
+    best_answer_text: str
+    explanation: str
+
+
+class QuizSubmitOut(BaseModel):
+    job: JobOut
+    invoice_id: Optional[int]
+    invoice_number: Optional[str]
+    quality_score: int
+    feedback: list[QuizFeedbackItem]
 
 
 class DeliverOut(BaseModel):
@@ -546,6 +589,206 @@ def deliver(
             invoice_number=(
                 invoice.invoice_number if invoice else None
             ),
+        )
+
+
+# === Endpoints: Leverans-quiz =====================================
+#
+# Ersätter den fuskvänliga slidern (eleven valde själv 0-100). Nu
+# svarar eleven på 3 situationsfrågor (kvalitet/kommunikation/tid/
+# etik/teknik) med 3 alternativ vardera. Backend räknar quality_score
+# från svaren · kan inte fuskas.
+
+
+def _shuffle_options(
+    q,  # business.delivery_quiz.QuizQuestion
+    seed_int: int,
+) -> list[dict]:
+    """Randomisera ordningen så eleven inte kan gissa 'alternativ a är
+    alltid bästa'. Seedat på (job_id + question_id) så samma elev
+    får samma ordning vid omladdning av sidan = stabilt."""
+    import random as _r
+    rng = _r.Random(seed_int)
+    items = [
+        {"key": "good", "text": q.option_good, "level": "good"},
+        {"key": "mid",  "text": q.option_mid,  "level": "mid"},
+        {"key": "bad",  "text": q.option_bad,  "level": "bad"},
+    ]
+    rng.shuffle(items)
+    # Ge dem stabila a/b/c-keys efter shuffle (frontend visar
+    # 'a' / 'b' / 'c' så eleven inte ser level i UI).
+    for i, item in enumerate(items):
+        item["key"] = ["a", "b", "c"][i]
+    return items
+
+
+@router.get(
+    "/jobs/{job_id}/quality-quiz",
+    response_model=QuizOut,
+)
+def get_quality_quiz(
+    job_id: int, info: TokenInfo = Depends(require_token),
+):
+    """Hämta 3 quiz-frågor för leveransen. Anti-repetition via
+    Company.recent_quiz_question_ids så eleven inte ser samma fråga
+    två leveranser i rad. Stabilt seedat på job_id så omladdning
+    av sidan ger samma frågor."""
+    _require_student(info)
+    from ..business.delivery_quiz import pick_questions
+    import random as _rnd_q
+    with session_scope() as s:
+        co = _get_active_company(s)
+        job = (
+            s.query(Job)
+            .filter(Job.id == job_id, Job.company_id == co.id)
+            .first()
+        )
+        if job is None:
+            raise HTTPException(404, "Jobbet saknas")
+        if job.status != "in_progress":
+            raise HTTPException(
+                400, f"Jobbet har status '{job.status}'",
+            )
+        # Stabil RNG: samma job ger samma frågor om eleven laddar om
+        rng = _rnd_q.Random(f"quiz-{job.id}-{co.id}")
+        recent = list(co.recent_quiz_question_ids or [])
+        questions = pick_questions(
+            industry_key=co.industry_key,
+            recent_ids=recent,
+            rng=rng,
+        )
+        out_qs = []
+        for q in questions:
+            opts = _shuffle_options(q, seed_int=q.id * 1000 + job.id)
+            out_qs.append(QuizQuestionOut(
+                id=q.id,
+                category=q.category,
+                text=q.text,
+                options=opts,
+            ))
+        return QuizOut(job_id=job.id, questions=out_qs)
+
+
+@router.post(
+    "/jobs/{job_id}/submit-delivery-quiz",
+    response_model=QuizSubmitOut,
+)
+def submit_delivery_quiz(
+    job_id: int, body: QuizSubmitIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Eleven har svarat på 3 quiz-frågor · backend räknar quality_score
+    deterministiskt och levererar jobbet. Eleven kan INTE fuska."""
+    sid = _require_student(info)
+    from ..business.delivery_quiz import (
+        get_question, pick_questions, score_answers, update_recent_ids,
+    )
+    import random as _rnd_q2
+    with session_scope() as s:
+        co = _get_active_company(s)
+        job = (
+            s.query(Job)
+            .filter(Job.id == job_id, Job.company_id == co.id)
+            .first()
+        )
+        if job is None:
+            raise HTTPException(404, "Jobbet saknas")
+        if job.status != "in_progress":
+            raise HTTPException(
+                400, f"Jobbet har status '{job.status}'",
+            )
+
+        # Återgenerera SAMMA frågor som vi gav i GET (samma seed)
+        rng = _rnd_q2.Random(f"quiz-{job.id}-{co.id}")
+        recent = list(co.recent_quiz_question_ids or [])
+        questions = pick_questions(
+            industry_key=co.industry_key,
+            recent_ids=recent,
+            rng=rng,
+        )
+        if len(questions) != 3:
+            raise HTTPException(
+                500, "Quiz-databasen är för liten",
+            )
+
+        # Validera svar
+        for ans in body.answers:
+            if ans not in ("good", "mid", "bad"):
+                raise HTTPException(
+                    422,
+                    f"Ogiltigt svar '{ans}' · måste vara good/mid/bad",
+                )
+
+        quality_score = score_answers(body.answers)
+
+        # Leverera jobbet med beräknad score
+        delivered_job, invoice = deliver_job(
+            s,
+            company=co,
+            job=job,
+            quality_score=quality_score,
+            create_invoice=body.create_invoice,
+        )
+
+        # Uppdatera anti-repetition · senaste 10 frågor
+        new_ids = [q.id for q in questions]
+        co.recent_quiz_question_ids = update_recent_ids(
+            recent, new_ids, keep_n=10,
+        )
+
+        s.flush()
+
+        # Pedagogisk feedback · vad var bäst-svaret + förklaring
+        feedback: list[QuizFeedbackItem] = []
+        for q, your_level in zip(questions, body.answers):
+            your_text = {
+                "good": q.option_good,
+                "mid":  q.option_mid,
+                "bad":  q.option_bad,
+            }[your_level]
+            feedback.append(QuizFeedbackItem(
+                question_id=q.id,
+                question_text=q.text,
+                your_answer_level=your_level,
+                your_answer_text=your_text,
+                best_answer_text=q.option_good,
+                explanation=q.explanation,
+            ))
+
+        # Pentagon-koppling (samma logik som gamla deliver-endpointen)
+        try:
+            from ..game_engine.pentagon import apply_pentagon_delta
+            if quality_score >= 80:
+                apply_pentagon_delta(
+                    sid, axis="economy", requested_delta=2,
+                    reason_kind="decision",
+                    reason_id=job.id, reason_table="biz_jobs",
+                    explanation=(
+                        f"företag · levererat {job.title} med kvalitet "
+                        f"{quality_score} (quiz)"
+                    ),
+                )
+            elif quality_score < 50:
+                apply_pentagon_delta(
+                    sid, axis="social", requested_delta=-2,
+                    reason_kind="decision",
+                    reason_id=job.id, reason_table="biz_jobs",
+                    explanation=(
+                        f"företag · låg kvalitet {quality_score} på "
+                        f"leverans (quiz)"
+                    ),
+                )
+        except Exception:
+            pass
+
+        return QuizSubmitOut(
+            job=_to_job_out(delivered_job),
+            invoice_id=invoice.id if invoice else None,
+            invoice_number=(
+                invoice.invoice_number if invoice else None
+            ),
+            quality_score=quality_score,
+            feedback=feedback,
         )
 
 

@@ -636,6 +636,37 @@ export const bizEngineApi = {
       method: "POST",
       body: JSON.stringify(b),
     }),
+  getQualityQuiz: (jobId: number) =>
+    call<{
+      job_id: number;
+      questions: Array<{
+        id: number;
+        category: string;
+        text: string;
+        options: Array<{ key: string; text: string; level: string }>;
+      }>;
+    }>(`/v2/foretag/jobs/${jobId}/quality-quiz`),
+  submitDeliveryQuiz: (jobId: number, b: {
+    answers: Array<"good" | "mid" | "bad">;
+    create_invoice?: boolean;
+  }) =>
+    call<{
+      job: Job;
+      invoice_id: number | null;
+      invoice_number: string | null;
+      quality_score: number;
+      feedback: Array<{
+        question_id: number;
+        question_text: string;
+        your_answer_level: "good" | "mid" | "bad";
+        your_answer_text: string;
+        best_answer_text: string;
+        explanation: string;
+      }>;
+    }>(`/v2/foretag/jobs/${jobId}/submit-delivery-quiz`, {
+      method: "POST",
+      body: JSON.stringify(b),
+    }),
 
   listMarketing: (onlyActive = false) =>
     call<MarketingCampaign[]>(

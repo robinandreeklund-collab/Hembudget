@@ -723,6 +723,13 @@ def run_migrations(engine: Engine) -> list[str]:
             # Auto-tick · spelmotorn drar fram veckor automatiskt baserat
             # på real-tid (inte manuell "Stega vecka"-knapp).
             ("last_auto_tick_at", "last_auto_tick_at DATETIME"),
+            # Anti-repetition för leverans-quiz · JSON list[int] med
+            # senaste 10 fråge-id:n så eleven inte ser samma fråga
+            # tvång leveranser i rad.
+            (
+                "recent_quiz_question_ids",
+                "recent_quiz_question_ids TEXT",
+            ),
         ]
         for col_name, col_sql in biz_company_columns:
             if col_name not in cols:

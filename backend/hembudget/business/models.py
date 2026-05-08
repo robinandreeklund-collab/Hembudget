@@ -118,6 +118,12 @@ class Company(TenantMixin, Base):
     last_auto_tick_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
+    # Anti-repetition för leverans-quiz · senaste 10 question_ids så
+    # eleven inte ser samma fråga två leveranser i rad. Förvaltas av
+    # business.delivery_quiz.pick_questions().
+    recent_quiz_question_ids: Mapped[Optional[list]] = mapped_column(
+        JSON, nullable=True,
+    )
     # Leveranskapacitet (1 = själv, +1 per anställd)
     delivery_capacity: Mapped[int] = mapped_column(
         Integer, default=1, nullable=False,

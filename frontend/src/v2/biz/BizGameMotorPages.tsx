@@ -1451,29 +1451,90 @@ function JobCard({
 }
 
 
+type QuizQ = {
+  id: number;
+  category: string;
+  text: string;
+  options: Array<{ key: string; text: string; level: string }>;
+};
+
+type QuizFeedback = {
+  question_id: number;
+  question_text: string;
+  your_answer_level: "good" | "mid" | "bad";
+  your_answer_text: string;
+  best_answer_text: string;
+  explanation: string;
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  kvalitet: "Kvalitet",
+  kommunikation: "Kommunikation",
+  tid: "Tidshantering",
+  etik: "Etik",
+  teknik: "Tekniskt omdöme",
+};
+
 function DeliverModal({
   job, onClose,
 }: { job: Job; onClose: (refreshed: boolean) => void }) {
-  const [quality, setQuality] = useState(70);
+  const [questions, setQuestions] = useState<QuizQ[] | null>(null);
+  // index över aktuell fråga (0/1/2)
+  const [step, setStep] = useState(0);
+  // Sparade svar per fråga · "good"/"mid"/"bad" baserat på vilken
+  // option eleven valde (a/b/c i UI mappar till level via shuffled-options).
+  const [answers, setAnswers] = useState<Array<"good" | "mid" | "bad" | null>>([null, null, null]);
   const [submitting, setSubmitting] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<{ invoice_number: string | null } | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [submitErr, setSubmitErr] = useState<string | null>(null);
+  const [done, setDone] = useState<{
+    invoice_number: string | null;
+    quality_score: number;
+    feedback: QuizFeedback[];
+  } | null>(null);
+
+  // Hämta 3 frågor när modal öppnas
+  useEffect(() => {
+    bizEngineApi.getQualityQuiz(job.id)
+      .then(r => setQuestions(r.questions as QuizQ[]))
+      .catch(e => setLoadErr(String((e as Error).message || e)));
+  }, [job.id]);
+
+  function pickOption(level: "good" | "mid" | "bad") {
+    setAnswers(prev => {
+      const next = [...prev];
+      next[step] = level;
+      return next;
+    });
+    // Auto-avancera till nästa fråga eller till submit-läge
+    if (step < 2) {
+      setTimeout(() => setStep(s => s + 1), 200);
+    }
+  }
 
   async function submit() {
+    if (answers.some(a => a === null)) return;
     setSubmitting(true);
-    setErr(null);
+    setSubmitErr(null);
     try {
-      const r = await bizEngineApi.deliverJob(job.id, {
-        quality_score: quality,
+      const r = await bizEngineApi.submitDeliveryQuiz(job.id, {
+        answers: answers as Array<"good" | "mid" | "bad">,
         create_invoice: true,
       });
-      setDone({ invoice_number: r.invoice_number });
+      setDone({
+        invoice_number: r.invoice_number,
+        quality_score: r.quality_score,
+        feedback: r.feedback,
+      });
     } catch (e) {
-      setErr(String((e as Error).message || e));
+      setSubmitErr(String((e as Error).message || e));
     } finally {
       setSubmitting(false);
     }
   }
+
+  const allAnswered = answers.every(a => a !== null);
+  const currentQ = questions?.[step];
 
   return (
     <div
@@ -1483,6 +1544,7 @@ function DeliverModal({
         background: "rgba(0,0,0,0.7)", zIndex: 100,
         display: "flex", alignItems: "center", justifyContent: "center",
         padding: 20,
+        overflowY: "auto",
       }}
     >
       <div
@@ -1490,7 +1552,8 @@ function DeliverModal({
         style={{
           background: "#0f1525",
           border: "1px solid rgba(99,102,241,0.4)",
-          borderRadius: 12, padding: 24, maxWidth: 480, width: "100%",
+          borderRadius: 12, padding: 24, maxWidth: 560, width: "100%",
+          maxHeight: "90vh", overflowY: "auto",
         }}
       >
         <h2 style={{ color: "white", marginTop: 0 }}>
@@ -1502,51 +1565,188 @@ function DeliverModal({
 
         {done === null ? (
           <>
-            <label style={{ color: "white", display: "block", marginTop: 16 }}>
-              Kvalitet på leverans · {quality}/100
-              <input
-                type="range" min="0" max="100" step="5"
-                value={quality}
-                onChange={e => setQuality(parseInt(e.target.value, 10))}
-                style={{ width: "100%", marginTop: 8 }}
-              />
-              <div style={{
-                display: "flex", justifyContent: "space-between",
-                fontSize: "0.75rem", color: "#aab",
-              }}>
-                <span>Slarvigt</span>
-                <span>OK</span>
-                <span>Excellent</span>
+            {loadErr && (
+              <div style={{ color: "#fda594", marginTop: 16 }}>
+                Kunde inte hämta quiz: {loadErr}
               </div>
-            </label>
-            <p style={{
-              color: "rgba(255,255,255,0.7)", fontSize: "0.85rem",
-              marginTop: 16,
-            }}>
-              Hög kvalitet → rykte upp + chans till repetitionsorder.
-              Låg kvalitet → klagomål + ryktesfall.
-            </p>
-            {err && <div style={{ color: "#fda594", marginTop: 8 }}>{err}</div>}
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button onClick={submit} disabled={submitting} style={btnPrimary}>
-                {submitting ? "Levererar…" : "Leverera + skapa faktura"}
-              </button>
-              <button onClick={() => onClose(false)} style={btnGhost}>
-                Avbryt
-              </button>
-            </div>
+            )}
+            {!questions && !loadErr && (
+              <p style={{ color: "#aab", marginTop: 16 }}>Hämtar frågor…</p>
+            )}
+            {questions && currentQ && !allAnswered && (
+              <>
+                {/* Steg-indikator */}
+                <div style={{
+                  display: "flex", gap: 6, marginTop: 18, marginBottom: 14,
+                }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{
+                      flex: 1, height: 4, borderRadius: 2,
+                      background: i <= step
+                        ? (answers[i] !== null ? "#6ee7b7" : "#818cf8")
+                        : "rgba(255,255,255,0.1)",
+                    }} />
+                  ))}
+                </div>
+                <div style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+                  color: "rgba(255,255,255,0.55)",
+                  marginBottom: 8,
+                }}>
+                  FRÅGA {step + 1} AV 3 · {CATEGORY_LABEL[currentQ.category] || currentQ.category.toUpperCase()}
+                </div>
+                <p style={{
+                  color: "white",
+                  fontSize: "1rem",
+                  fontFamily: "Source Serif 4, Georgia, serif",
+                  lineHeight: 1.5,
+                  marginTop: 0,
+                }}>
+                  {currentQ.text}
+                </p>
+                <div style={{
+                  display: "flex", flexDirection: "column", gap: 10,
+                  marginTop: 16,
+                }}>
+                  {currentQ.options.map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => pickOption(opt.level as "good" | "mid" | "bad")}
+                      style={{
+                        textAlign: "left",
+                        padding: "12px 14px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(99,102,241,0.3)",
+                        background: "rgba(99,102,241,0.05)",
+                        color: "white",
+                        fontSize: 14,
+                        fontFamily: "Source Serif 4, Georgia, serif",
+                        cursor: "pointer",
+                        lineHeight: 1.5,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "rgba(99,102,241,0.15)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "rgba(99,102,241,0.05)";
+                      }}
+                    >
+                      <span style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 11, fontWeight: 700,
+                        color: "#fbbf24", marginRight: 10,
+                      }}>{opt.key.toUpperCase()}.</span>
+                      {opt.text}
+                    </button>
+                  ))}
+                </div>
+                {step > 0 && (
+                  <button
+                    onClick={() => setStep(s => s - 1)}
+                    style={{
+                      marginTop: 14,
+                      background: "transparent",
+                      border: "none",
+                      color: "rgba(255,255,255,0.5)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    ← Tillbaka till fråga {step}
+                  </button>
+                )}
+              </>
+            )}
+            {questions && allAnswered && (
+              <>
+                <div style={{
+                  marginTop: 16, padding: 14,
+                  background: "rgba(99,102,241,0.08)",
+                  border: "1px solid rgba(99,102,241,0.3)",
+                  borderRadius: 8,
+                }}>
+                  <div style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+                    color: "#c7d2fe", marginBottom: 8,
+                  }}>
+                    KLAR · 3 AV 3 BESVARADE
+                  </div>
+                  <p style={{
+                    color: "white", fontSize: 13.5, margin: 0,
+                    fontFamily: "Source Serif 4, Georgia, serif",
+                  }}>
+                    Tryck "Leverera" för att skicka. Kvalitets-poängen
+                    räknas ut från dina svar och påverkar rykte +
+                    chans till repetitionsorder. Du får en pedagogisk
+                    förklaring efter leveransen.
+                  </p>
+                </div>
+                {submitErr && (
+                  <div style={{ color: "#fda594", marginTop: 12 }}>
+                    {submitErr}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                  <button onClick={submit} disabled={submitting} style={btnPrimary}>
+                    {submitting ? "Levererar…" : "Leverera + skapa faktura"}
+                  </button>
+                  <button
+                    onClick={() => { setStep(0); setAnswers([null, null, null]); }}
+                    style={btnGhost}
+                  >
+                    Ändra svar
+                  </button>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <div>
+            {/* Kvalitets-score · färgkod baserad på utfall */}
             <div style={{
               padding: 14, borderRadius: 8,
-              background: "rgba(34,197,94,0.1)",
-              border: "1px solid rgba(34,197,94,0.3)",
+              background: done.quality_score >= 80
+                ? "rgba(34,197,94,0.1)"
+                : done.quality_score >= 50
+                  ? "rgba(251,191,36,0.1)"
+                  : "rgba(220,76,43,0.1)",
+              border: `1px solid ${
+                done.quality_score >= 80
+                  ? "rgba(34,197,94,0.3)"
+                  : done.quality_score >= 50
+                    ? "rgba(251,191,36,0.3)"
+                    : "rgba(220,76,43,0.3)"
+              }`,
               marginTop: 16,
             }}>
-              <h3 style={{ color: "#6ee7b7", margin: "0 0 8px" }}>
-                Levererat ✓
-              </h3>
+              <div style={{
+                display: "flex", alignItems: "baseline",
+                justifyContent: "space-between", marginBottom: 8,
+              }}>
+                <h3 style={{
+                  color: done.quality_score >= 80
+                    ? "#6ee7b7"
+                    : done.quality_score >= 50
+                      ? "#fbbf24"
+                      : "#fda594",
+                  margin: 0,
+                }}>
+                  Levererat ✓
+                </h3>
+                <div style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 18, fontWeight: 700,
+                  color: done.quality_score >= 80
+                    ? "#6ee7b7"
+                    : done.quality_score >= 50
+                      ? "#fbbf24"
+                      : "#fda594",
+                }}>
+                  {done.quality_score}/100
+                </div>
+              </div>
               <p style={{ color: "white", margin: 0, fontSize: "0.9rem" }}>
                 Kunden <strong>{job.customer_name}</strong> är upplagd
                 som ny kund i bolaget och faktura{" "}
@@ -1562,6 +1762,86 @@ function DeliverModal({
                 </a>.
               </p>
             </div>
+
+            {/* Pedagogisk feedback per quiz-fråga */}
+            <div style={{ marginTop: 18 }}>
+              <div style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+                color: "rgba(255,255,255,0.55)",
+                marginBottom: 10,
+              }}>
+                LÄRDOMAR FRÅN DENNA LEVERANS
+              </div>
+              {done.feedback.map((fb, i) => {
+                const isGood = fb.your_answer_level === "good";
+                const isBad = fb.your_answer_level === "bad";
+                return (
+                  <div key={fb.question_id} style={{
+                    padding: 12, marginBottom: 10,
+                    borderRadius: 6,
+                    background: "rgba(255,255,255,0.03)",
+                    borderLeft: `3px solid ${
+                      isGood ? "#6ee7b7"
+                      : isBad ? "#fda594"
+                      : "#fbbf24"
+                    }`,
+                  }}>
+                    <div style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 9.5, fontWeight: 700,
+                      color: "rgba(255,255,255,0.5)",
+                      marginBottom: 4,
+                    }}>
+                      FRÅGA {i + 1} ·{" "}
+                      {isGood ? "BRA SVAR"
+                       : isBad ? "DÅLIGT SVAR"
+                       : "OK SVAR"}
+                    </div>
+                    <div style={{
+                      color: "white", fontSize: 13,
+                      fontFamily: "Source Serif 4, Georgia, serif",
+                      marginBottom: 6, lineHeight: 1.45,
+                    }}>
+                      {fb.question_text}
+                    </div>
+                    <div style={{
+                      fontSize: 12,
+                      color: "rgba(255,255,255,0.7)",
+                      marginBottom: 4,
+                    }}>
+                      <strong style={{ color: "rgba(255,255,255,0.5)" }}>
+                        Du valde:
+                      </strong>{" "}
+                      {fb.your_answer_text}
+                    </div>
+                    {!isGood && (
+                      <div style={{
+                        fontSize: 12,
+                        color: "rgba(110,231,183,0.85)",
+                        marginBottom: 6,
+                      }}>
+                        <strong style={{ color: "#6ee7b7" }}>
+                          Bästa svar:
+                        </strong>{" "}
+                        {fb.best_answer_text}
+                      </div>
+                    )}
+                    <div style={{
+                      fontSize: 11.5,
+                      color: "rgba(255,255,255,0.6)",
+                      lineHeight: 1.5,
+                      marginTop: 6,
+                      paddingTop: 6,
+                      borderTop: "1px dashed rgba(255,255,255,0.1)",
+                    }}>
+                      {fb.explanation}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <a
                 href="/v2/foretag/fakturor"
