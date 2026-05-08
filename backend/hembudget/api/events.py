@@ -113,15 +113,31 @@ def list_pending(scope: Session = Depends(db)) -> dict:
         .all()
     )
 
-    # Backstop · om 0 pending events finns kör vi en explicit tick för
-    # innevarande spel-vecka. Säkerhetsnät för fall där seed:ens tick
-    # av anchor-månaden misslyckades (t.ex. templates ej seedade än
-    # vid student-skapande, eller idempotency-bug i tidigare commit
-    # som gjorde att bara oct-events skapades och alla expirerade).
-    # tick_for_student är idempotent per ISO-vecka så om events redan
-    # finns för nuvarande vecka skippar den utan biverkning.
-    if not rows:
-        try:
+    # Backstop · kör tick_for_student om INNEVARANDE spel-vecka saknar
+    # events. Tidigare körde vi backstop:en bara när 0 pending events
+    # totalt — men i spel-tid-modellen kan en elev ha gamla pending-
+    # events kvar (deadline långt fram) i veckor utan att nya skapas.
+    # Resultat: eleven såg samma 1-2 events i evighet utan nya
+    # förslag.
+    #
+    # tick_for_student är idempotent per ISO-vecka (already_ticked-
+    # check) så det är säkert att alltid kalla — den skippar om
+    # veckan redan har events.
+    try:
+        week_n = today.isocalendar()[1]
+        from datetime import date as _date_eg, timedelta as _td_eg
+        week_start = _date_eg.fromisocalendar(today.year, week_n, 1)
+        week_end = week_start + _td_eg(days=6)
+        ticked_this_week = (
+            scope.query(StudentEvent)
+            .filter(
+                StudentEvent.proposed_date >= week_start,
+                StudentEvent.proposed_date <= week_end,
+                StudentEvent.source == "system",
+            )
+            .first()
+        )
+        if ticked_this_week is None:
             from ..school.engines import (
                 get_current_actor_student as _gcas_e,
             )
@@ -149,8 +165,8 @@ def list_pending(scope: Session = Depends(db)) -> dict:
                     .order_by(StudentEvent.deadline.asc())
                     .all()
                 )
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     return {
         "events": [_to_out(e).model_dump() for e in rows],

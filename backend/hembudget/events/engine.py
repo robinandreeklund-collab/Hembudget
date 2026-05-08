@@ -206,12 +206,19 @@ def tick_for_student(
         .all()
     )
 
-    # Existerande pågående/nyligen skapade events — undvik dubblar
-    cutoff = today - timedelta(days=14)
+    # Existerande pågående/nyligen skapade events — undvik dubblar.
+    #
+    # SPEL-TID-FIX: filtrera på proposed_date (spel-tid) istället för
+    # created_at (real-tid). Tidigare blandades spel-tid-cutoff med
+    # real-tid-tidsstämpel → cutoff = spel-2026-03-07 jämfördes med
+    # real-tid created_at = 2026-05-XX → ALLA real-tids-händelser
+    # räknades som "recent" → ALLA template-codes blockades som
+    # dupes → 0 nya sociala events skapades efter spel-tid-switchen.
+    cutoff_game = today - timedelta(days=14)
     recent_codes = {
         e.event_code
         for e in scope_session.query(StudentEvent)
-        .filter(StudentEvent.created_at >= datetime.combine(cutoff, datetime.min.time()))
+        .filter(StudentEvent.proposed_date >= cutoff_game)
         .all()
     }
 
