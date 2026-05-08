@@ -30,13 +30,22 @@ FROM python:3.11-slim AS backend
 # (connection-multiplexer mellan FastAPI och Cloud SQL Postgres så
 # 5+ Cloud Run-instanser kan dela en liten DB-pool utan att spränga
 # Cloud SQL conn-cap).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+#
+# Retry-loop runt apt-get update — Debian-mirror sync-race ger
+# sporadiska 404/storleksskillnader på Packages.xz när Cloud Build
+# råkar hämta mid-mirror-sync. Försök 3 ggr med kort backoff.
+RUN set -eux; \
+    for i in 1 2 3; do \
+        apt-get update -o Acquire::Retries=3 \
+            -o Acquire::http::Pipeline-Depth=0 && break || sleep 5; \
+    done; \
+    apt-get install -y --no-install-recommends \
         libjpeg62-turbo \
         zlib1g \
         fonts-dejavu-core \
         curl \
-        pgbouncer \
-    && rm -rf /var/lib/apt/lists/*
+        pgbouncer; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
