@@ -156,25 +156,23 @@ def init_master_engine() -> Engine:
     is_sqlite = url.startswith("sqlite:")
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
-        # PgBouncer-mode · containern kör PgBouncer som lokal proxy.
-        # App-side hålls LITEN pool (5+5=10) eftersom PgBouncer själv
-        # multiplexar mot Cloud SQL. Stor app-pool är spill — den
-        # håller bara TCP-conn till PgBouncer (lokala, gratis), men
-        # PgBouncer släpper bara ut PGBOUNCER_POOL_SIZE (default 8)
-        # samtidiga server-side queries oavsett.
+        # Direct-connect mot Cloud SQL (PgBouncer är opt-in via
+        # HEMBUDGET_ENABLE_PGBOUNCER och avslagen som default).
+        # Master-engine bär bara lärar-/elev-auth + admin — låg trafik.
+        # 10+10 = max 20 per revision räcker rejält. Med MAX_INSTANCES=1
+        # ligger total Cloud-SQL-conn-användning säkert under db-g1-
+        # small-cap (50).
         #
         # expire_on_commit=False · annars triggar SQLAlchemy lazy-load
         # på "released" objects efter commit, vilket öppnar en NY
-        # connection mid-request. För connection-känsliga setups är
-        # det giftigt.
+        # connection mid-request — giftigt vid pool-press.
         #
-        # pool_timeout=15 · fail-fast vid pool-exhaustion. PgBouncer
-        # har sin egen query_wait_timeout=30 så hela request-budgeten
-        # blir ~45 s (klient ger upp innan).
+        # pool_timeout=15 · fail-fast vid pool-exhaustion så vi får
+        # en tydlig 500 istället för en 30s-hängd request.
         engine_kwargs.update(
             pool_pre_ping=True,
-            pool_size=5,
-            max_overflow=5,
+            pool_size=10,
+            max_overflow=10,
             pool_recycle=1800,
             pool_timeout=15,
             connect_args={
@@ -881,11 +879,13 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
         # Med pool_pre_ping fångar vi stale connections och med
         # pool_recycle=300 (5 min) cyklas connections regelbundet så
         # idle-in-transaction från gammal revision släpper.
-        # PgBouncer-mode · liten app-pool, stora pool sköts på proxy.
-        # 5+5 = max 10 client-conn till PgBouncer (lokala TCP, gratis).
-        # PgBouncer aggregerar dessa mot ~8 server-conn till Cloud SQL.
+        # Direct-connect mot Cloud SQL (PgBouncer opt-in via
+        # HEMBUDGET_ENABLE_PGBOUNCER, default off). Scope-engine bär
+        # all dashboard-trafik (frontend fyrar 13+ parallella requests
+        # vid hub-load). 8+8 = max 16 per revision. Med MAX_INSTANCES=1
+        # ryms vi i db-g1-small (50 conn cap).
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_pre_ping=True, pool_size=8, max_overflow=8,
             pool_recycle=1800, pool_timeout=15,
             connect_args={
                 "connect_timeout": 5,

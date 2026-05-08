@@ -34,7 +34,10 @@ CPU="${CPU:-1}"
 # in i både QueuePool-timeouts OCH 1 GiB-minnetaket. Sänk till 20.
 CONCURRENCY="${CONCURRENCY:-20}"
 TIMEOUT="${TIMEOUT:-300}"
-MAX_INSTANCES="${MAX_INSTANCES:-5}"
+# OBS: MAX_INSTANCES=1 är default igen efter att PgBouncer-skalningen
+# rullades tillbaka (login-500 i prod). När vi får PgBouncer stabil
+# kan vi bumpa upp + sätta HEMBUDGET_ENABLE_PGBOUNCER=1.
+MAX_INSTANCES="${MAX_INSTANCES:-1}"
 MIN_INSTANCES="${MIN_INSTANCES:-0}"
 
 # ----- Färger för output -----
@@ -297,35 +300,23 @@ if [[ "$MODE" == "school" ]]; then
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_NAME=$TEACHER_NAME"
     fi
 
-    # Skol-läge med PgBouncer · containern startar PgBouncer som
-    # connection-multiplexer mellan FastAPI och Cloud SQL. Det
-    # tillåter MAX_INSTANCES > 1 utan att Cloud SQL-cap sprängs:
-    # varje instans håller bara PGBOUNCER_POOL_SIZE server-conn
-    # mot DB:n.
+    # Skol-läge · DIRECT-CONNECT mot Cloud SQL (PgBouncer rullades
+    # tillbaka efter prod-incident där conn-cap sprängdes). Beräkning:
     #
-    # Aktuell deploy: db-g1-small (50 conn cap).
-    # Beräkning: N_INSTANCES × PGBOUNCER_POOL_SIZE + Postgres-internal
-    # (≈10) ≤ 50.
+    #   1 inst × (10+10 master + 8+8 scope) = 36 max conn + Postgres-
+    #   internal (~10) = ~46 av 50 (db-g1-small). Säkert med headroom.
     #
-    #   5 inst × 6 pool + 10 internal = 40 conn  ← VAL (headroom)
-    #   3 inst × 12 pool + 10 internal = 46 conn (mer per inst)
-    #   5 inst × 8 pool + 10 internal = 50 conn (max-utnyttjat)
-    #
-    # 5 instanser = bättre fördelning av elev-requests över Cloud Run-
-    # autoscaling. Concurrency 40 per inst = 5 × 40 = 200 simultaneous
-    # requests — täcker en hel klass + lärare med headroom.
-    #
-    # Vid Cloud SQL-uppgradering: bumpa PGBOUNCER_POOL_SIZE eller
-    # MAX_INSTANCES utan kod-deploy:
-    #   gcloud run services update hembudget --region=europe-west1 \
-    #     --update-env-vars=PGBOUNCER_POOL_SIZE=12
-    MAX_INSTANCES="${MAX_INSTANCES:-5}"
-    MIN_INSTANCES="${MIN_INSTANCES:-1}"
-    CONCURRENCY="${CONCURRENCY:-40}"
-    PGBOUNCER_POOL_SIZE="${PGBOUNCER_POOL_SIZE:-6}"
-    PGBOUNCER_MAX_CLIENT_CONN="${PGBOUNCER_MAX_CLIENT_CONN:-200}"
-    ENV_VARS+=",PGBOUNCER_POOL_SIZE=${PGBOUNCER_POOL_SIZE}"
-    ENV_VARS+=",PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}"
+    # Återaktivera PgBouncer-skalning per-deploy genom att sätta:
+    #   HEMBUDGET_ENABLE_PGBOUNCER=1 MAX_INSTANCES=5 ./deploy.sh
+    # (kräver att PgBouncer-flödet i entrypoint.sh + containern är
+    #  verifierat först — gör i ett testprojekt innan prod).
+    if [[ "${HEMBUDGET_ENABLE_PGBOUNCER:-0}" == "1" ]]; then
+        ENV_VARS+=",HEMBUDGET_ENABLE_PGBOUNCER=1"
+        PGBOUNCER_POOL_SIZE="${PGBOUNCER_POOL_SIZE:-6}"
+        PGBOUNCER_MAX_CLIENT_CONN="${PGBOUNCER_MAX_CLIENT_CONN:-200}"
+        ENV_VARS+=",PGBOUNCER_POOL_SIZE=${PGBOUNCER_POOL_SIZE}"
+        ENV_VARS+=",PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}"
+    fi
 
     # Redis-cache · 30s-aggregat-cache av /v2/hub. Stor win på heavy
     # endpoints. Två alternativ:

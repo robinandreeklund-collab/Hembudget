@@ -13,11 +13,20 @@
 
 set -uo pipefail
 
+# PgBouncer är OPT-IN. Tidigare default-på-vid-cloudsql visade sig
+# spränga Cloud SQL conn-cap (login-500 i prod) — antingen för att
+# PgBouncer inte startade rent, eller för att dess egna server-conn
+# adderades på toppen av appens. Tills vi har kunnat debugga
+# beteendet säkert kör vi direct-connect till Cloud SQL.
+#
+# Återaktivera per-revision via:
+#   gcloud run services update hembudget --region=europe-west1 \
+#     --update-env-vars=HEMBUDGET_ENABLE_PGBOUNCER=1
 PGBOUNCER_ENABLED=0
-if [[ -n "${HEMBUDGET_DATABASE_URL:-}" ]]; then
-    if [[ "${HEMBUDGET_DATABASE_URL}" == *"cloudsql"* ]]; then
-        PGBOUNCER_ENABLED=1
-    fi
+if [[ "${HEMBUDGET_ENABLE_PGBOUNCER:-0}" == "1" ]] \
+   && [[ -n "${HEMBUDGET_DATABASE_URL:-}" ]] \
+   && [[ "${HEMBUDGET_DATABASE_URL}" == *"cloudsql"* ]]; then
+    PGBOUNCER_ENABLED=1
 fi
 
 if [[ "${PGBOUNCER_ENABLED}" == "1" ]]; then
@@ -86,7 +95,12 @@ if [[ "${PGBOUNCER_ENABLED}" == "1" ]]; then
     export HEMBUDGET_DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:6432/${DB_NAME}"
     echo "[entrypoint] App pekar nu på localhost:6432 (PgBouncer)"
 else
-    echo "[entrypoint] Ingen Cloud SQL detekterat → kör utan PgBouncer"
+    if [[ -n "${HEMBUDGET_DATABASE_URL:-}" \
+          && "${HEMBUDGET_DATABASE_URL}" == *"cloudsql"* ]]; then
+        echo "[entrypoint] PgBouncer disabled (HEMBUDGET_ENABLE_PGBOUNCER!=1) → direct-connect till Cloud SQL"
+    else
+        echo "[entrypoint] Ingen Cloud SQL detekterat → kör utan PgBouncer"
+    fi
 fi
 
 # Starta uvicorn i förgrund (Cloud Run förväntar sig PID 1 = appen).
