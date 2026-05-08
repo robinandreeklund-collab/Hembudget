@@ -77,7 +77,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
         "qrcode[pil]>=8.0" \
         "anthropic>=0.40" \
         "psycopg2-binary>=2.9" \
-        "yfinance>=0.2"
+        "yfinance>=0.2" \
+        "redis>=5.0"
 # OBS: sqlcipher3-binary hoppas över i demo — backend faller tillbaka på
 # plain SQLite automatiskt. pytesseract/tesseract skippas också eftersom
 # vision-import inte används i demo.

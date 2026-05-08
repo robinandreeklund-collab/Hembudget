@@ -365,7 +365,68 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
 
     Demo får tom payload. Lärare med x-as-student-impersonation ser
     elevens vy (för förhandsvisning från v2-elev-detaljen).
+
+    Cache · 20s TTL per student. Sparar 5-10 master_session-anrop +
+    pentagon-beräkning per request. Mutationer (markera-paid,
+    export-to-bank, transfer m.fl.) bustar cache via
+    invalidate_hub_cache(sid) så stale-staleness max ~20s.
     """
+    # === Cache-check innan vi gör nåt jobb ============================
+    target_sid_for_cache: Optional[int] = None
+    if info.role == "student" and info.student_id is not None:
+        target_sid_for_cache = info.student_id
+    elif info.role == "teacher" and info.teacher_id is not None:
+        from ..school.engines import get_current_actor_student
+        target_sid_for_cache = get_current_actor_student()
+
+    if target_sid_for_cache is not None:
+        try:
+            from ..cache import get_cache as _gc_hub
+            cache_key = f"hub:s_{target_sid_for_cache}:v1"
+            cached = _gc_hub().get(cache_key)
+            if cached is not None:
+                return HubResponse.model_validate_json(cached)
+        except Exception:
+            # Cache-fel är aldrig fatalt · fortsätt med live-bygge
+            import logging
+            logging.getLogger(__name__).debug(
+                "hub-cache: read failed · fortsätter live", exc_info=True,
+            )
+
+    response = _build_hub_response(info)
+
+    # === Cache-skriv om vi har en student-id =========================
+    if target_sid_for_cache is not None and response.student_id != 0:
+        try:
+            from ..cache import get_cache as _gc_hub_w
+            cache_key_w = f"hub:s_{target_sid_for_cache}:v1"
+            _gc_hub_w().set(
+                cache_key_w,
+                response.model_dump_json().encode("utf-8"),
+                ttl=20,
+            )
+        except Exception:
+            pass
+    return response
+
+
+def invalidate_hub_cache(student_id: Optional[int]) -> None:
+    """Bust hub-cachen för en elev. Anropas från endpoints som
+    muterar elev-data (mark paid, transfer, accept event etc.) så
+    eleven omedelbart ser uppdaterat tillstånd istället för att
+    vänta TTL ut."""
+    if student_id is None:
+        return
+    try:
+        from ..cache import get_cache as _gc_inv
+        _gc_inv().delete(f"hub:s_{student_id}:v1")
+    except Exception:
+        pass
+
+
+def _build_hub_response(info: TokenInfo) -> HubResponse:
+    """Live-bygge av hub-svaret · ingen caching här. Brukade vara
+    body:n i get_hub() innan vi extraherade en cache-wrapper."""
     # Resolva target-student-id · stöd både egen-elev och lärar-impersonation
     target_sid: Optional[int] = None
     if info.role == "student" and info.student_id is not None:
@@ -2517,7 +2578,7 @@ def update_mail_status(
             except Exception:
                 pass
 
-        return V2MailItemRow(
+        result = V2MailItemRow(
             id=m.id,
             sender=m.sender,
             sender_short=m.sender_short,
@@ -2538,6 +2599,9 @@ def update_mail_status(
             bankgiro=m.bankgiro,
             notes=m.notes,
         )
+    # Bust hub-cachen så ohanterade-räknaren uppdateras direkt
+    invalidate_hub_cache(info.student_id)
+    return result
 
 
 # === Exportera brev till banken (skapar UpcomingTransaction) ===
@@ -2646,13 +2710,14 @@ def export_mail_to_bank(
         m.upcoming_id = upc.id
         m.status = "exported"
         s.flush()
-
-        return V2MailExportResponse(
+        export_result = V2MailExportResponse(
             mail_id=m.id,
             upcoming_id=upc.id,
             expected_date=upc.expected_date,
             amount=float(upc.amount),
         )
+    invalidate_hub_cache(info.student_id)
+    return export_result
 
 
 # === Överföring mellan elevens egna konton ===
@@ -2785,13 +2850,14 @@ def create_v2_transfer(
         out_tx.transfer_pair_id = in_tx.id
         in_tx.transfer_pair_id = out_tx.id
         s.flush()
-
-        return V2TransferResponse(
+        transfer_result = V2TransferResponse(
             source_tx_id=out_tx.id,
             destination_tx_id=in_tx.id,
             amount=float(amount),
             transfer_date=tx_date,
         )
+    invalidate_hub_cache(info.student_id)
+    return transfer_result
 
 
 # === Upcoming-uppdatering (V2 · /upcoming-V1 är gateblockad i school) ===

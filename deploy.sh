@@ -327,6 +327,52 @@ if [[ "$MODE" == "school" ]]; then
     ENV_VARS+=",PGBOUNCER_POOL_SIZE=${PGBOUNCER_POOL_SIZE}"
     ENV_VARS+=",PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}"
 
+    # Redis-cache · 30s-aggregat-cache av /v2/hub. Stor win på heavy
+    # endpoints. Två alternativ:
+    #
+    #   1. Upstash (rekommenderat för småstart) · gratis-tier 10 000
+    #      ops/dag = ~333 ops/min = räcker 1-2 klasser. Ingen VPC,
+    #      ingen Memorystore-kostnad. Skapa konto på upstash.com,
+    #      kopiera Redis URL (rediss://default:TOKEN@HOST:PORT) och
+    #      sätt som env-var:
+    #        UPSTASH_REDIS_URL=rediss://... ./deploy.sh
+    #
+    #   2. Memorystore basic (~$30/mån) · skapas via:
+    #        gcloud redis instances create hembudget-cache \
+    #          --size=1 --region=europe-west1 --tier=basic
+    #      Kräver VPC connector — mer setup.
+    #
+    # Utan REDIS_URL faller appen tillbaka till in-memory-cache per
+    # Cloud Run-instans (mindre effektivt med multi-instans men
+    # fungerande).
+    if [[ -n "${UPSTASH_REDIS_URL:-}" ]]; then
+        # Skicka in via Cloud Run-secret så token inte hamnar i
+        # revisionsbeskrivningen plain-text.
+        REDIS_SECRET_NAME="hembudget-redis-url"
+        if ! gcloud secrets describe "$REDIS_SECRET_NAME" \
+                --project="$PROJECT_ID" >/dev/null 2>&1; then
+            printf "%s" "$UPSTASH_REDIS_URL" | gcloud secrets create \
+                "$REDIS_SECRET_NAME" --data-file=- \
+                --project="$PROJECT_ID" --quiet
+        else
+            printf "%s" "$UPSTASH_REDIS_URL" | gcloud secrets versions add \
+                "$REDIS_SECRET_NAME" --data-file=- \
+                --project="$PROJECT_ID" --quiet
+        fi
+        if [[ -n "$SA_EMAIL" ]]; then
+            gcloud secrets add-iam-policy-binding "$REDIS_SECRET_NAME" \
+                --member="serviceAccount:${SA_EMAIL}" \
+                --role="roles/secretmanager.secretAccessor" \
+                --project="$PROJECT_ID" --quiet 2>/dev/null || true
+        fi
+        ok "Redis-cache aktiv via Upstash"
+    elif [[ -n "${HEMBUDGET_REDIS_URL:-}" ]]; then
+        ENV_VARS+=",HEMBUDGET_REDIS_URL=${HEMBUDGET_REDIS_URL}"
+        ok "Redis-cache aktiv via HEMBUDGET_REDIS_URL"
+    else
+        info "Cache: in-memory (per Cloud Run-instans · sätt UPSTASH_REDIS_URL för delad cache)"
+    fi
+
     info "MODE=school: lärare/elev-läge aktiveras"
     info "  Bootstrap-kod: $BOOTSTRAP_SECRET (spara den — behövs för första lärarinlog)"
     if [[ -n "$TEACHER_EMAIL" ]]; then
@@ -366,9 +412,13 @@ DEPLOY_ARGS=(
 # Cloud SQL: koppla in Postgres-instansen + injicera DATABASE_URL
 # som secret så lösenordet inte hamnar i revisionsbeskrivningen
 if [[ "$MODE" == "school" && -n "$CLOUDSQL_INSTANCE_CONN" ]]; then
+    SECRET_BINDS="HEMBUDGET_DATABASE_URL=hembudget-database-url:latest"
+    if [[ -n "${UPSTASH_REDIS_URL:-}" ]]; then
+        SECRET_BINDS="${SECRET_BINDS},HEMBUDGET_REDIS_URL=hembudget-redis-url:latest"
+    fi
     DEPLOY_ARGS+=(
         --add-cloudsql-instances="$CLOUDSQL_INSTANCE_CONN"
-        --update-secrets="HEMBUDGET_DATABASE_URL=hembudget-database-url:latest"
+        --update-secrets="$SECRET_BINDS"
     )
 fi
 

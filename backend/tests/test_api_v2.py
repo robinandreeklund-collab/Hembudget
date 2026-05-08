@@ -10851,3 +10851,91 @@ def test_supplier_invoice_not_marked_overdue_when_future_due(fx):
     assert out.days_until_due > 0, (
         f"days_until_due ska vara positivt: {out.days_until_due}"
     )
+
+
+def test_hub_response_is_cached_for_20s(fx):
+    """Andra anropet till /v2/hub ska komma från cachen (samma student
+    inom 20s). Vi mäter genom att verifiera att cache-key blir satt
+    efter första requesten."""
+    from hembudget.cache import (
+        get_cache as _gc, reset_cache_for_testing,
+    )
+    reset_cache_for_testing()
+
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    cache_key = f"hub:s_{sid}:v1"
+    # Innan request · cache tom
+    assert _gc().get(cache_key) is None
+
+    # Första anropet · live-bygge + cache-skriv
+    r1 = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r1.status_code == 200, r1.text
+    cached = _gc().get(cache_key)
+    assert cached is not None, "hub-svar ska cachas efter första request"
+
+    # Andra anropet · ska komma från cache (samma payload)
+    r2 = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r1.json() == r2.json(), (
+        "Cache-träff ska ge identisk payload"
+    )
+
+
+def test_hub_cache_busted_on_mark_paid(fx):
+    """Markera mail som paid ska bust hub-cache så nästa hub-request
+    inte returnerar stale unhandled_count."""
+    from hembudget.cache import (
+        get_cache as _gc, reset_cache_for_testing,
+    )
+    from hembudget.db.models import MailItem
+    reset_cache_for_testing()
+
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    cache_key = f"hub:s_{sid}:v1"
+
+    # Hämta hub → cachas
+    r1 = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r1.status_code == 200
+    assert _gc().get(cache_key) is not None
+
+    # Hitta första unhandled mail
+    target_mail_id = None
+
+    def find(s):
+        nonlocal target_mail_id
+        m = (
+            s.query(MailItem)
+            .filter(MailItem.status == "unhandled")
+            .first()
+        )
+        if m is not None:
+            target_mail_id = m.id
+    _scope_run(sid, find)
+    if target_mail_id is None:
+        return  # Ingen unhandled att markera · skippa
+
+    # Markera som paid → ska bust cache
+    r = client.patch(
+        f"/v2/postladan/{target_mail_id}/status",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+        json={"status": "paid"},
+    )
+    assert r.status_code == 200, r.text
+    assert _gc().get(cache_key) is None, (
+        "Hub-cache ska busts efter markera-paid"
+    )
