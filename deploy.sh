@@ -297,16 +297,35 @@ if [[ "$MODE" == "school" ]]; then
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_NAME=$TEACHER_NAME"
     fi
 
-    # Skol-läge: 1 instans i nuläget eftersom Cloud SQL db-f1-micro
-    # (25 conn) inte räcker för flera instanser. För att skala:
-    #   1) Bumpa Cloud SQL till db-g1-small (50) eller större, ELLER
-    #   2) Sätt upp PgBouncer som connection-multiplexer.
-    # Sen kan MAX_INSTANCES bumpas och poolen i school/engines.py
-    # justeras därefter.
-    # Med 1 instans + concurrency 20 + Postgres-pool 3+3 (=6 conn,
-    # delade master+scope) hanterar vi ~20 samtidiga requests.
-    MAX_INSTANCES=1
-    MIN_INSTANCES=1
+    # Skol-läge med PgBouncer · containern startar PgBouncer som
+    # connection-multiplexer mellan FastAPI och Cloud SQL. Det
+    # tillåter MAX_INSTANCES > 1 utan att Cloud SQL-cap sprängs:
+    # varje instans håller bara PGBOUNCER_POOL_SIZE server-conn
+    # mot DB:n.
+    #
+    # Aktuell deploy: db-g1-small (50 conn cap).
+    # Beräkning: N_INSTANCES × PGBOUNCER_POOL_SIZE + Postgres-internal
+    # (≈10) ≤ 50.
+    #
+    #   5 inst × 6 pool + 10 internal = 40 conn  ← VAL (headroom)
+    #   3 inst × 12 pool + 10 internal = 46 conn (mer per inst)
+    #   5 inst × 8 pool + 10 internal = 50 conn (max-utnyttjat)
+    #
+    # 5 instanser = bättre fördelning av elev-requests över Cloud Run-
+    # autoscaling. Concurrency 40 per inst = 5 × 40 = 200 simultaneous
+    # requests — täcker en hel klass + lärare med headroom.
+    #
+    # Vid Cloud SQL-uppgradering: bumpa PGBOUNCER_POOL_SIZE eller
+    # MAX_INSTANCES utan kod-deploy:
+    #   gcloud run services update hembudget --region=europe-west1 \
+    #     --update-env-vars=PGBOUNCER_POOL_SIZE=12
+    MAX_INSTANCES="${MAX_INSTANCES:-5}"
+    MIN_INSTANCES="${MIN_INSTANCES:-1}"
+    CONCURRENCY="${CONCURRENCY:-40}"
+    PGBOUNCER_POOL_SIZE="${PGBOUNCER_POOL_SIZE:-6}"
+    PGBOUNCER_MAX_CLIENT_CONN="${PGBOUNCER_MAX_CLIENT_CONN:-200}"
+    ENV_VARS+=",PGBOUNCER_POOL_SIZE=${PGBOUNCER_POOL_SIZE}"
+    ENV_VARS+=",PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}"
 
     info "MODE=school: lärare/elev-läge aktiveras"
     info "  Bootstrap-kod: $BOOTSTRAP_SECRET (spara den — behövs för första lärarinlog)"

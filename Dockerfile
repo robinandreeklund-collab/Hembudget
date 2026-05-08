@@ -26,12 +26,16 @@ RUN npm run build
 # ---------- Stage 2: Backend + runtime ----------
 FROM python:3.11-slim AS backend
 
-# Systemberoenden för pypdfium2, Pillow och matplotlib
+# Systemberoenden för pypdfium2, Pillow och matplotlib + pgbouncer
+# (connection-multiplexer mellan FastAPI och Cloud SQL Postgres så
+# 5+ Cloud Run-instanser kan dela en liten DB-pool utan att spränga
+# Cloud SQL conn-cap).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libjpeg62-turbo \
         zlib1g \
         fonts-dejavu-core \
         curl \
+        pgbouncer \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -82,6 +86,13 @@ COPY --from=frontend-build /frontend/dist /app/frontend/dist
 # Data-mappen för auto-seed (Nordea/SEB CSV + XLSX)
 COPY data/ /app/data/
 
+# PgBouncer-config + entrypoint som startar pgbouncer + uvicorn
+COPY pgbouncer.ini /etc/pgbouncer/pgbouncer.template.ini
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh \
+    && mkdir -p /var/log/pgbouncer /var/run/pgbouncer \
+    && chown -R nobody:nogroup /var/log/pgbouncer /var/run/pgbouncer
+
 # Cloud Run sätter PORT-env vid start. Vi bindar på 0.0.0.0 och inaktiverar
 # SQLCipher (ingen master-password i skol-läge) + pekar LM Studio till en
 # icke-existerande host så AI-features failar tyst utan att blockera start.
@@ -103,4 +114,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 
 # Lyssna på Cloud Run:s PORT (default 8080 om kört lokalt)
 EXPOSE 8080
-CMD ["sh", "-c", "exec python -m hembudget.main --host 0.0.0.0 --port ${PORT:-8080}"]
+# Använd entrypoint som startar PgBouncer (om Cloud SQL detekterat) +
+# uvicorn. PgBouncer multiplexar app-connections mot en mindre pool
+# som passar Cloud SQL conn-cap.
+CMD ["/app/entrypoint.sh"]
