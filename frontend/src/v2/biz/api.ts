@@ -1,9 +1,15 @@
 /**
  * API-klient för /v2/foretag/*-endpoints (Företagsläget · Bug #7-utbyggnad).
- * Använder raw fetch + localStorage-token (samma som övriga v2-vyer).
+ *
+ * Token läses via centrala getToken() från @/api/client — tidigare
+ * läste vi sessionStorage direkt här, vilket gick sönder när auth
+ * migrerades till localStorage (alla bizApi-anrop fick "Missing
+ * bearer token" → läraren såg fel state, eleven kunde inte lasta
+ * data).
  */
+import { getToken } from "@/api/client";
 
-const TOKEN = () => sessionStorage.getItem("hembudget_token") || "";
+const TOKEN = () => getToken() || "";
 
 async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(path, {
@@ -37,7 +43,26 @@ export type Company = {
   vat_period: string;
   sni_code: string | null;
   industry_label: string | null;
+  industry_key: string | null;
+  city_key: string | null;
+  city_display: string | null;
   active: boolean;
+};
+
+export type Industry = {
+  key: string;
+  label: string;
+  short_description: string;
+  sni_code: string;
+  hourly_rate_min: number;
+  hourly_rate_max: number;
+  margin_baseline_pct: number;
+  requires_lokal: boolean;
+  monthly_lokal_cost_baseline: number;
+  equipment_cost_init: number;
+  pipeline_per_week_baseline: number;
+  learning_focus: string;
+  available_in_my_city: boolean;
 };
 
 export type CompanyTransaction = {
@@ -76,6 +101,9 @@ export type CompanyInvoice = {
   paid_on: string | null;
   rot_rut_kind: "rot" | "rut" | null;
   rot_rut_amount: number | null;
+  is_overdue: boolean;
+  days_overdue: number;
+  days_until_due: number;
 };
 
 export type CompanyOwnerSalary = {
@@ -121,6 +149,13 @@ export type BizPentagon = {
     tidsatgang: number;
     vinst: number;
   };
+  axes_prev?: {
+    omsattning: number;
+    kundbas: number;
+    likviditet: number;
+    tidsatgang: number;
+    vinst: number;
+  } | null;
   total_score: number;
   metrics: {
     income_4w: number;
@@ -137,11 +172,103 @@ export type ModeStatus = {
   has_active_company: boolean;
 };
 
+// === BizBank-overview · matchar prototyp p-biz-bank ===
+export type BizBankAccount = {
+  eye: string;
+  name: string;
+  number: string;
+  balance: number;
+  balance_meta: string;
+  is_primary: boolean;
+};
+
+export type BizBankTx = {
+  occurred_on: string;
+  name: string;
+  name_sub: string | null;
+  category: string;
+  amount_signed: number;
+  is_income: boolean;
+  is_owner_salary: boolean;
+};
+
+// === Pentagon axis-detail (för flip-kortet) ===
+export type BizAxis = "omsattning" | "kundbas" | "likviditet" | "tidsatgang" | "vinst";
+
+export type BizAxisFactor = {
+  explanation: string;
+  points: number;
+  delta_label: string;
+};
+
+export type BizAxisEvent = {
+  occurred_at: string | null;
+  date_label: string;
+  title: string;
+  detail: string | null;
+  delta: number | null;
+  delta_label: string;
+};
+
+export type BizAxisDetail = {
+  axis: BizAxis;
+  axis_label: string;
+  axis_number: string;
+  score: number;
+  factors: BizAxisFactor[];
+  events: BizAxisEvent[];
+  summary_text: string;
+};
+
+export type BizBankOverview = {
+  accounts: BizBankAccount[];
+  transactions: BizBankTx[];
+  f_skatt_due: string | null;
+  f_skatt_amount: number;
+  own_salary_this_month: number;
+  next_vat_due: string | null;
+  next_vat_amount: number;
+};
+
 
 export const bizApi = {
   getCompany: () => call<Company | null>("/v2/foretag"),
-  createCompany: (b: Partial<Company> & { name: string }) =>
+  createCompany: (b: {
+    name: string;
+    form: CompanyForm;
+    industry_key: string;
+    vat_registered?: boolean;
+    vat_period?: string;
+    share_capital?: number | null;
+    org_number?: string | null;
+    funding_method?: "cash" | "private_loan" | "business_loan_pg";
+  }) =>
     call<Company>("/v2/foretag", { method: "POST", body: JSON.stringify(b) }),
+
+  // Lista de 10 fasta branscherna (med 'available_in_my_city'-flagga)
+  listIndustries: () => call<Industry[]>("/v2/foretag/industries"),
+
+  // Sammanfattning för privat-hub · visar bara om eleven har företag
+  privateSummary: () =>
+    call<{
+      has_company: boolean;
+      company_name: string | null;
+      industry_label: string | null;
+      city_display: string | null;
+      week_no: number;
+      income_4w: number;
+      profit_4w: number;
+      margin_pct: number;
+      kassa: number;
+      n_invoices_open: number;
+      n_invoices_overdue: number;
+      pentagon_score: number;
+      summary_text: string;
+      n_new_opportunities: number;
+      n_quotes_pending: number;
+      n_quotes_won_recent: number;
+      n_quotes_lost_recent: number;
+    }>("/v2/foretag/private-summary"),
   patchCompany: (id: number, b: Partial<Company> & { name: string; form: string }) =>
     call<Company>(`/v2/foretag/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   closeCompany: (id: number) =>
@@ -185,6 +312,13 @@ export const bizApi = {
     call<CompanyInvoice>(`/v2/foretag/invoices/${id}/mark-paid`, {
       method: "POST",
     }),
+  sendInvoiceReminder: (id: number) =>
+    call<{
+      invoice_id: number; reminder_no: number; fee: number;
+      new_due_on: string; summary: string;
+    }>(`/v2/foretag/invoices/${id}/send-reminder`, {
+      method: "POST",
+    }),
 
   // Owner salary
   listOwnerSalaries: () => call<CompanyOwnerSalary[]>("/v2/foretag/owner-salaries"),
@@ -203,6 +337,13 @@ export const bizApi = {
       net_to_owner: number;
       total_cost_to_company: number;
     }>(`/v2/foretag/owner-salary/preview?gross_salary=${gross}&is_young=${isYoung}`),
+
+  // BizBank overview (prototyp p-biz-bank)
+  bankOverview: () => call<BizBankOverview>("/v2/foretag/bank-overview"),
+
+  // Pentagon axis-detail (flip-kortets baksida)
+  pentagonAxisDetail: (axis: BizAxis) =>
+    call<BizAxisDetail>(`/v2/foretag/pentagon/axis/${axis}`),
 
   // VAT
   listVatPeriods: () => call<VatPeriod[]>("/v2/foretag/vat/periods"),
@@ -344,6 +485,7 @@ export type Opportunity = {
   customer_name: string;
   customer_segment: string;
   industry_tag: string | null;
+  requires_car?: boolean;
   market_price: number;
   expected_delivery_days: number;
   deadline_on: string;
@@ -351,6 +493,13 @@ export type Opportunity = {
   status: string;
   week_no: number;
   has_quote: boolean;
+  quote_offered_price: number | null;
+  quote_offered_delivery_days: number | null;
+  quote_pitch_text: string | null;
+  quote_pitch_quality: number | null;
+  quote_accept_probability: number | null;
+  quote_accepted: boolean | null;
+  quote_decision_explanation: string | null;
 };
 
 export type Quote = {
@@ -378,6 +527,13 @@ export type Job = {
   status: string;
   quality_score: number | null;
   invoice_id: number | null;
+  estimated_hours: number;
+  hours_per_week: number;
+  days_remaining: number;
+  days_total: number;
+  progress_pct: number;
+  is_overdue: boolean;
+  is_klass_pool: boolean;
 };
 
 export type MarketingCampaign = {
@@ -421,6 +577,9 @@ export type SupplierInvoice = {
   status: string;
   paid_on: string | null;
   notes: string | null;
+  is_overdue: boolean;
+  days_overdue: number;
+  days_until_due: number;
 };
 
 export type TickResult = {
@@ -435,7 +594,19 @@ export type TickResult = {
   notes: string[];
 };
 
+export type TickStatus = {
+  last_auto_tick_at: string | null;
+  next_tick_at: string;
+  interval_hours: number;
+  seconds_until_next_tick: number;
+  week_no: number;
+  open_quotes_count: number;
+  last_tick_status: "done" | "failed" | "running" | null;
+  last_tick_error: string | null;
+};
+
 export const bizEngineApi = {
+  tickStatus: () => call<TickStatus>("/v2/foretag/tick-status"),
   listOpportunities: (status?: string) =>
     call<Opportunity[]>(
       `/v2/foretag/opportunities${status ? `?status_filter=${status}` : ""}`,
@@ -465,6 +636,37 @@ export const bizEngineApi = {
       invoice_id: number | null;
       invoice_number: string | null;
     }>(`/v2/foretag/jobs/${jobId}/deliver`, {
+      method: "POST",
+      body: JSON.stringify(b),
+    }),
+  getQualityQuiz: (jobId: number) =>
+    call<{
+      job_id: number;
+      questions: Array<{
+        id: number;
+        category: string;
+        text: string;
+        options: Array<{ key: string; text: string; level: string }>;
+      }>;
+    }>(`/v2/foretag/jobs/${jobId}/quality-quiz`),
+  submitDeliveryQuiz: (jobId: number, b: {
+    answers: Array<"good" | "mid" | "bad">;
+    create_invoice?: boolean;
+  }) =>
+    call<{
+      job: Job;
+      invoice_id: number | null;
+      invoice_number: string | null;
+      quality_score: number;
+      feedback: Array<{
+        question_id: number;
+        question_text: string;
+        your_answer_level: "good" | "mid" | "bad";
+        your_answer_text: string;
+        best_answer_text: string;
+        explanation: string;
+      }>;
+    }>(`/v2/foretag/jobs/${jobId}/submit-delivery-quiz`, {
       method: "POST",
       body: JSON.stringify(b),
     }),

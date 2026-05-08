@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
@@ -215,6 +216,11 @@ class SignupIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: str = Field(min_length=1, max_length=160)
+    # Beta-kod krävs när HEMBUDGET_BETA_GATE=1. Saknas eller fel kod
+    # → 403 BetaCodeRequired/Invalid. Se _validate_beta_code().
+    beta_code: Optional[str] = Field(
+        default=None, max_length=40,
+    )
 
 
 class ResendIn(BaseModel):
@@ -236,13 +242,82 @@ class SimpleOkOut(BaseModel):
 
 # ---------- Endpoints ----------
 
+def _beta_gate_enabled() -> bool:
+    """Är beta-gating aktiv? Default: ON. Kan stängas av med env-var
+    HEMBUDGET_BETA_GATE=0 (för lokala dev-körningar / framtida release)."""
+    import os as _os
+    return _os.environ.get("HEMBUDGET_BETA_GATE", "1").strip() not in (
+        "0", "false", "no", "off",
+    )
+
+
+def _validate_and_consume_beta_code(
+    s, code: Optional[str],
+) -> None:
+    """Slå upp beta-koden, validera och öka uses_count. Kastar 403 vid
+    saknad/ogiltig/förbrukad/utgången kod. Idempotent commit-flow:
+    consumera koden direkt så två parallella signups med samma kod inte
+    kan båda lyckas."""
+    from ..school.models import BetaCode
+    if not code or not code.strip():
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "beta_code_required",
+                "message": (
+                    "Ange en beta-kod, eller anmäl dig till "
+                    "väntelistan nedan så hör vi av oss."
+                ),
+            },
+        )
+    norm = code.strip().upper()
+    bc = (
+        s.query(BetaCode)
+        .filter(BetaCode.code_norm == norm)
+        .first()
+    )
+    if bc is None or not bc.active:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "beta_code_invalid",
+                "message": "Ogiltig beta-kod.",
+            },
+        )
+    if bc.expires_at is not None and bc.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "beta_code_expired",
+                "message": "Beta-koden har gått ut.",
+            },
+        )
+    if bc.uses_count >= bc.max_uses:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "beta_code_exhausted",
+                "message": "Beta-koden är förbrukad.",
+            },
+        )
+    bc.uses_count += 1
+    bc.last_used_at = datetime.utcnow()
+    if bc.uses_count >= bc.max_uses:
+        bc.active = False
+    s.flush()
+
+
 def _create_open_signup(
     payload: SignupIn, request: Request, *, is_family: bool,
 ) -> SimpleOkOut:
     """Delad signup-logik för lärare och förälder. Skapar en overifierad
     Teacher-rad och skickar verifieringsmail. Sätter is_family_account
     om signupen gick via familje-flödet — det är den enda skillnaden
-    mellan lärar- och förälder-konto i databasen."""
+    mellan lärar- och förälder-konto i databasen.
+
+    Beta-gating: när HEMBUDGET_BETA_GATE=1 (default) krävs en giltig
+    beta-kod. Koden konsumeras (uses_count++) innan Teacher-raden
+    skapas så att samtidiga signups inte kan båda lyckas."""
     _require_school_mode()
     _require_email_configured()
     check_rate_limit(request, "teacher-signup", RULES_SIGNUP)
@@ -250,6 +325,11 @@ def _create_open_signup(
 
     email = payload.email.lower()
     with master_session() as s:
+        # Validera + konsumera beta-koden FÖRST, innan vi gör något annat.
+        # Då undviker vi att skapa overifierad lärar-rad om koden är fel.
+        if _beta_gate_enabled():
+            _validate_and_consume_beta_code(s, payload.beta_code)
+
         existing = s.query(Teacher).filter(Teacher.email == email).first()
         if existing is not None:
             # Vi vill undvika att läcka om mailen redan finns. Svara OK
@@ -293,6 +373,66 @@ def parent_signup(payload: SignupIn, request: Request) -> SimpleOkOut:
     framtida policyändringar (t.ex. annan e-post-mall, annat välkomst-
     paket) kan ändras här utan att röra lärar-flödet."""
     return _create_open_signup(payload, request, is_family=True)
+
+
+# === Beta-väntelistan ===
+
+class WaitlistIn(BaseModel):
+    email: EmailStr
+    role: str = Field(default="other", max_length=20)
+
+
+@router.post("/waitlist/signup", response_model=SimpleOkOut)
+def waitlist_signup(payload: WaitlistIn, request: Request) -> SimpleOkOut:
+    """Anmäl intresse till beta-väntelistan. Idempotent på e-posten —
+    samma adress flera gånger uppdaterar bara `last_signup_at` +
+    `signup_count`. Svarar alltid OK för att inte läcka info om
+    e-posten redan finns.
+
+    Spam-skydd: rate-limit (samma som signup) + Turnstile.
+    """
+    _require_school_mode()
+    check_rate_limit(request, "teacher-signup", RULES_SIGNUP)
+    verify_turnstile(request, required=True)
+
+    role = payload.role.lower().strip() or "other"
+    if role not in ("teacher", "parent", "other"):
+        role = "other"
+
+    email_norm = payload.email.lower().strip()
+    # Hash IP för anti-spam-tracking utan att lagra plain
+    import hashlib as _hl_wl
+    client_ip = request.client.host if request.client else ""
+    ip_hash = _hl_wl.sha256(
+        (client_ip + "|hembudget-waitlist").encode()
+    ).hexdigest()[:32] if client_ip else None
+    ua = (request.headers.get("user-agent") or "")[:200]
+
+    from ..school.models import WaitlistEntry
+    with master_session() as s:
+        existing = (
+            s.query(WaitlistEntry)
+            .filter(WaitlistEntry.email_norm == email_norm)
+            .first()
+        )
+        if existing is not None:
+            existing.last_signup_at = datetime.utcnow()
+            existing.signup_count = (existing.signup_count or 1) + 1
+            # Uppdatera roll om den ändrats (t.ex. "other" → "teacher")
+            if role != "other":
+                existing.role = role
+            s.flush()
+        else:
+            s.add(WaitlistEntry(
+                email=payload.email,
+                email_norm=email_norm,
+                role=role,
+                ip_hash=ip_hash,
+                user_agent=ua,
+                signup_count=1,
+            ))
+            s.flush()
+    return SimpleOkOut(ok=True)
 
 
 @router.post("/teacher/request-verify-resend", response_model=SimpleOkOut)

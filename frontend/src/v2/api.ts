@@ -62,6 +62,32 @@ export type HubMonthSummary = {
   saved: number;
   save_rate_pct: number | null;
   transactions_count: number;
+  start_of_month_balance: number;
+};
+
+export type HubEventItem = {
+  id: number;
+  kind: "event" | "invite";
+  title: string;
+  category: string;
+  cost: number;
+  deadline: string;
+  source: string;
+  from_name: string | null;
+  days_until_deadline: number;
+  declinable: boolean;
+};
+
+export type HubGameTime = {
+  iso_date: string;
+  weekday_label: string;
+  full_label: string;
+  short_label: string;
+  year_month: string;
+  real_anchor_at: string;
+  seconds_per_game_day: number;
+  seconds_into_current_day: number;
+  seconds_until_next_day: number;
 };
 
 export type HubData = {
@@ -75,6 +101,67 @@ export type HubData = {
   month_summary: HubMonthSummary;
   total_balance: number;
   accounts_count: number;
+  pending_events: HubEventItem[];
+  game_time: HubGameTime | null;
+};
+
+// === Events / sociala händelser (V2) ===
+
+export type V2EventItem = {
+  id: number;
+  event_code: string;
+  title: string;
+  description: string;
+  category: string;
+  cost: number;
+  proposed_date: string | null;
+  deadline: string;
+  source: string;
+  status: string;
+  social_invite_allowed: boolean;
+  declinable: boolean;
+  created_at: string;
+};
+
+export type V2InviteItem = {
+  id: number;
+  from_student_id: number;
+  from_name: string;
+  event_code: string;
+  event_title: string;
+  proposed_date: string | null;
+  deadline: string;
+  cost: number;
+  cost_split_model: string;
+  swish_amount: number | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type V2ClassmateItem = {
+  student_id: number;
+  display_name: string;
+  class_label: string | null;
+};
+
+export type V2EventAcceptResponse = {
+  event_id: number;
+  status: string;
+  transaction_id: number | null;
+  cost_applied: number;
+  income_applied: number;
+  impact_applied: Record<string, number>;
+  pedagogical_note: string;
+};
+
+export type V2EventDeclineResponse = {
+  event_id: number;
+  status: string;
+  impact_applied: Record<string, number>;
+  pedagogical_note: string;
+  current_decline_streak: number;
+  show_streak_nudge: boolean;
 };
 
 export type BankAccount = {
@@ -114,6 +201,10 @@ export type BankUpcoming = {
   is_paid: boolean;
   mail_id: number | null;
   is_signed: boolean;
+  // Spel-dagar tills förfall · negativa = förfluten. Räknas backend-
+  // side mot current_game_date() så frontend slipper jämföra mot
+  // real-tid (= maj 2026 medan spel-tid är jan).
+  days_until_expected: number;
 };
 
 export type BankSummary = {
@@ -126,6 +217,9 @@ export type BankSummary = {
   transactions_count: number;
   next_release_at: string | null;
   pending_count: number;
+  // Spel-tid · ISO. Frontend använder detta som "today" för
+  // datum-jämförelser (DAYS_UNTIL etc.) istället för new Date().
+  today_game: string | null;
 };
 
 export type BankData = {
@@ -442,6 +536,70 @@ export type V2CreditFactor = {
   severity: "good" | "warn" | "bad" | "neutral";
 };
 
+// === Huvudbok / Ledger (V2) =============================================
+// Rapporterar balansrapport per konto + resultaträkning per kategori +
+// avstämningskontroller. Svarar på GET /v2/ledger/?month=YYYY-MM eller ?year=YYYY.
+
+export type LedgerAccount = {
+  id: number;
+  name: string;
+  type: string;
+  opening: number;
+  income: number;
+  expense: number;
+  transfer_in: number;
+  transfer_out: number;
+  closing: number;
+  fund_value?: number | null;
+  total_value?: number | null;
+  tx_count: number;
+};
+
+export type LedgerCategoryRow = {
+  id: number | null;
+  name: string;
+  income: number;
+  expense: number;
+  net: number;
+  tx_count: number;
+};
+
+export type LedgerCheck = {
+  type: string;
+  label: string;
+  status: "ok" | "warn" | "fail";
+  message: string;
+  detail_count?: number;
+};
+
+export type LedgerData = {
+  period: {
+    label: string;
+    start: string;
+    end: string;
+  };
+  locked_months: string[];
+  accounts: LedgerAccount[];
+  categories: LedgerCategoryRow[];
+  loans?: Array<{
+    name: string;
+    expected_balance: number;
+    matched_balance: number;
+    delta: number;
+  }>;
+  upcoming_summary?: Record<string, unknown>;
+  totals: {
+    income: number;
+    expenses: number;
+    net_result: number;
+    assets: number;
+    liabilities: number;
+    net_worth: number;
+    uncategorized_count: number;
+  };
+  checks: LedgerCheck[];
+};
+
 export type LoanData = {
   student_id: number;
   total_debt: number;
@@ -454,6 +612,42 @@ export type LoanData = {
 };
 
 // === Fas 2A · Lånegivaren ===
+
+export type V2LoanKind = "privatlan" | "billan" | "bolan" | "smslan";
+
+export type V2LoanApplyRequest = {
+  loan_kind: V2LoanKind;
+  amount: number;
+  term_months: number;
+  purpose?: string;
+  debit_account_id?: number;
+  accept_offer?: boolean;
+};
+
+export type V2WellbeingImpact = {
+  axis: string;
+  delta: number;
+  explanation: string;
+};
+
+export type V2LoanApplyResponse = {
+  application_id: number;
+  approved: boolean;
+  decline_reason?: string | null;
+  loan_kind: string;
+  score: number;
+  grade: string;
+  score_components: Record<string, number>;
+  kalp_passed: boolean;
+  kalp_left_after_all: number;
+  offered_rate?: number | null;
+  offered_monthly_payment?: number | null;
+  offered_total_repay?: number | null;
+  lender?: string | null;
+  loan_id?: number | null;
+  wellbeing_impact: V2WellbeingImpact[];
+  warnings: string[];
+};
 
 export type V2KALPResponse = {
   id: number;
@@ -685,6 +879,30 @@ export type V2ArbetsformedlingenJob = {
   education_level: string;
   match_score: number;
   description: string;
+  // Sprint 7 · utökad annons-data
+  company_blurb: string;
+  job_description: string[];
+  requirements: string[];
+  meriter: string[];
+  benefits: string[];
+  employment_type: string;
+  application_deadline: string;
+  work_hours: string;
+  start_date: string;
+};
+
+export type V2CoverLetterPreviewIn = {
+  text: string;
+  yrke_display: string;
+  employer_name: string;
+  job_description?: string;
+  requirements?: string[];
+};
+
+export type V2CoverLetterPreviewOut = {
+  score: number;
+  feedback_md: string;
+  highlights: string[];
 };
 
 export type V2ArbetsformedlingenJobsResponse = {
@@ -711,6 +929,11 @@ export type V2ArbetsformedlingenApplication = {
   rounds_data: Record<string, unknown> | null;
   started_on: string;
   completed_on: string | null;
+  // Sprint 7 · läses av elev + lärar-vy
+  cover_letter_text: string | null;
+  case_answer_text: string | null;
+  ai_feedback_md: string | null;
+  job_ad_data: Record<string, unknown> | null;
 };
 
 export type V2ArbetsformedlingenRoundOut = {
@@ -2339,6 +2562,67 @@ export type OnboardingEventType =
 export const v2Api = {
   status: () => api<V2Status>("/v2/status"),
   hub: () => api<HubData>("/v2/hub"),
+  gameTime: () => api<HubGameTime>("/v2/game-time"),
+  // === Events / sociala händelser ===
+  eventsPending: () =>
+    api<{ events: V2EventItem[]; count: number }>("/v2/events/pending"),
+  eventsHistory: (limit: number = 30) =>
+    api<{ events: V2EventItem[]; count: number }>(
+      `/v2/events/history?limit=${limit}`,
+    ),
+  eventAccept: (id: number, accountId?: number, decisionReason?: string) =>
+    api<V2EventAcceptResponse>(`/v2/events/${id}/accept`, {
+      method: "POST",
+      body: JSON.stringify({
+        account_id: accountId,
+        decision_reason: decisionReason,
+      }),
+    }),
+  eventDecline: (id: number, decisionReason?: string) =>
+    api<V2EventDeclineResponse>(`/v2/events/${id}/decline`, {
+      method: "POST",
+      body: JSON.stringify({ decision_reason: decisionReason }),
+    }),
+  eventClassmates: () =>
+    api<{ classmates: V2ClassmateItem[]; invites_enabled: boolean }>(
+      "/v2/events/classmates",
+    ),
+  eventInviteClassmates: (
+    eventId: number,
+    classmateIds: number[],
+    message?: string,
+  ) =>
+    api<{ created: number; invite_ids: number[] }>(
+      "/v2/events/invite-classmates",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          event_id: eventId,
+          classmate_ids: classmateIds,
+          message,
+        }),
+      },
+    ),
+  eventInvitations: () =>
+    api<{ invitations: V2InviteItem[]; count: number }>(
+      "/v2/events/invitations",
+    ),
+  eventInviteRespond: (
+    inviteId: number,
+    accept: boolean,
+    decisionReason?: string,
+  ) =>
+    api<{ status: string; resulting_event_id: number | null }>(
+      "/v2/events/invitations/respond",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          invite_id: inviteId,
+          accept,
+          decision_reason: decisionReason,
+        }),
+      },
+    ),
   bank: (limitTransactions: number = 30) =>
     api<BankData>(`/v2/bank?limit_transactions=${limitTransactions}`),
   budget: (month?: string) =>
@@ -2765,6 +3049,18 @@ export const v2Api = {
       `/v2/arbetsformedlingen/applications/${appId}/abandon`,
       { method: "POST" },
     ),
+  /** AI-feedback på personligt brev INNAN submit. Hjälper eleven
+   *  iterera utan att förbruka rond 1-tillfället. */
+  arbetsformedlingenCoverLetterPreview: (
+    body: V2CoverLetterPreviewIn,
+  ) =>
+    api<V2CoverLetterPreviewOut>(
+      "/v2/arbetsformedlingen/cover-letter-preview",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
   teacherAFApplications: (studentId: number) =>
     api<V2ArbetsformedlingenApplication[]>(
       `/v2/teacher/arbetsformedlingen/applications/${studentId}`,
@@ -3105,7 +3401,13 @@ export const v2Api = {
     upcomingId: number,
     body: { expected_date?: string; debit_account_id?: number },
   ) =>
-    api<unknown>(`/upcoming/${upcomingId}`, {
+    api<{
+      id: number;
+      expected_date: string;
+      debit_account_id: number | null;
+      autogiro: boolean;
+      is_paid: boolean;
+    }>(`/v2/upcoming/${upcomingId}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
@@ -3277,6 +3579,35 @@ export const v2Api = {
     api<void>(`/v2/teacher/students/${studentId}`, {
       method: "DELETE",
     }),
+  /** Status för pågående/nyligen klara student-raderingar. UI pollar
+   * denna under pågående delete för att visa 'Raderar…' / 'Klar' / 'Fel'. */
+  teacherDeleteJobs: () =>
+    api<{
+      rows: Array<{
+        student_id: number;
+        student_name: string;
+        status: "queued" | "running" | "done" | "failed";
+        started_at: number;
+        finished_at: number | null;
+        error: string | null;
+      }>;
+      pending_count: number;
+    }>(`/v2/teacher/delete-jobs`),
+  /** Starta bakgrunds-radering av alla mina elever. Returnerar omedelbart. */
+  teacherDeleteAllMyStudents: () =>
+    api<{ status: string; teacher_id: number }>(
+      `/v2/teacher/bulk-delete-all-my-students`,
+      { method: "DELETE" },
+    ),
+  /** Polla status på pågående bulk-delete. */
+  teacherBulkDeleteStatus: () =>
+    api<{
+      status: "idle" | "queued" | "running" | "done" | "failed";
+      deleted_count?: number;
+      failed_count?: number;
+      failed_ids?: number[];
+      error?: string;
+    }>(`/v2/teacher/bulk-delete-status`),
   // === /v2/teacher/students/{id}/activity-log (Fas 2Y) ===
   teacherStudentHistory: (studentId: number, limit = 100) =>
     api<V2HistoryResponse>(
@@ -3466,6 +3797,29 @@ export const v2Api = {
       `/teacher/modules/${moduleId}/steps/${stepId}`,
       { method: "DELETE" },
     ),
+  /** AI-skiss · genererar modul-utkast (titel + summary + steg) från en
+   *  beskrivning. Kräver att lärarens ai_enabled=true. Lärar-vyn visar
+   *  utkastet i en modal innan modul + steg sparas via separata POSTs. */
+  teacherAIGenerateModuleDraft: (prompt: string) =>
+    api<{
+      raw: string;
+      parsed: {
+        title: string;
+        summary: string;
+        steps: {
+          kind: "read" | "watch" | "reflect" | "task" | "quiz";
+          title: string;
+          body?: string;
+          sort_order?: number;
+        }[];
+      };
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+    }>("/ai/modules/generate", {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
+    }),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{
@@ -3679,6 +4033,12 @@ export const v2Api = {
       }`,
     ),
   lan: () => api<LoanData>("/v2/lan"),
+  /** Huvudbok / Ledger · period kan vara YYYY-MM eller YYYY. */
+  huvudbok: (period: string) => {
+    const isMonth = period.length === 7 && period.includes("-");
+    const qs = isMonth ? `month=${period}` : `year=${period}`;
+    return api<LedgerData>(`/v2/ledger/?${qs}`);
+  },
   /** Räkna KALP för ett tänkt lånebelopp (sparas i scope-DB). */
   kalp: (loanAmount: number, loanTermMonths: number = 300) =>
     api<V2KALPResponse>("/v2/lan/kalp", {
@@ -3687,6 +4047,12 @@ export const v2Api = {
         loan_amount: loanAmount,
         loan_term_months: loanTermMonths,
       }),
+    }),
+  /** Eleven ansöker om lån. accept_offer=false = bara prövning. */
+  loanApply: (req: V2LoanApplyRequest) =>
+    api<V2LoanApplyResponse>("/v2/lan/apply", {
+      method: "POST",
+      body: JSON.stringify(req),
     }),
   /** Lärar-API · seedа default-katalog (5 produkter). */
   teacherSeedDefaultLoanProducts: (studentId: number) =>

@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -26,7 +26,9 @@ from decimal import Decimal
 from ..db.base import session_scope
 from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
-    MailItem, Loan, LoanPayment, LoanProduct, PaymentMark, CreditCheck, KALPCalculation,
+    MailItem, Loan, LoanPayment, LoanProduct, LoanScheduleEntry,
+    CreditApplication,
+    PaymentMark, CreditCheck, KALPCalculation,
     TaxDeduction, TaxProposal, TaxYearReturn,
     InsurancePolicy, InsuranceClaim,
     UtilitySubscription, UtilityReading,
@@ -218,6 +220,39 @@ class HubMonthSummary(BaseModel):
     # för att inte påstå "0 % sparkvot" när vi faktiskt inte vet.
     save_rate_pct: Optional[float] = None
     transactions_count: int
+    # Saldo i början av månaden = totalt saldo nu MINUS denna månads
+    # netto-flöde (income - expenses). Pedagogiskt viktigt: eleven
+    # ser kontinuiteten "förra månadsslut → flöde i mån → saldo nu".
+    # Annars verkar det som magi att saldo är 15k när "denna mån = -748".
+    start_of_month_balance: float = 0.0
+
+
+class HubEventItem(BaseModel):
+    """Pending social event eller klasskompis-bjudning på Hub-feed."""
+    id: int
+    kind: Literal["event", "invite"]
+    title: str
+    category: str
+    cost: float
+    deadline: _date
+    source: str  # "system" | "classmate_invite" | "teacher_triggered"
+    from_name: Optional[str] = None  # bara för invites
+    days_until_deadline: int
+    declinable: bool
+
+
+class HubGameTime(BaseModel):
+    """Spel-tid · 1 real-timme = 1 spel-vecka. Synkat med biz-tick."""
+    iso_date: str  # "2026-05-07"
+    weekday_label: str  # "Torsdag"
+    full_label: str  # "Torsdag 7 maj 2026"
+    short_label: str  # "7 maj"
+    year_month: str  # "2026-05"
+    real_anchor_at: str  # student.created_at ISO
+    # Real-tid sekunder · för UI-countdown och progress-bar
+    seconds_per_game_day: int = 514  # SECONDS_PER_GAME_DAY
+    seconds_into_current_day: int = 0  # 0..seconds_per_game_day-1
+    seconds_until_next_day: int = 514  # countdown till nästa spel-dag
 
 
 class HubResponse(BaseModel):
@@ -231,11 +266,92 @@ class HubResponse(BaseModel):
     month_summary: HubMonthSummary
     total_balance: float
     accounts_count: int
+    pending_events: list[HubEventItem] = Field(default_factory=list)
+    game_time: Optional[HubGameTime] = None
 
 
 def _current_year_month() -> str:
-    today = _date.today()
-    return f"{today.year:04d}-{today.month:02d}"
+    """Returnerar elevens nuvarande SPEL-månad (synkat med privat-tid).
+
+    Tidigare returnerade detta real-tid (date.today()) → pentagon-axel,
+    bokföring och postlåda visade "2026-05" trots att eleven är på
+    "2026-02" i spel-tiden. Vi använder business.game_clock.current_game_date
+    som löser nuvarande elev från ContextVar och faller tillbaka till
+    real-tid om scope saknas (test/kickstart).
+    """
+    try:
+        from ..business.game_clock import current_game_date
+        d = current_game_date()
+    except Exception:
+        d = _date.today()
+    return f"{d.year:04d}-{d.month:02d}"
+
+
+@router.get("/game-time", response_model=HubGameTime)
+def get_game_time(info: TokenInfo = Depends(require_token)) -> HubGameTime:
+    """Lättviktigt endpoint som returnerar elevens nuvarande spel-tid.
+    Används av sidor som vill defaulta till spel-månad (Bokföring,
+    Postlådan, etc.) utan att behöva hämta hela /v2/hub."""
+    target_sid: Optional[int] = None
+    if info.role == "student" and info.student_id is not None:
+        target_sid = info.student_id
+    elif info.role == "teacher" and info.teacher_id is not None:
+        from ..school.engines import get_current_actor_student
+        target_sid = get_current_actor_student()
+    if target_sid is None:
+        # Fallback: anchor-datum
+        from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+        return HubGameTime(
+            iso_date=GAME_ANCHOR_DATE.isoformat(),
+            weekday_label="Torsdag",
+            full_label="Torsdag 1 januari 2026",
+            short_label="1 januari",
+            year_month=GAME_ANCHOR_DATE.strftime("%Y-%m"),
+            real_anchor_at=datetime.utcnow().isoformat() + "Z",
+        )
+    from ..game_engine.release_schedule import game_date_for
+    with master_session() as ms:
+        stu = ms.get(Student, target_sid)
+        if stu is None or stu.created_at is None:
+            from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+            return HubGameTime(
+                iso_date=GAME_ANCHOR_DATE.isoformat(),
+                weekday_label="Torsdag",
+                full_label="Torsdag 1 januari 2026",
+                short_label="1 januari",
+                year_month=GAME_ANCHOR_DATE.strftime("%Y-%m"),
+                real_anchor_at=datetime.utcnow().isoformat() + "Z",
+            )
+        gy, gm, gd = game_date_for(stu.created_at)
+        gd = max(1, min(28, gd))
+        game_d = _date(gy, gm, gd)
+        weekdays = ["Måndag", "Tisdag", "Onsdag", "Torsdag",
+                    "Fredag", "Lördag", "Söndag"]
+        months = [
+            "januari", "februari", "mars", "april", "maj",
+            "juni", "juli", "augusti", "september", "oktober",
+            "november", "december",
+        ]
+        wd = weekdays[game_d.weekday()]
+        mn = months[gm - 1]
+        # Sekunder in i nuvarande spel-dag · för UI-countdown
+        from ..game_engine.release_schedule import SECONDS_PER_GAME_DAY
+        elapsed_real = max(
+            0.0, (datetime.utcnow() - stu.created_at).total_seconds(),
+        )
+        sec_into_day = int(elapsed_real % SECONDS_PER_GAME_DAY)
+        sec_until_next = SECONDS_PER_GAME_DAY - sec_into_day
+        return HubGameTime(
+            iso_date=game_d.isoformat(),
+            weekday_label=wd,
+            full_label=f"{wd} {gd} {mn} {gy}",
+            short_label=f"{gd} {mn}",
+            year_month=f"{gy:04d}-{gm:02d}",
+            real_anchor_at=stu.created_at.isoformat() + "Z",
+            seconds_per_game_day=SECONDS_PER_GAME_DAY,
+            seconds_into_current_day=sec_into_day,
+            seconds_until_next_day=sec_until_next,
+        )
 
 
 @router.get("/hub", response_model=HubResponse)
@@ -249,7 +365,68 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
 
     Demo får tom payload. Lärare med x-as-student-impersonation ser
     elevens vy (för förhandsvisning från v2-elev-detaljen).
+
+    Cache · 20s TTL per student. Sparar 5-10 master_session-anrop +
+    pentagon-beräkning per request. Mutationer (markera-paid,
+    export-to-bank, transfer m.fl.) bustar cache via
+    invalidate_hub_cache(sid) så stale-staleness max ~20s.
     """
+    # === Cache-check innan vi gör nåt jobb ============================
+    target_sid_for_cache: Optional[int] = None
+    if info.role == "student" and info.student_id is not None:
+        target_sid_for_cache = info.student_id
+    elif info.role == "teacher" and info.teacher_id is not None:
+        from ..school.engines import get_current_actor_student
+        target_sid_for_cache = get_current_actor_student()
+
+    if target_sid_for_cache is not None:
+        try:
+            from ..cache import get_cache as _gc_hub
+            cache_key = f"hub:s_{target_sid_for_cache}:v1"
+            cached = _gc_hub().get(cache_key)
+            if cached is not None:
+                return HubResponse.model_validate_json(cached)
+        except Exception:
+            # Cache-fel är aldrig fatalt · fortsätt med live-bygge
+            import logging
+            logging.getLogger(__name__).debug(
+                "hub-cache: read failed · fortsätter live", exc_info=True,
+            )
+
+    response = _build_hub_response(info)
+
+    # === Cache-skriv om vi har en student-id =========================
+    if target_sid_for_cache is not None and response.student_id != 0:
+        try:
+            from ..cache import get_cache as _gc_hub_w
+            cache_key_w = f"hub:s_{target_sid_for_cache}:v1"
+            _gc_hub_w().set(
+                cache_key_w,
+                response.model_dump_json().encode("utf-8"),
+                ttl=20,
+            )
+        except Exception:
+            pass
+    return response
+
+
+def invalidate_hub_cache(student_id: Optional[int]) -> None:
+    """Bust hub-cachen för en elev. Anropas från endpoints som
+    muterar elev-data (mark paid, transfer, accept event etc.) så
+    eleven omedelbart ser uppdaterat tillstånd istället för att
+    vänta TTL ut."""
+    if student_id is None:
+        return
+    try:
+        from ..cache import get_cache as _gc_inv
+        _gc_inv().delete(f"hub:s_{student_id}:v1")
+    except Exception:
+        pass
+
+
+def _build_hub_response(info: TokenInfo) -> HubResponse:
+    """Live-bygge av hub-svaret · ingen caching här. Brukade vara
+    body:n i get_hub() innan vi extraherade en cache-wrapper."""
     # Resolva target-student-id · stöd både egen-elev och lärar-impersonation
     target_sid: Optional[int] = None
     if info.role == "student" and info.student_id is not None:
@@ -290,6 +467,30 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 "get_hub: auto-recovery seed failed för %s",
                 target_sid,
             )
+
+        # Auto-tick · eskalera obetalda fakturor + tick fram nya
+        # spel-månader + släpp Skatteverket-deklaration-events när
+        # spel-tiden passerar SKV:s årliga datum. Cachat per elev,
+        # idempotent. Tysta fel — får aldrig påverka hub-vyn.
+        try:
+            _auto_tick_private_months_if_due(target_sid)
+        except Exception:
+            pass
+        try:
+            # Drag pengar från signerade autogiro-fakturor när
+            # förfallodag passerat (i spel-tid). Annars syns de
+            # som '1 d sen' i bank trots att eleven signerat.
+            _auto_debit_signed_upcomings_if_due(target_sid)
+        except Exception:
+            pass
+        try:
+            _seed_skv_deklaration_events(target_sid)
+        except Exception:
+            pass
+        try:
+            _run_dunning_for_student(target_sid)
+        except Exception:
+            pass
 
     if target_sid is None:
         return HubResponse(
@@ -396,6 +597,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
     )
     total_balance = 0.0
     accounts_count = 0
+    pending_events: list[HubEventItem] = []
 
     try:
         with session_scope() as s:
@@ -506,11 +708,133 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 if not bool(getattr(acc, "incognito", False)):
                     tot += (cur + fund_total) if fund_total > 0 else cur
             total_balance = float(tot)
+            # Saldo i början av månaden = saldo nu MINUS netto-flöde
+            # i denna månad. Visas i hub-kortet "Underskott/Sparat denna
+            # mån" så eleven förstår kontinuiteten över månadsskiftet.
+            month_summary.start_of_month_balance = round(
+                total_balance - month_summary.saved, 2,
+            )
+
+            # Pending sociala events i scope-DB (max 5 visas på Hub)
+            # Filtrera bort events vars deadline redan passerat — seed-
+            # flödet skapar historiska events (jan-april) som annars
+            # syns som 'pending' i flera månader efter student-skapandet.
+            from ..db.models import StudentEvent as _SE_hub
+            pending_se = (
+                s.query(_SE_hub)
+                .filter(
+                    _SE_hub.status == "pending",
+                    _SE_hub.deadline >= today,
+                )
+                .order_by(_SE_hub.deadline.asc())
+                .limit(5)
+                .all()
+            )
+            for ev in pending_se:
+                pending_events.append(HubEventItem(
+                    id=ev.id,
+                    kind="event",
+                    title=ev.title,
+                    category=ev.category,
+                    cost=float(ev.cost),
+                    deadline=ev.deadline,
+                    source=ev.source,
+                    from_name=None,
+                    days_until_deadline=(ev.deadline - today).days,
+                    declinable=ev.declinable,
+                ))
     except Exception:
         # Scope-DB saknas eller wellbeing failar — returnera minimal
         # data så hubben inte blir vit. Eleven kan fortfarande se
         # karaktär + v2-fält från master.
         pass
+
+    # Inkomna klasskompis-bjudningar (master-DB) — bara för v2-elever
+    try:
+        from ..school.social_models import ClassEventInvite as _CEI_hub
+        with master_session() as ms2:
+            invites = (
+                ms2.query(_CEI_hub)
+                .filter(
+                    _CEI_hub.to_student_id == target_sid,
+                    _CEI_hub.status == "pending",
+                    _CEI_hub.deadline >= _date.today(),
+                )
+                .order_by(_CEI_hub.deadline.asc())
+                .limit(5)
+                .all()
+            )
+            for inv in invites:
+                from_name = None
+                from_st = ms2.get(Student, inv.from_student_id)
+                if from_st is not None:
+                    from_name = from_st.display_name
+                pending_events.append(HubEventItem(
+                    id=inv.id,
+                    kind="invite",
+                    title=inv.event_title,
+                    category="social",
+                    cost=float(inv.swish_amount or 0),
+                    deadline=inv.deadline,
+                    source="classmate_invite",
+                    from_name=from_name,
+                    days_until_deadline=(
+                        inv.deadline - _date.today()
+                    ).days,
+                    declinable=True,
+                ))
+    except Exception:
+        pass
+    pending_events.sort(key=lambda e: e.days_until_deadline)
+
+    # === Spel-tid · 1 real-timme = 1 spel-vecka =================
+    # Beräkna nuvarande spel-datum baserat på student.created_at och
+    # real-tid. Frontend visar det stort i hub-headern.
+    game_time = None
+    try:
+        from ..game_engine.release_schedule import game_date_for
+        with master_session() as _ms_gt:
+            _stu_gt = _ms_gt.get(Student, target_sid)
+            if _stu_gt is not None and _stu_gt.created_at is not None:
+                # game_date_for använder GAME_ANCHOR_DATE som start
+                gy, gm, gd = game_date_for(_stu_gt.created_at)
+                gd = max(1, min(28, gd))  # safety för Python-date
+                from datetime import date as _d_gt
+                game_d = _d_gt(gy, gm, gd)
+                weekdays = ["Måndag", "Tisdag", "Onsdag", "Torsdag",
+                            "Fredag", "Lördag", "Söndag"]
+                months = [
+                    "januari", "februari", "mars", "april", "maj",
+                    "juni", "juli", "augusti", "september", "oktober",
+                    "november", "december",
+                ]
+                wd = weekdays[game_d.weekday()]
+                mn = months[gm - 1]
+                from ..game_engine.release_schedule import (
+                    SECONDS_PER_GAME_DAY,
+                )
+                elapsed_real = max(
+                    0.0,
+                    (datetime.utcnow() - _stu_gt.created_at).total_seconds(),
+                )
+                sec_into_day = int(elapsed_real % SECONDS_PER_GAME_DAY)
+                sec_until_next = SECONDS_PER_GAME_DAY - sec_into_day
+                game_time = HubGameTime(
+                    iso_date=game_d.isoformat(),
+                    weekday_label=wd,
+                    full_label=f"{wd} {gd} {mn} {gy}",
+                    short_label=f"{gd} {mn}",
+                    year_month=f"{gy:04d}-{gm:02d}",
+                    real_anchor_at=_stu_gt.created_at.isoformat() + "Z",
+                    seconds_per_game_day=SECONDS_PER_GAME_DAY,
+                    seconds_into_current_day=sec_into_day,
+                    seconds_until_next_day=sec_until_next,
+                )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "get_hub: game_time-beräkning misslyckades",
+        )
 
     return HubResponse(
         student_id=target_sid,
@@ -522,7 +846,9 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         pentagon=pentagon,
         month_summary=month_summary,
         total_balance=total_balance,
+        pending_events=pending_events,
         accounts_count=accounts_count,
+        game_time=game_time,
     )
 
 
@@ -570,6 +896,10 @@ class BankUpcoming(BaseModel):
     # eleven har exporterat fakturan från postlådan men ännu inte
     # signerat den (BankID-signering eller markera-betald).
     is_signed: bool = False
+    # Antal SPEL-dagar tills förfall · negativa = förfluten. Beräknas
+    # backend-side mot current_game_date() så frontend slipper räkna
+    # mot real-tid (= maj 2026 medan spel-tid är jan).
+    days_until_expected: int = 0
 
 
 class BankSummary(BaseModel):
@@ -584,6 +914,9 @@ class BankSummary(BaseModel):
     # None = inga pending. Frontend kan visa "Nästa transaktion om 2 h".
     next_release_at: Optional[datetime] = None
     pending_count: int = 0
+    # Spel-tid · ISO-datum (synkat med privat). Frontend använder
+    # detta för "dagar kvar"-beräkningar istället för new Date().
+    today_game: Optional[_date] = None
 
 
 class BankResponse(BaseModel):
@@ -634,9 +967,24 @@ def get_bank(
     if info.role != "student" or info.student_id is None:
         return _empty_bank(0)
 
+    # Drag pengar från signerade autogiro-fakturor först · annars
+    # syns banken med upcoming "1 d sen" trots att eleven signerat.
+    # Cache-gated 60s så billigt att köra inline.
+    try:
+        _auto_debit_signed_upcomings_if_due(info.student_id)
+    except Exception:
+        pass
+
     try:
         with session_scope() as s:
-            today = _date.today()
+            # Spel-tid · synkat med privat-tid via business.game_clock.
+            # Tidigare användes _date.today() (= maj 2026 real-tid)
+            # vilket gjorde att osignerade fakturor med spel-januari-
+            # förfallodag försvann ur bank-vyn (filtret 'expected_date
+            # >= today' matchade inget) och nyexporterade fakturor
+            # auto-flyttades till maj 22 istället för spel-tid + 7 d.
+            from ..business.game_clock import current_game_date as _cgd_bank
+            today = _cgd_bank()
             month_start = _date(today.year, today.month, 1)
 
             # 1. Konton + saldo
@@ -757,6 +1105,10 @@ def get_bank(
                 # eller pre-konfigurerat. False = exporterat från
                 # postlådan men ännu inte signerat (visas som
                 # 'Osignerade' i banken).
+                days_until_exp = (
+                    (u.expected_date - today).days
+                    if u.expected_date else 0
+                )
                 upcoming.append(BankUpcoming(
                     id=u.id,
                     name=u.name,
@@ -770,6 +1122,7 @@ def get_bank(
                     is_paid=paid,
                     mail_id=mail_by_upcoming.get(u.id),
                     is_signed=bool(u.autogiro) or paid,
+                    days_until_expected=days_until_exp,
                 ))
 
             # 4. Månads-summa
@@ -824,6 +1177,7 @@ def get_bank(
                         next_pending_tx[0] if next_pending_tx else None
                     ),
                     pending_count=int(pending_tx_count or 0),
+                    today_game=today,
                 ),
                 accounts=accounts_out,
                 recent_transactions=recent_tx,
@@ -1255,10 +1609,35 @@ def update_budget_category(
         # Om eleven sänker en kategori under Konsumentverket-minimum loggas
         # det DIREKT som WellbeingEvent (snarare än vänta på nästa
         # wellbeing-recompute). Pedagogiskt: eleven ser konsekvensen direkt
-        # i pentagon-historiken.
+        # i pentagon-historiken. Familje-aware (sambo/barn) via student-
+        # profile-lookup mot master-DB.
         if not body.is_income:
             from ..wellbeing.minimums import check_against_minimum
-            check = check_against_minimum(cat.name, int(body.planned_amount))
+            _kv_profile = None
+            try:
+                from ..school.models import StudentProfile as _SP_kv
+                with master_session() as _msdb_kv:
+                    _kv_profile = (
+                        _msdb_kv.query(_SP_kv)
+                        .filter(_SP_kv.student_id == info.student_id)
+                        .first()
+                    )
+                    if _kv_profile is not None:
+                        # Detacha så vi kan använda fältvärdena
+                        class _Snap:
+                            pass
+                        _snap = _Snap()
+                        for f in (
+                            "age", "family_status", "children_ages",
+                            "housing_type",
+                        ):
+                            setattr(_snap, f, getattr(_kv_profile, f, None))
+                        _kv_profile = _snap
+            except Exception:
+                _kv_profile = None
+            check = check_against_minimum(
+                cat.name, int(body.planned_amount), profile=_kv_profile,
+            )
             if check.is_violation:
                 try:
                     from ..game_engine.pentagon import apply_pentagon_delta
@@ -1916,6 +2295,39 @@ def get_mail(
 
     Demo/teacher får tom payload.
     """
+    # Auto-tick · eskalera obetalda fakturor innan vi listar mail
+    # så eleven ser nya reminder-mail i samma load. Cachat 60s.
+    # Plus auto-tick nya privata månader (1 real-timme = 1 spel-vecka)
+    # — när eleven driver karaktären framåt seedar vi nästa månad så
+    # postlådan fortsätter fyllas.
+    # Plus släpp Skatteverket-deklaration-mail per spel-år.
+    if info.role == "student" and info.student_id is not None:
+        try:
+            _auto_tick_private_months_if_due(info.student_id)
+        except Exception:
+            pass
+        try:
+            # Drag pengar från signerade autogiro-fakturor som
+            # förfaller i spel-tid · markerar mailet som paid.
+            _auto_debit_signed_upcomings_if_due(info.student_id)
+        except Exception:
+            pass
+        # Migrationsfix · äldre mail stämplades med utcnow → "7 maj"
+        # överallt. Normaliserar received_at till spel-tid baserat på
+        # due_date. Cache-gated 10 min så billig.
+        try:
+            _normalize_mail_received_at_if_seed_stamped(info.student_id)
+        except Exception:
+            pass
+        try:
+            _seed_skv_deklaration_events(info.student_id)
+        except Exception:
+            pass
+        try:
+            _run_dunning_for_student(info.student_id)
+        except Exception:
+            pass
+
     if info.role != "student" or info.student_id is None:
         return _empty_mail(0)
 
@@ -2166,7 +2578,7 @@ def update_mail_status(
             except Exception:
                 pass
 
-        return V2MailItemRow(
+        result = V2MailItemRow(
             id=m.id,
             sender=m.sender,
             sender_short=m.sender_short,
@@ -2187,6 +2599,9 @@ def update_mail_status(
             bankgiro=m.bankgiro,
             notes=m.notes,
         )
+    # Bust hub-cachen så ohanterade-räknaren uppdateras direkt
+    invalidate_hub_cache(info.student_id)
+    return result
 
 
 # === Exportera brev till banken (skapar UpcomingTransaction) ===
@@ -2262,14 +2677,19 @@ def export_mail_to_bank(
                     amount=float(existing.amount),
                 )
 
-        expected = body.expected_date or m.due_date or _date.today()
+        expected = body.expected_date or m.due_date
+        if expected is None:
+            from ..business.game_clock import current_game_date as _cgd_exp
+            expected = _cgd_exp()
         # Om eleven exporterar en faktura med förfluten due-date,
-        # flytta auto till idag + 7 dagar så banken hinner signera
+        # flytta auto till spel-idag + 7 dagar så banken hinner signera
         # och autogiro fungerar (annars hamnar den i 'past' och
         # försvinner från bankens upcoming-vy).
-        if expected < _date.today():
+        from ..business.game_clock import current_game_date as _cgd_today
+        today_game = _cgd_today()
+        if expected < today_game:
             from datetime import timedelta as _td_exp
-            expected = _date.today() + _td_exp(days=7)
+            expected = today_game + _td_exp(days=7)
         amount_abs = abs(Decimal(str(m.amount)))
 
         upc = UpcomingTransaction(
@@ -2290,13 +2710,14 @@ def export_mail_to_bank(
         m.upcoming_id = upc.id
         m.status = "exported"
         s.flush()
-
-        return V2MailExportResponse(
+        export_result = V2MailExportResponse(
             mail_id=m.id,
             upcoming_id=upc.id,
             expected_date=upc.expected_date,
             amount=float(upc.amount),
         )
+    invalidate_hub_cache(info.student_id)
+    return export_result
 
 
 # === Överföring mellan elevens egna konton ===
@@ -2375,7 +2796,13 @@ def create_v2_transfer(
                     f"{int(balance)} kr.",
                 )
 
-        tx_date = body.transfer_date or _date.today()
+        # Spel-tid · annars stämplas överföringar med real-tid (=
+        # maj 2026) trots att eleven är på spel-januari.
+        if body.transfer_date is not None:
+            tx_date = body.transfer_date
+        else:
+            from ..business.game_clock import current_game_date as _cgd_v2tr
+            tx_date = _cgd_v2tr()
         descr = (body.description or "").strip() \
             or f"Överföring till {dst.name}"
         # Idempotency-hash: säker även om eleven trycker två gånger
@@ -2423,12 +2850,94 @@ def create_v2_transfer(
         out_tx.transfer_pair_id = in_tx.id
         in_tx.transfer_pair_id = out_tx.id
         s.flush()
-
-        return V2TransferResponse(
+        transfer_result = V2TransferResponse(
             source_tx_id=out_tx.id,
             destination_tx_id=in_tx.id,
             amount=float(amount),
             transfer_date=tx_date,
+        )
+    invalidate_hub_cache(info.student_id)
+    return transfer_result
+
+
+# === Upcoming-uppdatering (V2 · /upcoming-V1 är gateblockad i school) ===
+
+class V2UpcomingUpdateRequest(BaseModel):
+    """Eleven flyttar förfallodag eller byter debiterande konto.
+
+    Signerade dragningar (autogiro=True) blockeras → eleven måste
+    avsigna och signera om för att ändra datum (matchar verkliga
+    bankavtal: en signerad autogiro-fullmakt kan inte godtyckligt
+    ändras utan ny signering).
+    """
+    expected_date: Optional[_date] = None
+    debit_account_id: Optional[int] = None
+
+
+class V2UpcomingUpdateResponse(BaseModel):
+    id: int
+    expected_date: _date
+    debit_account_id: Optional[int]
+    autogiro: bool
+    is_paid: bool
+
+
+@router.patch(
+    "/upcoming/{upcoming_id}",
+    response_model=V2UpcomingUpdateResponse,
+)
+def update_upcoming_v2(
+    upcoming_id: int,
+    body: V2UpcomingUpdateRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2UpcomingUpdateResponse:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever",
+        )
+    with session_scope() as s:
+        u = s.get(UpcomingTransaction, upcoming_id)
+        if u is None:
+            raise HTTPException(404, "Upcoming hittades inte")
+        is_paid = u.matched_transaction_id is not None
+        if is_paid:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Fakturan är redan betald — datum kan inte ändras.",
+            )
+        # Pedagogisk regel: signerad autogiro är ett bindande avtal med
+        # banken. Eleven måste avsigna fakturan i postlådan först om
+        # förfallodatum behöver ändras.
+        if (
+            body.expected_date is not None
+            and bool(u.autogiro)
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Fakturan är signerad via BankID. Avsigna i "
+                "postlådan först om du behöver flytta datumet — "
+                "sedan signerar du om med nytt datum.",
+            )
+        if body.expected_date is not None:
+            u.expected_date = body.expected_date
+            # debit_date följer expected_date om den inte explicit satts
+            if u.debit_date is None or u.debit_date == u.expected_date:
+                u.debit_date = body.expected_date
+        if body.debit_account_id is not None:
+            # Validera att kontot finns + tillhör eleven
+            acc = s.get(Account, body.debit_account_id)
+            if acc is None:
+                raise HTTPException(
+                    400, f"Konto {body.debit_account_id} hittades inte",
+                )
+            u.debit_account_id = body.debit_account_id
+        s.flush()
+        return V2UpcomingUpdateResponse(
+            id=u.id,
+            expected_date=u.expected_date,
+            debit_account_id=u.debit_account_id,
+            autogiro=bool(u.autogiro),
+            is_paid=is_paid,
         )
 
 
@@ -3606,12 +4115,19 @@ def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
             # frekvens).
             from datetime import timedelta as _td
             check = latest_credit_check(s)
+            # Räkna alltid om om vi inte har student_id/profile-data
+            # i existerande cache (gamla rader använde formel utan
+            # ålder/familj/boende = base 100, gav alla A).
             stale = (
                 check is None
                 or (datetime.utcnow() - check.computed_at) > _td(days=7)
+                or check.uc_score_value == 100
             )
             if stale and annual_gross_dec > 0:
-                check = compute_credit_check(s, annual_gross_dec)
+                check = compute_credit_check(
+                    s, annual_gross_dec,
+                    student_id=info.student_id,
+                )
 
             if check is not None:
                 credit_class = check.uc_score_class
@@ -3938,6 +4454,708 @@ def post_kalp(
         )
 
 
+# === Eleven ansöker själv om lån · /v2/lan/apply ===
+#
+# Verklighetstrogen lånesimulering. Eleven kan ansöka om fyra lånetyper:
+# privatlån, billån, bolån, SMS-lån. Varje lånetyp har:
+#   - Eget belopp/löptid-spann (verklighetsbaserat)
+#   - Egen ränta-bana (baseras på elevens UC-score)
+#   - Egen godkännande-tröskel (UC + KALP)
+#   - Egen pedagogisk wellbeing-impact (SMS-lån varnar safety; bolån
+#     är "stort beslut" → safety-)
+#
+# Hela flödet är spårbart för läraren via StudentActivity + lagras
+# alltid i CreditApplication (även avslag/abandon).
+
+LoanKind = Literal["privatlan", "billan", "bolan", "smslan"]
+
+
+# Specs per lånetyp — verklighetstrogna ranges (2024 svenska marknaden)
+_LOAN_KIND_SPECS: dict[str, dict] = {
+    "privatlan": {
+        "min_amount": 10_000,
+        "max_amount": 500_000,
+        "min_term": 12,
+        "max_term": 144,  # 12 år
+        "min_score": 500,  # C+
+        "rate_at_min_score": 0.12,  # 12 %
+        "rate_at_max_score": 0.045,  # 4.5 %
+        "lenders": ["Avanza", "SEB", "Marginalen", "Resurs"],
+        "label": "Privatlån",
+        "category_hint": "Privatlån",
+        "wellbeing": {
+            "economy": -3,
+            "safety": -2,
+        },
+        "deposit": True,  # pengarna går in på lönekontot
+    },
+    "billan": {
+        "min_amount": 50_000,
+        "max_amount": 500_000,
+        "min_term": 36,
+        "max_term": 84,  # 7 år
+        "min_score": 600,  # B+
+        "rate_at_min_score": 0.08,
+        "rate_at_max_score": 0.04,
+        "lenders": [
+            "Volkswagen Finans", "Toyota Financial",
+            "Marginalen Bank", "Nordea Finans",
+        ],
+        "label": "Billån",
+        "category_hint": "Billån",
+        "wellbeing": {
+            "economy": -2,
+            "safety": +1,  # bil ger trygghet/mobilitet
+        },
+        "deposit": False,  # pengarna går till bilförsäljaren — inte synligt
+    },
+    "bolan": {
+        "min_amount": 200_000,
+        "max_amount": 5_000_000,
+        "min_term": 120,  # 10 år
+        "max_term": 600,  # 50 år
+        "min_score": 600,
+        "rate_at_min_score": 0.055,
+        "rate_at_max_score": 0.025,
+        "lenders": ["SBAB", "Handelsbanken", "Swedbank", "SEB"],
+        "label": "Bolån",
+        "category_hint": "Bolån",
+        "wellbeing": {
+            "economy": -2,
+            "safety": +3,  # eget hem ökar trygghet
+        },
+        "deposit": False,  # går till säljaren
+    },
+    "smslan": {
+        "min_amount": 1_000,
+        "max_amount": 30_000,
+        "min_term": 1,
+        "max_term": 12,
+        "min_score": 0,  # ingen tröskel — det är poängen, det är en fälla
+        "rate_at_min_score": 0.50,  # 50 % effektiv årsränta
+        "rate_at_max_score": 0.30,  # 30 % effektiv årsränta minimum
+        "lenders": ["Folkia", "Klarna Express", "Trustbuddy", "MobilLån"],
+        "label": "SMS-lån",
+        "category_hint": "Privatlån",
+        "wellbeing": {
+            "economy": -5,
+            "safety": -8,  # tydlig pedagogisk varningssignal
+        },
+        "deposit": True,
+        "high_cost": True,
+    },
+}
+
+
+def _annuity_monthly(
+    principal: Decimal, annual_rate: float, months: int,
+) -> Decimal:
+    """Annuitetsmånadsbetalning. annual_rate är decimaltal (0.05 = 5 %)."""
+    if months <= 0:
+        return Decimal("0")
+    if annual_rate <= 0:
+        return (principal / Decimal(months)).quantize(Decimal("0.01"))
+    r = Decimal(str(annual_rate)) / Decimal("12")
+    n = months
+    factor = (r * (1 + r) ** n) / ((1 + r) ** n - 1)
+    return (principal * factor).quantize(Decimal("0.01"))
+
+
+def _rate_for_score(spec: dict, score: int) -> float:
+    """Linjär interpolering av ränta utifrån score.
+
+    Score >= 800 → bästa räntan. Score <= spec['min_score'] → sämsta.
+    SMS-lån: även "bra" score får 30 % — det är inneboende högkostnad.
+    """
+    min_score = spec["min_score"]
+    rate_low = spec["rate_at_max_score"]
+    rate_high = spec["rate_at_min_score"]
+    if score >= 800:
+        return rate_low
+    if score <= min_score:
+        return rate_high
+    # Lerp
+    frac = (score - min_score) / (800 - min_score)
+    return round(rate_high - (rate_high - rate_low) * frac, 4)
+
+
+def _pick_lender(spec: dict, student_id: int, amount: int) -> str:
+    """Deterministiskt val av bank baserat på elev + belopp."""
+    import hashlib as _hl
+    key = f"{student_id}-{amount}-{spec['label']}".encode()
+    h = int(_hl.sha256(key).hexdigest()[:8], 16)
+    return spec["lenders"][h % len(spec["lenders"])]
+
+
+def _compute_uc_for_apply(
+    scope_session: Session,
+    student_id: int,
+) -> "ScoreResult":  # noqa: F821 — typed via import inside func
+    """Räkna fram aktuell UC-score för en elev. Reutiliserar
+    bank.py:_compute_credit_for_student-logiken med v2-indata.
+    """
+    from ..school.credit_scoring import compute_score
+    from ..db.models import PaymentReminder, ScheduledPayment
+
+    late_payments = scope_session.query(PaymentReminder).count()
+    reminders_high = (
+        scope_session.query(PaymentReminder)
+        .filter(PaymentReminder.reminder_no >= 3)
+        .count()
+    )
+    failed_payments = (
+        scope_session.query(ScheduledPayment)
+        .filter(ScheduledPayment.status == "failed_no_funds")
+        .count()
+    )
+    debt_total = Decimal("0")
+    for L in scope_session.query(Loan).filter(Loan.active.is_(True)).all():
+        debt_total += Decimal(L.principal_amount or 0)
+
+    # Sparbuffer = (sparkonto + ISK) / snittutgifter senaste 3 mån
+    savings_balance = Decimal("0")
+    for acc in scope_session.query(Account).filter(
+        Account.type.in_(("savings", "isk")),
+    ).all():
+        ob = acc.opening_balance or Decimal("0")
+        from sqlalchemy import func as _sf
+        mv = scope_session.query(
+            _sf.coalesce(_sf.sum(Transaction.amount), 0),
+        ).filter(Transaction.account_id == acc.id).scalar() or Decimal("0")
+        savings_balance += ob + Decimal(str(mv))
+
+    today = _date.today()
+    cutoff = today - timedelta(days=90)
+    from sqlalchemy import func as _sf2
+    expenses = scope_session.query(
+        _sf2.coalesce(_sf2.sum(Transaction.amount), 0),
+    ).filter(
+        Transaction.amount < 0,
+        Transaction.date >= cutoff,
+    ).scalar() or 0
+    avg_monthly_expense = abs(Decimal(str(expenses))) / 3 or Decimal("1")
+    savings_buffer_months = (
+        float(savings_balance / avg_monthly_expense)
+        if avg_monthly_expense > 0 else 0.0
+    )
+
+    # Master-DB: profil + employer-satisfaction + ålder
+    with master_session() as ms:
+        profile = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        from ..school.employer_models import EmployerSatisfaction
+        sat = (
+            ms.query(EmployerSatisfaction)
+            .filter(EmployerSatisfaction.student_id == student_id)
+            .first()
+        )
+        sat_score = sat.score if sat else 70
+
+        gross_annual = (
+            Decimal(profile.gross_salary_monthly * 12)
+            if profile else Decimal("1")
+        )
+        debt_ratio = (
+            float(debt_total / gross_annual) if gross_annual > 0 else 0.0
+        )
+
+        st = ms.get(Student, student_id)
+        months_on_platform = 0
+        if st and st.created_at:
+            months_on_platform = (datetime.utcnow() - st.created_at).days // 30
+
+        return compute_score(
+            late_payments=late_payments,
+            failed_payments=failed_payments,
+            reminders_l3_or_higher=reminders_high,
+            debt_ratio=debt_ratio,
+            savings_buffer_months=savings_buffer_months,
+            satisfaction_score=sat_score,
+            months_on_platform=months_on_platform,
+            age=profile.age if profile else None,
+            monthly_net_income=(
+                profile.net_salary_monthly if profile else None
+            ),
+            family_status=profile.family_status if profile else None,
+            housing_type=profile.housing_type if profile else None,
+        )
+
+
+class V2LoanApplyRequest(BaseModel):
+    loan_kind: LoanKind
+    amount: float = Field(..., gt=0)
+    term_months: int = Field(..., gt=0, le=600)
+    purpose: Optional[str] = Field(None, max_length=200)
+    debit_account_id: Optional[int] = None  # konto pengarna utbetalas till
+    accept_offer: bool = Field(
+        default=False,
+        description=(
+            "False = bara prövning, ingen Loan skapas. True = eleven "
+            "har sett offerten och vill genomföra (skapar Loan + tx)."
+        ),
+    )
+
+
+class V2WellbeingImpact(BaseModel):
+    axis: str
+    delta: int
+    explanation: str
+
+
+class V2LoanApplyResponse(BaseModel):
+    application_id: int
+    approved: bool
+    decline_reason: Optional[str] = None
+    loan_kind: str
+    score: int
+    grade: str
+    score_components: dict
+    kalp_passed: bool
+    kalp_left_after_all: float
+    offered_rate: Optional[float] = None
+    offered_monthly_payment: Optional[float] = None
+    offered_total_repay: Optional[float] = None
+    lender: Optional[str] = None
+    loan_id: Optional[int] = None
+    wellbeing_impact: list[V2WellbeingImpact] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+@router.post("/lan/apply", response_model=V2LoanApplyResponse)
+def post_loan_apply(
+    body: V2LoanApplyRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2LoanApplyResponse:
+    """Eleven ansöker själv om lån. Verklighetstrogen flöde:
+
+    1. Validera att kind + belopp + löptid ligger inom verkliga ramar.
+    2. Räkna UC-score (via samma formel som /bank/credit-score).
+    3. Räkna KALP (Finansinspektionens stresstest 7 %).
+    4. Beslut:
+       - Beloppet utanför kind-ramar → avslag (för stort/litet/lång löptid)
+       - SMS-lån: alltid godkänt men markerad high-cost; varningar
+       - Andra: kräver score >= kind.min_score OCH KALP passed
+    5. Om accept_offer=True OCH godkänd: skapa Loan + utbetalningstx +
+       LoanScheduleEntry + wellbeing-delta + log_activity.
+    6. Annars: bara CreditApplication-rad (audit) + score+ränta-info.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast elever kan ansöka om lån",
+        )
+    student_id = info.student_id
+
+    spec = _LOAN_KIND_SPECS.get(body.loan_kind)
+    if spec is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Okänd lånetyp: {body.loan_kind}",
+        )
+
+    amount_dec = Decimal(str(body.amount))
+    warnings: list[str] = []
+
+    # Hård validering av belopp + löptid (banken skulle aldrig gå med på
+    # 5 mkr SMS-lån eller 10 års bolån, så avslå direkt här)
+    if amount_dec < spec["min_amount"]:
+        return _loan_apply_decline(
+            student_id, body, spec,
+            reason=(
+                f"Minsta belopp för {spec['label']} är "
+                f"{spec['min_amount']:,} kr".replace(",", " ")
+            ),
+        )
+    if amount_dec > spec["max_amount"]:
+        return _loan_apply_decline(
+            student_id, body, spec,
+            reason=(
+                f"Högsta belopp för {spec['label']} är "
+                f"{spec['max_amount']:,} kr".replace(",", " ")
+            ),
+        )
+    if body.term_months < spec["min_term"]:
+        return _loan_apply_decline(
+            student_id, body, spec,
+            reason=(
+                f"Kortaste löptid för {spec['label']} är "
+                f"{spec['min_term']} mån"
+            ),
+        )
+    if body.term_months > spec["max_term"]:
+        return _loan_apply_decline(
+            student_id, body, spec,
+            reason=(
+                f"Längsta löptid för {spec['label']} är "
+                f"{spec['max_term']} mån"
+            ),
+        )
+
+    # Räkna UC + KALP
+    with session_scope() as s:
+        score_result = _compute_uc_for_apply(s, student_id)
+
+        # KALP
+        with master_session() as ms:
+            profile = (
+                ms.query(StudentProfile)
+                .filter(StudentProfile.student_id == student_id)
+                .first()
+            )
+            net_monthly = (
+                Decimal(profile.net_salary_monthly or 0) if profile
+                else Decimal("0")
+            )
+            housing = (
+                Decimal(profile.housing_monthly or 0) if profile
+                else Decimal("0")
+            )
+            family = profile.family_status if profile else "ensam"
+
+        from ..loans.credit import compute_kalp
+        kalp = compute_kalp(
+            s,
+            monthly_income_net=net_monthly,
+            family_status=family,
+            monthly_housing=housing,
+            loan_amount=amount_dec,
+            loan_term_months=body.term_months,
+        )
+
+        # Beslut
+        offered_rate = _rate_for_score(spec, score_result.score)
+        monthly_payment = _annuity_monthly(
+            amount_dec, offered_rate, body.term_months,
+        )
+        total_repay = monthly_payment * body.term_months
+
+        # SMS-lån: alltid godkänt (med varning); andra kräver UC + KALP
+        is_sms = body.loan_kind == "smslan"
+        approved: bool
+        decline_reason: Optional[str] = None
+        if is_sms:
+            approved = True
+            warnings.append(
+                "VARNING: SMS-lån har effektiv årsränta över 30 %. "
+                "Du betalar tillbaka mer än dubbla beloppet om du "
+                "inte är försiktig."
+            )
+            if not kalp.passed:
+                warnings.append(
+                    "KALP visar att du inte har råd med betalningarna "
+                    "— lånet godkänns ändå (SMS-banker kollar inte) "
+                    "men du riskerar betalningsanmärkningar."
+                )
+        else:
+            if score_result.score < spec["min_score"]:
+                approved = False
+                decline_reason = (
+                    f"Din kreditscore är {score_result.score} "
+                    f"(grad {score_result.grade}). "
+                    f"{spec['label']} kräver minst {spec['min_score']} "
+                    f"(grad {_grade_for_threshold(spec['min_score'])})."
+                )
+            elif not kalp.passed:
+                approved = False
+                decline_reason = (
+                    "KALP-kalkylen visar att du inte har råd med "
+                    "månadsbetalningen efter levnadskostnader. "
+                    f"Du saknar {abs(int(kalp.monthly_left_after_all)):,} "
+                    "kr/mån".replace(",", " ")
+                )
+            else:
+                approved = True
+
+        # Bolån: kontantinsats-info (varning men inte avslag)
+        if body.loan_kind == "bolan" and approved:
+            min_kontantinsats = float(amount_dec) * 0.15
+            warnings.append(
+                f"Bolån kräver normalt minst 15 % kontantinsats. "
+                f"För detta belopp: minst "
+                f"{int(min_kontantinsats):,} kr".replace(",", " ")
+                + " (informativt — vi simulerar inte krav här)"
+            )
+
+        # Skapa CreditApplication-rad (audit alltid)
+        application = CreditApplication(
+            kind=body.loan_kind,
+            requested_amount=amount_dec,
+            requested_months=body.term_months,
+            purpose=body.purpose,
+            result="approved" if approved else "declined",
+            score_value=score_result.score,
+            decline_reason=decline_reason,
+            simulated_lender=_pick_lender(
+                spec, student_id, int(body.amount),
+            ),
+            offered_rate=offered_rate if approved else None,
+            offered_monthly_payment=(
+                monthly_payment if approved else None
+            ),
+            decided_at=datetime.utcnow(),
+        )
+        s.add(application)
+        s.flush()
+
+        loan_id: Optional[int] = None
+        wb_impacts: list[V2WellbeingImpact] = []
+
+        if approved and body.accept_offer:
+            # Skapa Loan + utbetalningstx + schema
+            loan = Loan(
+                name=f"{spec['label']} · {application.simulated_lender}",
+                lender=application.simulated_lender,
+                principal_amount=amount_dec,
+                start_date=_date.today(),
+                interest_rate=offered_rate,
+                binding_type="rörlig",
+                amortization_monthly=monthly_payment,
+                loan_kind=_map_kind_to_db(body.loan_kind),
+                is_high_cost_credit=bool(spec.get("high_cost")),
+                applied_at=datetime.utcnow(),
+                score_at_application=score_result.score,
+                active=True,
+                notes=body.purpose,
+            )
+            s.add(loan)
+            s.flush()
+            application.resulting_loan_id = loan.id
+            application.result = "accepted"
+
+            # Utbetalningstransaktion (om kind har deposit + konto specat)
+            if spec.get("deposit") and body.debit_account_id:
+                acc = s.get(Account, body.debit_account_id)
+                if acc is not None:
+                    import hashlib as _hl_loan
+                    tx_hash = _hl_loan.sha256(
+                        f"loan-deposit|{loan.id}|{amount_dec}".encode(),
+                    ).hexdigest()[:32]
+                    deposit_tx = Transaction(
+                        account_id=acc.id,
+                        date=_date.today(),
+                        amount=amount_dec,  # positivt
+                        currency="SEK",
+                        raw_description=(
+                            f"Utbetalning {spec['label']} · "
+                            f"{application.simulated_lender}"
+                        ),
+                        normalized_merchant=application.simulated_lender,
+                        hash=tx_hash,
+                        user_verified=True,
+                    )
+                    s.add(deposit_tx)
+
+            # Schedule-rader för hela löptiden — en interest-rad +
+            # en amortization-rad per månad (matcher räknar ihop dem
+            # mot bankens transaktion automatiskt).
+            from datetime import date as _ds
+            today = _ds.today()
+            balance = amount_dec
+            monthly_rate = Decimal(str(offered_rate)) / Decimal("12")
+            day_of_month = min(today.day, 28)
+            for i in range(1, body.term_months + 1):
+                # Beräkna förfallodag: samma dag i månad N
+                total_months = today.month + i
+                year = today.year + (total_months - 1) // 12
+                month_n = (total_months - 1) % 12 + 1
+                from datetime import date as _dt
+                try:
+                    due = _dt(year, month_n, day_of_month)
+                except ValueError:
+                    continue
+                interest_amt = (
+                    balance * monthly_rate
+                ).quantize(Decimal("0.01"))
+                amort_amt = (
+                    monthly_payment - interest_amt
+                ).quantize(Decimal("0.01"))
+                if interest_amt > 0:
+                    s.add(LoanScheduleEntry(
+                        loan_id=loan.id, due_date=due,
+                        amount=interest_amt, payment_type="interest",
+                    ))
+                if amort_amt > 0:
+                    s.add(LoanScheduleEntry(
+                        loan_id=loan.id, due_date=due,
+                        amount=amort_amt, payment_type="amortization",
+                    ))
+                    balance -= amort_amt
+
+            loan_id = loan.id
+
+        s.commit()
+
+    # === Wellbeing-deltas (master-DB) ===
+    if approved:
+        wb_spec = spec["wellbeing"]
+        for axis in ("economy", "safety"):
+            d = wb_spec.get(axis, 0)
+            if d != 0:
+                from ..game_engine.pentagon import apply_pentagon_delta
+                apply_pentagon_delta(
+                    student_id,
+                    axis=axis,
+                    requested_delta=d,
+                    reason_kind="loan_applied",
+                    reason_id=application.id,
+                    reason_table="credit_applications",
+                    explanation=(
+                        f"{spec['label']} · "
+                        f"{int(amount_dec):,} kr".replace(",", " ")
+                    ),
+                )
+                wb_impacts.append(V2WellbeingImpact(
+                    axis=axis, delta=d,
+                    explanation=(
+                        f"{spec['label']} påverkar {axis} med {d:+d}"
+                    ),
+                ))
+    else:
+        # Avslag → liten negativ economy (besviken) + safety -1 (osäkerhet)
+        from ..game_engine.pentagon import apply_pentagon_delta
+        apply_pentagon_delta(
+            student_id, axis="economy", requested_delta=-1,
+            reason_kind="loan_declined",
+            reason_id=application.id,
+            reason_table="credit_applications",
+            explanation=f"Avslag på {spec['label']}",
+        )
+
+    # === Lärar-spårning ===
+    from ..school.activity import log_activity
+    if approved and body.accept_offer:
+        log_activity(
+            kind="loan.created",
+            summary=(
+                f"Tog {spec['label']} {int(amount_dec):,} kr · "
+                f"{body.term_months} mån".replace(",", " ")
+            ),
+            payload={
+                "loan_id": loan_id,
+                "loan_kind": body.loan_kind,
+                "amount": float(amount_dec),
+                "term_months": body.term_months,
+                "rate": offered_rate,
+                "score": score_result.score,
+                "lender": application.simulated_lender,
+            },
+        )
+    elif approved:
+        log_activity(
+            kind="loan.offer_received",
+            summary=(
+                f"Fick offert på {spec['label']} {int(amount_dec):,} kr"
+            ).replace(",", " "),
+            payload={
+                "application_id": application.id,
+                "loan_kind": body.loan_kind,
+                "score": score_result.score,
+                "offered_rate": offered_rate,
+            },
+        )
+    else:
+        log_activity(
+            kind="loan.declined",
+            summary=(
+                f"Avslag på {spec['label']} "
+                f"{int(amount_dec):,} kr".replace(",", " ")
+            ),
+            payload={
+                "application_id": application.id,
+                "loan_kind": body.loan_kind,
+                "score": score_result.score,
+                "reason": decline_reason,
+            },
+        )
+
+    return V2LoanApplyResponse(
+        application_id=application.id,
+        approved=approved,
+        decline_reason=decline_reason,
+        loan_kind=body.loan_kind,
+        score=score_result.score,
+        grade=score_result.grade,
+        score_components=score_result.factors.get("_score_components", {}),
+        kalp_passed=kalp.passed,
+        kalp_left_after_all=float(kalp.monthly_left_after_all),
+        offered_rate=offered_rate if approved else None,
+        offered_monthly_payment=(
+            float(monthly_payment) if approved else None
+        ),
+        offered_total_repay=(
+            float(total_repay) if approved else None
+        ),
+        lender=application.simulated_lender if approved else None,
+        loan_id=loan_id,
+        wellbeing_impact=wb_impacts,
+        warnings=warnings,
+    )
+
+
+def _grade_for_threshold(min_score: int) -> str:
+    """Vilken grad krävs minst för en viss poängtröskel."""
+    from ..school.credit_scoring import _grade_from_score
+    return _grade_from_score(min_score)
+
+
+def _map_kind_to_db(api_kind: str) -> str:
+    """Mappa API-namn till Loan.loan_kind-enum."""
+    return {
+        "privatlan": "private",
+        "billan": "car",
+        "bolan": "mortgage",
+        "smslan": "sms",
+    }.get(api_kind, "other")
+
+
+def _loan_apply_decline(
+    student_id: int,
+    body: V2LoanApplyRequest,
+    spec: dict,
+    *,
+    reason: str,
+) -> V2LoanApplyResponse:
+    """Snabb-avslag (utan UC-räkning) för felaktiga indata."""
+    with session_scope() as s:
+        application = CreditApplication(
+            kind=body.loan_kind,
+            requested_amount=Decimal(str(body.amount)),
+            requested_months=body.term_months,
+            purpose=body.purpose,
+            result="declined",
+            decline_reason=reason,
+            simulated_lender=_pick_lender(spec, student_id, int(body.amount)),
+            decided_at=datetime.utcnow(),
+        )
+        s.add(application)
+        s.commit()
+        from ..school.activity import log_activity
+        log_activity(
+            kind="loan.declined",
+            summary=f"Avslag {spec['label']} · {reason[:60]}",
+            payload={
+                "application_id": application.id,
+                "loan_kind": body.loan_kind,
+                "reason": reason,
+            },
+        )
+        return V2LoanApplyResponse(
+            application_id=application.id,
+            approved=False,
+            decline_reason=reason,
+            loan_kind=body.loan_kind,
+            score=0,
+            grade="—",
+            score_components={},
+            kalp_passed=False,
+            kalp_left_after_all=0.0,
+            warnings=[],
+        )
+
+
 # === Lärar-endpoints för Lånegivaren (insyn + seed) ===
 
 class V2LoanProductIn(BaseModel):
@@ -4196,7 +5414,9 @@ def teacher_create_payment_mark(
                     else Decimal("0")
                 )
             if annual_gross > 0:
-                compute_credit_check(s, annual_gross)
+                compute_credit_check(
+                    s, annual_gross, student_id=student_id,
+                )
 
             return V2PaymentMarkOut(
                 id=mark.id,
@@ -5592,12 +6812,22 @@ def get_insurance(
                     "Har barn men saknar barnförsäkring."
                 )
 
-            # Skadehändelser (12 senaste mån)
-            from datetime import date as _d_ic, timedelta as _td_ic
-            cutoff = _d_ic.today() - _td_ic(days=365)
+            # Skadehändelser (12 senaste spel-mån) · bara redan inträffade
+            # händelser. Tidigare användes _d_ic.today() (= maj 7 real-tid)
+            # vilket dels betyder att 12 mån bakåt är fel period (jämfört
+            # med spel-tid jan), dels att framtida seedade events (t.ex.
+            # 'Bilen behöver reparation 6 jan' när eleven är på Jan 2)
+            # syntes innan spel-dagen passerats.
+            from datetime import timedelta as _td_ic
+            from ..business.game_clock import current_game_date as _cgd_ic
+            today_game = _cgd_ic()
+            cutoff = today_game - _td_ic(days=365)
             claim_rows = (
                 s.query(InsuranceClaim)
-                .filter(InsuranceClaim.occurred_on >= cutoff)
+                .filter(
+                    InsuranceClaim.occurred_on >= cutoff,
+                    InsuranceClaim.occurred_on <= today_game,
+                )
                 .order_by(InsuranceClaim.occurred_on.desc())
                 .all()
             )
@@ -6141,14 +7371,18 @@ def get_utility(
         )
         total_grid = sum(float(u.grid_fee_monthly or 0) for u in active)
         has_spot = any(u.spot_pricing for u in active)
-        soon = _date.today() + _td(days=30)
+        # Spel-tid · annars filtreras readings ut för att de ligger
+        # i jan 2025-26 medan today=maj 2026 (cutoff=maj 2025).
+        from ..business.game_clock import current_game_date as _cgd_uti
+        today_game = _cgd_uti()
+        soon = today_game + _td(days=30)
         expiring = sum(
             1 for u in active
             if u.binding_end is not None and u.binding_end <= soon
         )
 
-        # Senaste 12 mån utility readings
-        cutoff = _date.today() - _td(days=365)
+        # Senaste 12 mån utility readings (spel-tid)
+        cutoff = today_game - _td(days=365)
         readings = (
             s.query(UtilityReading)
             .filter(UtilityReading.period_end >= cutoff)
@@ -6159,8 +7393,8 @@ def get_utility(
             .all()
         )
 
-        # Senaste månadens kostnad + kWh
-        last30 = _date.today() - _td(days=45)
+        # Senaste månadens kostnad + kWh (spel-tid)
+        last30 = today_game - _td(days=45)
         last_month_readings = [
             r for r in readings if r.period_end >= last30
         ]
@@ -12794,58 +14028,293 @@ class V2KlassOverview(BaseModel):
     mini_pentagons: list[V2KlassMiniPentagon]
 
 
+# Per-process TTL-cache för dyra per-elev-beräkningar i lärar-hubben.
+# Klass-överblicken itererar 20-30 elever och varje wellbeing-beräkning
+# gör ~20 DB-queries i scope-DB. Utan cache → 60-120 s laddtid per klick.
+# 5 min freshness är OK för en lärar-dashboard; alternativet (eventer som
+# invaliderar exakt) är komplext och behövs inte här.
+_TEACHER_METRICS_TTL_SECONDS = 300.0
+# Hur färska persisterade WellbeingScore-rader får vara för att
+# återanvändas i klass-prefetch utan att räkna om wellbeing.
+_WELLBEING_SNAPSHOT_FRESH_SECONDS = 600.0
+# scope_key → (expires_at, (total, eco, safe, health, social, leisure))
+_wellbeing_cache: dict[
+    str, tuple[float, tuple[int, int, int, int, int, int]]
+] = {}
+# scope_key → (expires_at, (unhandled_count, oldest_days, has_authority))
+_mailcount_cache: dict[
+    str, tuple[float, tuple[int, Optional[int], bool]]
+] = {}
+
+
+def _cache_get(cache: dict, key: str):
+    import time
+    entry = cache.get(key)
+    if entry is None:
+        return None
+    expires_at, value = entry
+    if expires_at < time.monotonic():
+        cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(cache: dict, key: str, value) -> None:
+    import time
+    cache[key] = (time.monotonic() + _TEACHER_METRICS_TTL_SECONDS, value)
+
+
+def invalidate_teacher_metrics_cache(scope_key: Optional[str] = None) -> None:
+    """Töm TTL-cachen — anropas av tester och kan användas av endpoints
+    som vet att en elevs scope-data ändrats kraftigt."""
+    if scope_key is None:
+        _wellbeing_cache.clear()
+        _mailcount_cache.clear()
+    else:
+        _wellbeing_cache.pop(scope_key, None)
+        _mailcount_cache.pop(scope_key, None)
+
+
+def _collect_student_metrics(
+    student: Student,
+) -> tuple[
+    Optional[tuple[int, int, int, int, int, int]],
+    tuple[int, Optional[int], bool],
+]:
+    """Hämtar wellbeing + ohanterad-post i ETT scope-context per elev.
+
+    Tidigare gjordes detta i två separata helpers, var och en med eget
+    `scope_context` + `session_scope`. Klass-hubben med 28 elever
+    triggade då 56 session-öppningar mot scope-DB:n. Här delar de en
+    OCH persisterar wellbeing-snapshoten så framtida klass-overviews
+    kan batch-läsa istället för att räkna om.
+    """
+    from ..school.engines import scope_context, scope_for_student
+
+    scope_key = scope_for_student(student)
+    cached_wb = _cache_get(_wellbeing_cache, scope_key)
+    cached_mail = _cache_get(_mailcount_cache, scope_key)
+    if cached_wb is not None and cached_mail is not None:
+        return cached_wb, cached_mail
+
+    wb_tuple: Optional[tuple[int, int, int, int, int, int]] = cached_wb
+    mail_tuple: tuple[int, Optional[int], bool] = cached_mail or (
+        0, None, False,
+    )
+
+    try:
+        with scope_context(scope_key):
+            with session_scope() as s:
+                if cached_wb is None:
+                    try:
+                        from ..wellbeing.calculator import (
+                            persist_wellbeing as _persist_wb,
+                        )
+                        ym = _current_year_month()
+                        wb = calculate_wellbeing(s, ym)
+                        wb_tuple = (
+                            wb.total_score, wb.economy, wb.safety,
+                            wb.health, wb.social, wb.leisure,
+                        )
+                        # Persistera snapshoten i scope-DB:n så
+                        # _prefetch_klass_metrics kan batch-läsa
+                        # nästa gång istället för att räkna om
+                        # wellbeing för samma elev.
+                        try:
+                            _persist_wb(s, wb)
+                        except Exception:
+                            pass
+                    except Exception:
+                        wb_tuple = None
+                if cached_mail is None:
+                    try:
+                        items = (
+                            s.query(
+                                MailItem.received_at, MailItem.mail_type,
+                            )
+                            .filter(MailItem.status == "unhandled")
+                            .order_by(MailItem.received_at.asc())
+                            .all()
+                        )
+                        unhandled_count = len(items)
+                        oldest_days: Optional[int] = None
+                        has_authority = False
+                        if items:
+                            oldest = items[0][0]
+                            if oldest is not None:
+                                delta = datetime.utcnow() - oldest
+                                oldest_days = max(0, delta.days)
+                            has_authority = any(
+                                row[1] == "authority" for row in items
+                            )
+                        mail_tuple = (
+                            unhandled_count, oldest_days, has_authority,
+                        )
+                    except Exception:
+                        mail_tuple = (0, None, False)
+    except Exception:
+        # Hela scope-öppningen failade — returnera defaults så hubben
+        # inte kraschar för en enskild elev.
+        if wb_tuple is None and cached_wb is None:
+            wb_tuple = None
+        if cached_mail is None:
+            mail_tuple = (0, None, False)
+
+    if wb_tuple is not None:
+        _cache_set(_wellbeing_cache, scope_key, wb_tuple)
+    _cache_set(_mailcount_cache, scope_key, mail_tuple)
+    return wb_tuple, mail_tuple
+
+
+def _prefetch_klass_metrics(
+    scope_keys: list[str], year_month: str,
+) -> None:
+    """Förladda TTL-cachen med en handfull batched queries istället för
+    28+ scope_context-öppningar.
+
+    Postgres-läge: alla elev-scopes ligger i samma DB med tenant_id-
+    isolering. Vi kan därför läsa över hela klassen i:
+    - 1 query för WellbeingScore (senaste snapshot per scope för
+      aktuell månad, om < 10 min gammal)
+    - 1 query för MailItem (count + min(received_at) + bool authority
+      per scope, GROUP BY tenant_id)
+
+    SQLite-läge (pytest + dev): varje scope = egen fil, ingen batching
+    möjlig → no-op, fall-back till per-scope-loopen.
+    """
+    import os
+    if not os.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+        return
+    if not scope_keys:
+        return
+
+    # Bara nycklar som inte redan ligger i cachen behöver hämtas.
+    missing_wb = [
+        k for k in scope_keys
+        if _cache_get(_wellbeing_cache, k) is None
+    ]
+    missing_mail = [
+        k for k in scope_keys
+        if _cache_get(_mailcount_cache, k) is None
+    ]
+    if not missing_wb and not missing_mail:
+        return
+
+    try:
+        from ..school.engines import _init_shared_scope_engine
+        from sqlalchemy import func as _sa_func, case as _sa_case
+        from ..db.models import WellbeingScore as _WS, MailItem as _MI
+
+        _, session_maker = _init_shared_scope_engine()
+        # OBS: ingen scope_context aktiv → tenant-filter är AV, vi
+        # ser tvärs över alla tenants. Måste själva filtrera på
+        # tenant_id.in_(scope_keys).
+        with session_maker() as s:
+            if missing_wb:
+                fresh_after = (
+                    datetime.utcnow()
+                    - timedelta(seconds=_WELLBEING_SNAPSHOT_FRESH_SECONDS)
+                )
+                rows = (
+                    s.query(
+                        _WS.tenant_id, _WS.total_score, _WS.economy,
+                        _WS.safety, _WS.health, _WS.social, _WS.leisure,
+                    )
+                    .filter(
+                        _WS.year_month == year_month,
+                        _WS.tenant_id.in_(missing_wb),
+                        _WS.computed_at >= fresh_after,
+                    )
+                    .all()
+                )
+                for (
+                    tenant, total, eco, safe, health, social, leisure,
+                ) in rows:
+                    if tenant is None:
+                        continue
+                    _cache_set(
+                        _wellbeing_cache, tenant,
+                        (total, eco, safe, health, social, leisure),
+                    )
+
+            if missing_mail:
+                # GROUP BY tenant_id med aggregerings-sub-query.
+                authority_case = _sa_case(
+                    (_MI.mail_type == "authority", 1), else_=0,
+                )
+                mail_rows = (
+                    s.query(
+                        _MI.tenant_id,
+                        _sa_func.count(_MI.id),
+                        _sa_func.min(_MI.received_at),
+                        _sa_func.max(authority_case),
+                    )
+                    .filter(
+                        _MI.status == "unhandled",
+                        _MI.tenant_id.in_(missing_mail),
+                    )
+                    .group_by(_MI.tenant_id)
+                    .all()
+                )
+                seen: set[str] = set()
+                now = datetime.utcnow()
+                for tenant, cnt, oldest, has_auth in mail_rows:
+                    if tenant is None:
+                        continue
+                    seen.add(tenant)
+                    oldest_days: Optional[int] = None
+                    if oldest is not None:
+                        oldest_days = max(0, (now - oldest).days)
+                    _cache_set(
+                        _mailcount_cache, tenant,
+                        (int(cnt or 0), oldest_days, bool(has_auth)),
+                    )
+                # Scopes utan ohanterad post → tomma rader.
+                for k in missing_mail:
+                    if k not in seen:
+                        _cache_set(
+                            _mailcount_cache, k, (0, None, False),
+                        )
+    except Exception:
+        # Prefetchen är en optimering — om den failar fortsätter
+        # vi via per-scope-loopen i klass-overview.
+        import logging
+        logging.getLogger(__name__).exception(
+            "klass-prefetch failed — fortsätter via per-scope-loopen",
+        )
+
+
 def _safe_calc_wellbeing_for(
     student: Student,
 ) -> Optional[tuple[int, int, int, int, int, int]]:
     """Returnerar (total, economy, safety, health, social, leisure) eller
     None om wellbeing inte kan beräknas (fallar tyst — lärar-hub får
-    inte krascha för en enskild elev)."""
-    from ..school.engines import scope_context, scope_for_student
+    inte krascha för en enskild elev). Cachead 60 s per scope-key."""
+    from ..school.engines import scope_for_student
 
     scope_key = scope_for_student(student)
-    try:
-        with scope_context(scope_key):
-            with session_scope() as s:
-                ym = _current_year_month()
-                wb = calculate_wellbeing(s, ym)
-                return (
-                    wb.total_score, wb.economy, wb.safety, wb.health,
-                    wb.social, wb.leisure,
-                )
-    except Exception:
-        return None
+    cached = _cache_get(_wellbeing_cache, scope_key)
+    if cached is not None:
+        return cached
+
+    wb_tuple, _ = _collect_student_metrics(student)
+    return wb_tuple
 
 
 def _safe_count_unhandled_mail(student: Student) -> tuple[
     int, Optional[int], bool,
 ]:
-    """Returnerar (unhandled_count, oldest_days, has_authority)."""
-    from ..school.engines import scope_context, scope_for_student
+    """Returnerar (unhandled_count, oldest_days, has_authority).
+    Cachead 60 s per scope-key."""
+    from ..school.engines import scope_for_student
 
     scope_key = scope_for_student(student)
-    try:
-        with scope_context(scope_key):
-            with session_scope() as s:
-                items = (
-                    s.query(MailItem)
-                    .filter(MailItem.status == "unhandled")
-                    .order_by(MailItem.received_at.asc())
-                    .all()
-                )
-                unhandled_count = len(items)
-                oldest_days: Optional[int] = None
-                has_authority = False
-                if items:
-                    oldest = items[0].received_at
-                    if oldest is not None:
-                        delta = datetime.utcnow() - oldest
-                        oldest_days = max(0, delta.days)
-                    has_authority = any(
-                        m.mail_type == "authority" for m in items
-                    )
-                return unhandled_count, oldest_days, has_authority
-    except Exception:
-        return 0, None, False
+    cached = _cache_get(_mailcount_cache, scope_key)
+    if cached is not None:
+        return cached
+
+    _, mail_tuple = _collect_student_metrics(student)
+    return mail_tuple
 
 
 def _days_since(dt: Optional[datetime]) -> Optional[int]:
@@ -12909,6 +14378,17 @@ def teacher_klass_overview(
         and (today - d["last_login_at"]).days == 0
     )
 
+    # Pre-fetch hela klassens wellbeing+mail på 2 queries (Postgres-läge)
+    # innan vi går in i per-elev-loopen. Tomt på SQLite-läge.
+    try:
+        from ..school.engines import scope_for_student as _sfs_pre
+        prefetch_keys = [
+            _sfs_pre(d["obj"]) for d in students_data
+        ]
+        _prefetch_klass_metrics(prefetch_keys, _current_year_month())
+    except Exception:
+        pass  # prefetch är best-effort
+
     # Beräkna wellbeing per elev (i scope-context — kan ej ligga inom
     # master_session ovan eftersom scope-engine är separat)
     pents: list[tuple[int, int, int, int, int, int]] = []
@@ -12919,7 +14399,8 @@ def teacher_klass_overview(
 
     for d in students_data:
         st = d["obj"]
-        wb = _safe_calc_wellbeing_for(st)
+        # Hämta wellbeing + post i ETT scope-context-pass, cachat 60 s.
+        wb, mail_tuple = _collect_student_metrics(st)
         if wb is None:
             wb = (50, 50, 50, 50, 50, 50)
         total, eco, safe, health, social, leisure = wb
@@ -12958,7 +14439,7 @@ def teacher_klass_overview(
             ))
 
         # Postlåda
-        unhandled, oldest_days, has_auth = _safe_count_unhandled_mail(st)
+        unhandled, oldest_days, has_auth = mail_tuple
         mailbox_total_unhandled += unhandled
         if unhandled > 0:
             mailbox_items.append(V2KlassMailboxItem(
@@ -13016,25 +14497,46 @@ def teacher_klass_overview(
             )
             cfg = ms.query(_NegotiationConfig).first()
             max_rounds = cfg.max_rounds if cfg else 5
-            for neg in negs:
-                last_round = (
-                    ms.query(_NegotiationRound)
-                    .filter(_NegotiationRound.negotiation_id == neg.id)
-                    .order_by(_NegotiationRound.round_no.desc())
-                    .first()
+            # Batcha alla rundor i en enda query istället för en per
+            # förhandling. För varje förhandling håller vi den högsta
+            # round_no (senaste budet).
+            neg_ids = [n.id for n in negs]
+            last_round_by_neg: dict[
+                int, tuple[int, Optional[float]]
+            ] = {}
+            if neg_ids:
+                rounds = (
+                    ms.query(
+                        _NegotiationRound.negotiation_id,
+                        _NegotiationRound.round_no,
+                        _NegotiationRound.proposed_pct,
+                    )
+                    .filter(
+                        _NegotiationRound.negotiation_id.in_(neg_ids),
+                    )
+                    .all()
                 )
+                for neg_id, round_no, proposed_pct in rounds:
+                    existing = last_round_by_neg.get(neg_id)
+                    if existing is None or round_no > existing[0]:
+                        last_round_by_neg[neg_id] = (
+                            round_no, proposed_pct,
+                        )
+            for neg in negs:
+                last = last_round_by_neg.get(neg.id)
                 # NegotiationRound har proposed_pct (delta), bygg
                 # konkret SEK-bud genom starting_salary × (1 + pct/100).
                 last_proposed: Optional[float] = None
-                if (
-                    last_round
-                    and last_round.proposed_pct is not None
-                    and neg.starting_salary is not None
-                ):
-                    last_proposed = float(
-                        neg.starting_salary,
-                    ) * (1.0 + (last_round.proposed_pct / 100.0))
-                round_no = last_round.round_no if last_round else 0
+                round_no = 0
+                if last is not None:
+                    round_no, proposed_pct = last
+                    if (
+                        proposed_pct is not None
+                        and neg.starting_salary is not None
+                    ):
+                        last_proposed = float(
+                            neg.starting_salary,
+                        ) * (1.0 + (proposed_pct / 100.0))
                 pending_negotiations.append(V2KlassNegotiationItem(
                     negotiation_id=neg.id,
                     student_id=neg.student_id,
@@ -13537,6 +15039,7 @@ def _build_competencies_for_student(
 )
 def teacher_student_detail(
     student_id: int,
+    background_tasks: BackgroundTasks,
     info: TokenInfo = Depends(require_token),
 ) -> V2TeacherStudentDetail:
     """Lärar-detaljvy · alla aspekter av en specifik elev.
@@ -13565,24 +15068,44 @@ def teacher_student_detail(
             student, "v2_onboarding_completed_at", None,
         )
 
-    # Auto-recovery · Bug-fix för "seed failed" på gamla elever:
-    # Om eleven inte har en SINGLE WeekTickRun med status='completed'
-    # så har den aldrig fått sin initial data. Trigga seed nu.
-    # Detta fixar elever som skapades innan seed-funktionen byggdes,
-    # eller elever vars tick failade av en gammal bugg.
+    # Auto-recovery · om eleven inte har en SINGLE WeekTickRun med
+    # status='completed' så har den aldrig fått sin initial data.
+    # Trigga seed i BAKGRUNDEN så lärar-vyn kan renderas direkt
+    # (~200 ms i stället för 3-4 s synkron seed).
+    #
+    # Tidigare körde detta synkront → varje klick på en elev som
+    # saknar data tog 3-4 s vilket är oacceptabelt UX. Nu schemaläggs
+    # det som BackgroundTask: lärar-vyn renderar omedelbart med tom
+    # data, och nästa request till samma elev (efter att seed klar)
+    # ger full data.
+    #
+    # Vi gör en SNABB check för completed_runs här för att avgöra
+    # om bakgrunds-task behövs, så vi inte schemalägger seed för
+    # alla elever (bara de som faktiskt saknar data).
     try:
-        _ensure_student_has_initial_data(
-            student_id=student_id,
-            student_name=student_name,
-            spend_profile=spend_profile or "balanserad",
-            starting_level=v2_level,
-            partner_model=partner or "solo",
-        )
+        from ..school.game_engine_models import WeekTickRun as _WTR_q
+        with master_session() as _s_q:
+            _completed_runs = (
+                _s_q.query(_WTR_q)
+                .filter(
+                    _WTR_q.student_id == student_id,
+                    _WTR_q.status == "completed",
+                )
+                .count()
+            )
+        if _completed_runs == 0:
+            background_tasks.add_task(
+                _seed_initial_student_data_safe,
+                student_id,
+                spend_profile or "balanserad",
+                v2_level,
+                partner or "solo",
+            )
     except Exception:
         import logging
         logging.getLogger(__name__).exception(
-            "auto-recovery seed failed för student %s — vyn renderas "
-            "ändå, men data kan saknas",
+            "auto-recovery check failed för student %s — vyn "
+            "renderas ändå, seed försöks nästa gång",
             student_id,
         )
 
@@ -14878,6 +16401,7 @@ def _resolve_partner_model(
 )
 def v2_create_student(
     payload: V2CreateStudentIn,
+    background_tasks: BackgroundTasks,
     info: TokenInfo = Depends(require_token),
 ) -> V2CreatedStudentRow:
     """Skapa elev med v2-karaktär · auto-aktiverad v2 + login-kod.
@@ -15004,34 +16528,26 @@ def v2_create_student(
 
     # === Initial-seed så eleven har data att jobba med från dag 1 ===
     #
-    # Tidigare hade en ny elev INGEN data: tomt postlådan, inga konton,
-    # ingen pentagon-historik. Det gjorde att läraren och eleven såg
-    # ett tomt skal och kunde inte börja jobba förrän någon manuellt
-    # körde "Snabbspola månad" på spelmotor-panelen.
+    # Seed:en gör 2 × tick_month (~150-450 INSERTs) + insurance/utility/
+    # pension/rental — totalt ~3-4 sekunder. Tidigare körde vi det
+    # SYNKRONT före response → läraren satt och väntade i 4 s per
+    # skapad elev. Nu schemaläggs det som BackgroundTask: response
+    # returneras direkt med login-koden, seed:en rullar i samma
+    # Cloud-Run-instans (max-instances=1 säkerställer att det är
+    # samma process).
     #
-    # Nu kör vi:
-    #   1. tick_month för förra månaden (lön + fasta utgifter +
-    #      variabla utgifter + events + sjuk + pentagon)
-    #   2. Default-försäkringar (6 standard)
-    #   3. Default-pensionsantaganden (singleton)
-    #   4. Default-låneprodukter (UC-bedömningens katalog)
-    #
-    # Misslyckas tyst — student-skapandet får inte gå sönder om en
-    # seed-funktion krasch:ar.
-    try:
-        _seed_initial_student_data(
-            student_obj,
-            spend_profile=spend,
-            starting_level=payload.starting_level,
-            partner_model=partner,
-        )
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "v2_create_student: initial seed failed for student %s "
-            "— eleven har skapats men saknar data",
-            sid,
-        )
+    # Edge case: om eleven loggar in INNAN seed:en hunnit klart ser
+    # hen tomma vyer. _ensure_student_has_initial_data i
+    # teacher_student_detail (auto-recovery) städar upp om något
+    # failade. För eleven själv finns ingen explicit "förbereder
+    # data..."-state ännu — för 4 s extra första gången är det OK.
+    background_tasks.add_task(
+        _seed_initial_student_data_safe,
+        sid,
+        spend,
+        payload.starting_level,
+        partner,
+    )
 
     return V2CreatedStudentRow(
         student_id=sid,
@@ -15066,15 +16582,25 @@ class V2ReseedResponse(BaseModel):
 )
 def v2_delete_student(
     student_id: int,
+    background_tasks: BackgroundTasks,
     info: TokenInfo = Depends(require_token),
 ) -> Response:
     """Radera en elev permanent · scope-DB + master-rader + cascade.
 
-    Endast lärarens egna elever. Raderar:
-    - Student-raden (cascade tar StudentProfile, BankIDSession,
-      WeekTickRun, EmployerSatisfaction etc. via FK ON DELETE)
-    - Scope-DB:n (sqlite-fil) raderas i fil-läge; i postgres-läge
-      tas bara raderna eftersom databasen är delad
+    Flöde (Cloud Run --max-instances=1):
+    1. Sync · markera Student.active=False så eleven försvinner från
+       lärarens lista omedelbart (UI känns responsiv).
+    2. Async · bakgrundstask gör scope-DB-wipe, master-FK-cleanup,
+       file-removal och s.delete(st). Serialiseras via globalt lock
+       så två parallella tryck inte kraschar Cloud Run-instansen.
+
+    Tidigare körde hela raderingen synkront. För en fully-seedad
+    elev kunde det ta 30-60 s eftersom scope-DB har 50+ tabeller +
+    master har 25+ FK:s. Cloud Run med --max-instances=1 blev då
+    blockerad och nästa request fick 'Failed to fetch' i browser.
+
+    Status spåras i _delete_jobs · GET /v2/teacher/delete-jobs ger
+    UI:t feedback om vilka raderingar som pågår.
     """
     teacher_id = _require_teacher(info)
     with master_session() as s:
@@ -15083,18 +16609,134 @@ def v2_delete_student(
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, "Eleven hittades inte",
             )
-        # Radera scope-DB-data INNAN master-raden tas bort så vi
-        # fortfarande kan resolva scope_key
+        # Idempotens: om eleven redan håller på att raderas, skicka
+        # inte en ny bakgrundstask (skulle annars köa upp dubbla jobb).
+        existing_job = _delete_jobs.get(student_id)
+        if existing_job and existing_job.get("status") in (
+            "queued", "running",
+        ):
+            return Response(status_code=204)
+
+        # Sync · soft-delete så eleven försvinner direkt från listan.
+        # Den fulla raderingen (scope + master-FK:s) körs i bakgrunden.
+        st.active = False
+        student_name = st.display_name or f"Elev {student_id}"
+        s.commit()
+
+    # Spåra status så UI kan visa "Raderar…" och informera när klart.
+    import time as _t_d
+    _delete_jobs[student_id] = {
+        "student_id": student_id,
+        "student_name": student_name,
+        "teacher_id": teacher_id,
+        "status": "queued",
+        "started_at": _t_d.time(),
+        "finished_at": None,
+        "error": None,
+    }
+    background_tasks.add_task(
+        _hard_delete_student_worker, student_id, teacher_id,
+    )
+    return Response(status_code=204)
+
+
+# In-memory status-tracker för enskilda student-deletions. Visar
+# raderings-progress i UI:n. Lever bara i nuvarande Cloud Run-
+# instansen — om instansen restartar förlorar vi historik, men det
+# är OK eftersom soft-delete redan har tagit bort eleven från listan.
+# {student_id: {status, started_at, finished_at, error, ...}}
+_delete_jobs: dict[int, dict] = {}
+
+# Serialisera de tunga bakgrunds-raderingarna · max 1 åt gången per
+# instans. Undviker att två parallella deletes utmattar master-DB-
+# poolen eller råkar i lock-konflikter på samma scope-DB.
+import threading as _threading_d
+_hard_delete_lock = _threading_d.Semaphore(1)
+
+
+def _hard_delete_student_worker(
+    student_id: int, teacher_id: int,
+) -> None:
+    """Bakgrunds-worker · gör den fulla student-raderingen.
+
+    Serialiseras via _hard_delete_lock så bara EN tung radering
+    körs åt gången per instans. Best-effort: fel loggas och skrivs
+    till _delete_jobs så UI kan visa dem; eleven står kvar med
+    active=False (osynlig för läraren) om något går fel — då kan
+    läraren trycka radera igen utan duplicering.
+    """
+    import logging as _log_d
+    import time as _t_d
+    log = _log_d.getLogger(__name__)
+    job = _delete_jobs.get(student_id)
+    if job is None:
+        # Inte spårat (skulle inte hända) — skapa en bakåtkompatibel post
+        job = {
+            "student_id": student_id, "teacher_id": teacher_id,
+            "status": "queued", "started_at": _t_d.time(),
+            "finished_at": None, "error": None,
+        }
+        _delete_jobs[student_id] = job
+
+    # Vänta på lock (max 1 åt gången). Andra deletes köar upp utan
+    # att slå ut Cloud Run-instansen.
+    with _hard_delete_lock:
+        job["status"] = "running"
+        job["running_at"] = _t_d.time()
+        try:
+            _do_hard_delete_student(student_id, teacher_id)
+            job["status"] = "done"
+            job["finished_at"] = _t_d.time()
+            log.info(
+                "_hard_delete_student_worker: %s raderad på %.1fs",
+                student_id, job["finished_at"] - job["started_at"],
+            )
+        except Exception as e:
+            log.exception(
+                "_hard_delete_student_worker: outer failure för %s",
+                student_id,
+            )
+            job["status"] = "failed"
+            job["finished_at"] = _t_d.time()
+            job["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+
+
+def _do_hard_delete_student(student_id: int, teacher_id: int) -> None:
+    """Den faktiska raderings-logiken · separat så den är testbar och
+    så _hard_delete_student_worker bara hanterar lock + status."""
+    import logging as _log_d
+    log = _log_d.getLogger(__name__)
+    with master_session() as s:
+        st = s.get(Student, student_id)
+        if st is None:
+            log.info(
+                "_do_hard_delete_student: %s redan borttagen",
+                student_id,
+            )
+            return
+        if st.teacher_id != teacher_id:
+            log.warning(
+                "_do_hard_delete_student: teacher-id mismatch för %s",
+                student_id,
+            )
+            return
+
         from ..school.engines import (
             scope_for_student as _sfs_d, scope_context as _sctx_d,
             get_scope_session as _gss_d,
         )
         scope_key = _sfs_d(st)
+        if not scope_key or not isinstance(scope_key, str):
+            log.error(
+                "_do_hard_delete_student: saknar scope_key för %s",
+                student_id,
+            )
+            return
+
+        # Scope-DB-wipe
         try:
             with _sctx_d(scope_key):
                 with _gss_d(scope_key)() as ss:
-                    # Postgres: tenant-isolerade rader. Loopa alla
-                    # TenantMixin-tabeller och radera tenant_id-matched.
                     from ..db.base import Base, TenantMixin
                     for table in reversed(Base.metadata.sorted_tables):
                         cls = next(
@@ -15107,20 +16749,23 @@ def v2_delete_student(
                         if cls is None or not issubclass(cls, TenantMixin):
                             continue
                         try:
-                            ss.query(cls).delete(
-                                synchronize_session=False,
-                            )
+                            ss.query(cls).filter(
+                                cls.tenant_id == scope_key,
+                            ).delete(synchronize_session=False)
                         except Exception:
-                            pass
+                            log.exception(
+                                "_do_hard_delete_student: delete %s "
+                                "för tenant %s failade",
+                                cls.__name__, scope_key,
+                            )
                     ss.commit()
         except Exception:
-            import logging
-            logging.getLogger(__name__).exception(
-                "v2_delete_student: scope-cleanup failed för %s",
+            log.exception(
+                "_do_hard_delete_student: scope-cleanup failed för %s",
                 student_id,
             )
-        # SQLite-fil-läge: radera filen från disk så det inte
-        # ligger kvar gammal data om eleven återskapas senare.
+
+        # SQLite-fil-läge: radera filen från disk
         try:
             import os as _os_d
             from ..school.engines import _scope_db_path
@@ -15130,12 +16775,283 @@ def v2_delete_student(
         except Exception:
             pass
 
-        # Master-radering · CASCADE tar bort StudentProfile,
-        # BankIDSession, WeekTickRun, etc. via FK ON DELETE.
-        s.delete(st)
+        # Master · CASCADE-snabbväg först
+        from sqlalchemy.exc import IntegrityError as _IE_d
+        try:
+            s.delete(st)
+            s.commit()
+            return
+        except _IE_d:
+            log.warning(
+                "_do_hard_delete_student: CASCADE failade för %s — "
+                "kör fallback-cleanup",
+                student_id,
+            )
+            try:
+                s.rollback()
+            except Exception:
+                pass
+
+        # Fallback · enumerera alla master-tabeller med FK till students.id
+        from ..school.models import MasterBase
+        tables_with_student_fk = []
+        for table in MasterBase.metadata.sorted_tables:
+            for fk in table.foreign_keys:
+                if (
+                    fk.column.table.name == "students"
+                    and fk.column.name == "id"
+                ):
+                    tables_with_student_fk.append(
+                        (table, fk.parent.name),
+                    )
+                    break
+        for table, fk_col in reversed(tables_with_student_fk):
+            if table.name == "students":
+                continue
+            try:
+                s.execute(
+                    table.delete().where(
+                        table.c[fk_col] == student_id,
+                    ),
+                )
+            except Exception:
+                log.exception(
+                    "_do_hard_delete_student: cleanup av %s "
+                    "(FK %s) failade",
+                    table.name, fk_col,
+                )
+        st_retry = s.get(Student, student_id)
+        if st_retry is not None:
+            s.delete(st_retry)
         s.commit()
 
-    return Response(status_code=204)
+
+class V2DeleteJobRow(BaseModel):
+    student_id: int
+    student_name: str
+    status: Literal["queued", "running", "done", "failed"]
+    started_at: float
+    finished_at: Optional[float]
+    error: Optional[str]
+
+
+class V2DeleteJobsResponse(BaseModel):
+    rows: list[V2DeleteJobRow]
+    pending_count: int
+
+
+@router.get(
+    "/teacher/delete-jobs",
+    response_model=V2DeleteJobsResponse,
+)
+def v2_list_delete_jobs(
+    info: TokenInfo = Depends(require_token),
+) -> V2DeleteJobsResponse:
+    """UI-feedback · returnerar status för pågående och nyligen klara
+    student-raderingar för aktuell lärare. Frontend pollar denna under
+    pågående delete för att visa 'Raderar…' / 'Klar' / 'Fel' i kolumnen
+    där eleven låg innan klick.
+
+    Jobb äldre än 5 min städas bort så listan inte växer obegränsat.
+    """
+    teacher_id = _require_teacher(info)
+    import time as _t_l
+    now = _t_l.time()
+    # GC: ta bort gamla klara/failed-jobb äldre än 5 min
+    stale_cutoff = now - 300
+    for sid in list(_delete_jobs.keys()):
+        j = _delete_jobs[sid]
+        if (
+            j.get("status") in ("done", "failed")
+            and (j.get("finished_at") or 0) < stale_cutoff
+        ):
+            del _delete_jobs[sid]
+
+    rows: list[V2DeleteJobRow] = []
+    pending = 0
+    for sid, j in _delete_jobs.items():
+        if j.get("teacher_id") != teacher_id:
+            continue
+        rows.append(V2DeleteJobRow(
+            student_id=sid,
+            student_name=j.get("student_name") or f"Elev {sid}",
+            status=j.get("status", "queued"),  # type: ignore[arg-type]
+            started_at=float(j.get("started_at") or now),
+            finished_at=j.get("finished_at"),
+            error=j.get("error"),
+        ))
+        if j.get("status") in ("queued", "running"):
+            pending += 1
+    rows.sort(key=lambda r: -r.started_at)
+    return V2DeleteJobsResponse(rows=rows, pending_count=pending)
+
+
+class V2BulkDeleteResponse(BaseModel):
+    deleted_count: int
+    failed_count: int
+    failed_ids: list[int] = Field(default_factory=list)
+
+
+# In-memory job-tracker för bulk-delete. Async så frontend inte hänger
+# på 30+ sekunder (Postgres CASCADE kan ta tid med många FK).
+# {teacher_id: {"status": "running"|"done"|"failed", "deleted_count": N, ...}}
+_bulk_delete_jobs: dict[int, dict] = {}
+
+
+def _bulk_delete_worker(teacher_id: int) -> None:
+    """Bakgrunds-task som faktiskt utför raderingen. Skriver
+    progress till _bulk_delete_jobs[teacher_id]."""
+    import logging as _logging_b
+    log = _logging_b.getLogger(__name__)
+    job = _bulk_delete_jobs.setdefault(teacher_id, {})
+    job.update(status="running", deleted_count=0, failed_count=0)
+    try:
+        from ..db.base import Base, TenantMixin
+
+        # Hämta scope-keys
+        with master_session() as ms:
+            student_rows = (
+                ms.query(Student.id, Student.family_id)
+                .filter(Student.teacher_id == teacher_id)
+                .all()
+            )
+            if not student_rows:
+                job.update(status="done", deleted_count=0)
+                return
+            scope_keys = list({
+                f"f_{fid}" if fid else f"s_{sid}"
+                for sid, fid in student_rows
+            })
+            student_ids = [r[0] for r in student_rows]
+
+        log.info(
+            "bulk-delete-worker: teacher=%s, %d elever, %d scopes",
+            teacher_id, len(student_ids), len(scope_keys),
+        )
+
+        # Batch-DELETE per tabell
+        try:
+            from ..school.engines import _init_shared_scope_engine
+            import os as _os_pg
+            if _os_pg.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+                _, session_maker = _init_shared_scope_engine()
+                with session_maker() as ss:
+                    for table in reversed(Base.metadata.sorted_tables):
+                        cls = next(
+                            (
+                                c.class_ for c in Base.registry.mappers
+                                if c.local_table is table
+                            ),
+                            None,
+                        )
+                        if (cls is None
+                                or not issubclass(cls, TenantMixin)):
+                            continue
+                        try:
+                            ss.query(cls).filter(
+                                cls.tenant_id.in_(scope_keys),
+                            ).delete(synchronize_session=False)
+                        except Exception:
+                            log.exception(
+                                "bulk-delete-worker: %s failed",
+                                cls.__name__,
+                            )
+                    ss.commit()
+            else:
+                from ..school.engines import _scope_db_path
+                for scope_key in scope_keys:
+                    try:
+                        path = _scope_db_path(scope_key)
+                        if path and path.exists():
+                            path.unlink()
+                    except Exception:
+                        pass
+        except Exception:
+            log.exception(
+                "bulk-delete-worker: scope-cleanup phase failed",
+            )
+
+        # Master-radering
+        deleted = 0
+        try:
+            with master_session() as s:
+                n = (
+                    s.query(Student)
+                    .filter(Student.teacher_id == teacher_id)
+                    .delete(synchronize_session=False)
+                )
+                s.commit()
+                deleted = int(n)
+        except Exception:
+            log.exception(
+                "bulk-delete-worker: master-delete failed för "
+                "teacher %s",
+                teacher_id,
+            )
+            job.update(
+                status="failed",
+                deleted_count=deleted,
+                failed_count=len(student_ids),
+                failed_ids=student_ids,
+                error="Master delete failed (se Cloud Logging)",
+            )
+            return
+
+        job.update(
+            status="done",
+            deleted_count=deleted,
+            failed_count=0,
+        )
+        log.info(
+            "bulk-delete-worker: KLART teacher=%s, deleted=%d",
+            teacher_id, deleted,
+        )
+    except Exception as e:
+        log.exception(
+            "bulk-delete-worker: total failure för teacher %s",
+            teacher_id,
+        )
+        job.update(status="failed", error=str(e)[:300])
+
+
+@router.delete(
+    "/teacher/bulk-delete-all-my-students",
+)
+def v2_delete_all_my_students(
+    background_tasks: BackgroundTasks,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Starta bakgrunds-radering av alla teachers elever.
+
+    Returnerar OMEDELBART (inom ms) med job_id. Frontend pollar
+    /v2/teacher/bulk-delete-status för progress.
+
+    Tidigare körde detta synkront — Postgres CASCADE på 30+ tabeller
+    kunde ta 30-60 s, frontend hängde och såg ut som om inget hände.
+    Nu schemaläggs som BackgroundTask + status-endpoint.
+    """
+    teacher_id = _require_teacher(info)
+    # Reset job state
+    _bulk_delete_jobs[teacher_id] = {
+        "status": "queued",
+        "deleted_count": 0,
+        "failed_count": 0,
+    }
+    background_tasks.add_task(_bulk_delete_worker, teacher_id)
+    return {"status": "queued", "teacher_id": teacher_id}
+
+
+@router.get("/teacher/bulk-delete-status")
+def v2_bulk_delete_status(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Polla för status på pågående bulk-delete."""
+    teacher_id = _require_teacher(info)
+    job = _bulk_delete_jobs.get(teacher_id)
+    if job is None:
+        return {"status": "idle"}
+    return job
+
 
 
 @router.post(
@@ -15300,6 +17216,7 @@ def _ensure_student_has_initial_data(
 
 def _auto_pay_historical_invoices(
     student: "Student", year_month: str,
+    cutoff_date: Optional[_date] = None,
 ) -> None:
     """Markera alla fakturor från en historisk månad som BETALDA via
     autogiro + skapa motsvarande Transaction från lönekonto.
@@ -15309,6 +17226,11 @@ def _auto_pay_historical_invoices(
     postlådan. Vi simulerar att autogiro drog dem på due_date.
 
     Idempotent via stable hash. year_month = "YYYY-MM".
+
+    `cutoff_date` (valfritt): Om satt, betala bara fakturor där
+    due_date < cutoff_date. Används för innevarande månad så bara
+    redan-förfallna fakturor auto-betalas (= "i dag är 6 maj och
+    hyran för 1 maj är förfallen, ska redan vara dragen").
     """
     from datetime import date as _d_pay
     from hashlib import sha256 as _sha
@@ -15326,6 +17248,12 @@ def _auto_pay_historical_invoices(
     except Exception:
         return
 
+    # Cutoff: inom innevarande månad vill vi bara dra det som
+    # faktiskt redan förfallit, inte allt som ska komma framöver.
+    effective_end = period_end
+    if cutoff_date is not None and cutoff_date < period_end:
+        effective_end = cutoff_date
+
     scope_key = _sfs_p(student)
     with _sctx_p(scope_key):
         with session_scope() as s:
@@ -15340,10 +17268,13 @@ def _auto_pay_historical_invoices(
             mails = (
                 s.query(MailItem)
                 .filter(
-                    MailItem.mail_type == "invoice",
+                    # Salary_slip OCH invoice tas båda — lönespec från
+                    # förra månaden är också "historik" och ska inte
+                    # ligga som ohanterad i postlådan när månaden är slut.
+                    MailItem.mail_type.in_(["invoice", "salary_slip"]),
                     MailItem.status.in_(["unhandled", "viewed"]),
                     MailItem.due_date >= period_start,
-                    MailItem.due_date < period_end,
+                    MailItem.due_date < effective_end,
                 )
                 .all()
             )
@@ -15358,7 +17289,11 @@ def _auto_pay_historical_invoices(
                     .filter(Transaction.hash == tx_hash)
                     .first()
                 )
-                if existing is None:
+                # För invoice: skapa autogiro-transaktion (utgift).
+                # För salary_slip: lönen är redan transakterad av
+                # salary_phase.py (en separat Transaction-rad), så vi
+                # markerar bara mailet som hanterat — ingen extra tx.
+                if existing is None and m_inv.mail_type == "invoice":
                     tx = Transaction(
                         account_id=lonekonto.id,
                         date=m_inv.due_date or period_start,
@@ -15375,6 +17310,958 @@ def _auto_pay_historical_invoices(
                     s.add(tx)
                 m_inv.status = "paid"
             s.commit()
+
+
+# Bounded parallelism för seed-jobb. Tidigare kunde 20+ background-
+# seeds köra parallellt när läraren batch-skapade elever, vilket
+# spräckte både Cloud SQL-poolen (varje seed öppnar 5+ scope-sessions)
+# och 1 GiB-minnesgränsen. Med max 2 samtidiga seeds får vi naturlig
+# back-pressure utan att blockera UI:t.
+import threading as _threading_seed
+_SEED_CONCURRENCY = 2
+_seed_semaphore = _threading_seed.Semaphore(_SEED_CONCURRENCY)
+
+
+# === Dunning · automatisk eskalering av obetalda fakturor =========
+#
+# Verkligt svenskt påminnelse-flöde:
+#   5 dgr efter förfall  → Påminnelse  (60 kr avgift, lagstadgat max)
+#   14 dgr efter förfall → Sista påminnelsen (60 kr nytt avgift)
+#   30 dgr efter förfall → Inkassokrav (180 kr, lagstadgat max enligt
+#                                       inkassolagen § 5)
+#   60 dgr efter förfall → Kronofogden · betalningsföreläggande
+#                          (600 kr ansökan + betalningsanmärkning)
+#
+# Triggers vid varje GET /v2/hub och GET /v2/postladan, cachat 60s
+# per elev så vi inte kör helpern flera gånger på rad. En MailItem
+# räknas som BETALD (= ingen reminder triggas) när:
+#   1. mail.status == "paid", ELLER
+#   2. mail.upcoming_id är satt och tillhörande UpcomingTransaction
+#      har matched_transaction_id != NULL (autogiro/manuell tx matchade)
+#
+# Att bara EXPORTERA en faktura räcker INTE — pengarna måste faktiskt
+# ha lämnat kontot. Path 2 (eleven gjorde inget alls, ingen Upcoming)
+# eskaleras också via mail-fältet direkt.
+
+_dunning_cache: dict[int, float] = {}  # student_id → last-run-ts
+_DUNNING_CACHE_TTL = 60.0  # sekunder
+
+
+# === Skatteverket · deklaration-events =====================
+#
+# När spel-tiden passerar 2 mars/17 mars/31 mars/4 maj varje år
+# triggar vi mail från Skatteverket som följer SKV:s riktiga tids-
+# linje. Eleven ser deklaration-fönstret öppna och stänga, kan
+# lämna in i tid och få återbäring i april — eller missa deadline
+# och få förseningsavgift.
+#
+# Spel-tiden börjar 2026-01-01. Första deklarationen (för 2026)
+# blir tillgänglig 2027-03-02 = 14.5 real-dagar in. Förstaårs-
+# studenter hinner se ETT helt deklaration-flöde inom 4 veckors
+# elev-tid.
+
+_SKV_EVENTS_CACHE: dict[int, float] = {}
+_SKV_EVENTS_TTL = 300.0  # 5 min
+
+
+def _seed_skv_deklaration_events(student_id: int) -> int:
+    """Skapa Skatteverket-deklaration-mail när spel-tiden passerar
+    SKV:s tidslinje. Idempotent · cache-gated (5 min). Tysta fel.
+
+    Trigger-datum per spel-år Y (deklaration för år Y-1):
+        Y mars 2:  Din deklaration finns i digital brevlåda
+        Y mars 17: Du kan deklarera nu
+        Y mars 31: Sista dag för digital deklaration + ev. återbäring
+        Y maj 4:   Sista dag att deklarera
+
+    Returnerar antal nya mail.
+    """
+    import time as _t_skv
+    last_run = _SKV_EVENTS_CACHE.get(student_id, 0.0)
+    if _t_skv.time() - last_run < _SKV_EVENTS_TTL:
+        return 0
+    _SKV_EVENTS_CACHE[student_id] = _t_skv.time()
+
+    try:
+        from datetime import date as _d_skv
+        from ..game_engine.release_schedule import (
+            GAME_ANCHOR_DATE,
+            game_date_for,
+        )
+        from ..school.engines import (
+            scope_context as _sctx_skv,
+            scope_for_student as _sfs_skv,
+        )
+        from ..db.models import MailItem as _MI_skv
+
+        with master_session() as ms:
+            stu = ms.get(Student, student_id)
+            if stu is None or stu.created_at is None:
+                return 0
+
+        gy, gm, gd = game_date_for(stu.created_at)
+        try:
+            current_game_d = _d_skv(gy, gm, max(1, min(28, gd)))
+        except Exception:
+            return 0
+
+        # Bygg list av alla SKV-milstolpar som passerats sedan anchor
+        skv_steps = [
+            (
+                "skv_brevlada", _d_skv.fromisoformat,
+                "Din deklaration finns i digital brevlåda",
+                "Hej. Din inkomstdeklaration för {prev_year} ligger nu "
+                "i digitala brevlådan. Du kan börja granska direkt — "
+                "själva inlämningen öppnar 17 mars. Kontrollera "
+                "förtryckta uppgifter, ev. ROT/RUT-arbeten, ränteavdrag.",
+                3, 2,  # mars 2
+            ),
+            (
+                "skv_open", _d_skv.fromisoformat,
+                "Du kan deklarera nu",
+                "Inlämningstjänsten är öppen. Lämna in senast 31 mars "
+                "om du vill ha eventuell skatteåterbäring i april. "
+                "Sista dag totalt är 4 maj.",
+                3, 17,
+            ),
+            (
+                "skv_digital_deadline",
+                _d_skv.fromisoformat,
+                "Digital deadline · skatteåterbäring i april",
+                "Idag är sista dag att deklarera digitalt för att "
+                "garantera skatteåterbäring i april. Efter detta "
+                "betalas eventuell återbäring i juni–augusti.",
+                3, 31,
+            ),
+            (
+                "skv_final_deadline",
+                _d_skv.fromisoformat,
+                "Sista dag att deklarera",
+                "Idag är ALLRA SISTA dagen att lämna in deklarationen. "
+                "Missar du deadline blir det förseningsavgift "
+                "(1 250 kr första gången, 6 250 kr om du fortsatt "
+                "inte deklarerar).",
+                5, 4,
+            ),
+        ]
+
+        # För varje passerat SKV-fönster (varje år sedan ANCHOR-året)
+        scope_key = _sfs_skv(stu)
+        n_created = 0
+        with _sctx_skv(scope_key):
+            with session_scope() as s:
+                # Loopa år från ANCHOR_YEAR + 1 (första deklaration)
+                # till current_game_year. För varje år: kolla varje
+                # SKV-step och skapa mail om datumet passerats och
+                # mailet inte finns redan.
+                for tax_year in range(
+                    GAME_ANCHOR_DATE.year + 1, gy + 1,
+                ):
+                    prev_year = tax_year - 1
+                    for (
+                        kind, _parse, subject, body_tmpl, mm, dd,
+                    ) in skv_steps:
+                        try:
+                            milestone_d = _d_skv(tax_year, mm, dd)
+                        except Exception:
+                            continue
+                        if milestone_d > current_game_d:
+                            continue  # inte passerat än
+                        # Idempotens · samma year+kind = en mail
+                        unique_subj = (
+                            f"{subject} · {prev_year}"
+                        )
+                        existing = (
+                            s.query(_MI_skv)
+                            .filter(_MI_skv.subject == unique_subj)
+                            .first()
+                        )
+                        if existing is not None:
+                            continue
+                        body = body_tmpl.replace(
+                            "{prev_year}", str(prev_year),
+                        )
+                        s.add(_MI_skv(
+                            sender="Skatteverket",
+                            sender_short="SKV",
+                            sender_kind="agency",
+                            sender_meta=(
+                                f"Deklaration {prev_year}"
+                            ),
+                            mail_type="authority",
+                            subject=unique_subj,
+                            body_meta=f"Deklaration · {prev_year}",
+                            body=body,
+                            amount=None,
+                            due_date=milestone_d if kind in (
+                                "skv_digital_deadline",
+                                "skv_final_deadline",
+                            ) else None,
+                            status="unhandled",
+                            released_at=None,
+                        ))
+                        n_created += 1
+                if n_created > 0:
+                    s.commit()
+        return n_created
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_seed_skv_deklaration_events failed för student %s",
+            student_id,
+        )
+        return 0
+
+# Auto-tick-månader · cacha 5 min så vi inte tickar samma månad
+# flera gånger per request-burst.
+_auto_tick_month_cache: dict[int, float] = {}
+_AUTO_TICK_MONTH_TTL = 300.0  # 5 min
+
+
+def _auto_tick_private_months_if_due(student_id: int) -> int:
+    """Tick fram saknade privat-månader baserat på speltid sedan
+    student.created_at. Eleven driver karaktären framåt: 1 real-timme
+    = 1 spel-vecka, så efter ~4 real-timmar har en ny månad startat.
+
+    Idempotent · cachat så endast 1 körning per 5 min/elev. Tysta
+    fel — får aldrig ta ner request:en.
+
+    Returnerar antal månader som tickats.
+    """
+    import time as _t_at
+    last = _auto_tick_month_cache.get(student_id, 0.0)
+    if _t_at.time() - last < _AUTO_TICK_MONTH_TTL:
+        return 0
+    _auto_tick_month_cache[student_id] = _t_at.time()
+
+    try:
+        from datetime import datetime as _dt_at, timedelta as _td_at
+        from ..game_engine.release_schedule import game_year_month
+        from ..game_engine.profile_generator import generate_profile
+        from ..game_engine.monthly_engine import tick_month
+        from ..school.engines import (
+            scope_context as _sctx_at, scope_for_student as _sfs_at,
+        )
+        from ..db.models import MailItem as _MI_at
+
+        with master_session() as ms:
+            stu = ms.get(Student, student_id)
+            if stu is None:
+                return 0
+            created_at = stu.created_at
+            display_name = stu.display_name or "Elev"
+            sp = (
+                ms.query(StudentProfile)
+                .filter(StudentProfile.student_id == student_id)
+                .first()
+            )
+            starting_level = (
+                getattr(stu, "v2_level", None) or 1
+            )
+            partner_model = (
+                getattr(stu, "v2_partner_model", None) or "solo"
+            )
+            spend_profile = (
+                getattr(stu, "v2_spend_profile", None) or "balanserad"
+            )
+
+        if created_at is None:
+            return 0
+        # game_year_month använder GAME_ANCHOR_DATE (2026-01-01) som
+        # spel-startpunkt. Andra argumentet är legacy och ignoreras.
+        current_game_ym = game_year_month(created_at)
+
+        # Hitta senast tickade ym = max year_month från MailItem.due_date
+        scope_key = _sfs_at(stu)
+        with _sctx_at(scope_key):
+            with session_scope() as s:
+                latest_due = (
+                    s.query(_MI_at.due_date)
+                    .filter(_MI_at.due_date.isnot(None))
+                    .order_by(_MI_at.due_date.desc())
+                    .first()
+                )
+                if latest_due is None or latest_due[0] is None:
+                    # BOOTSTRAP-FIX: postlådan helt tom (seed misslyckades
+                    # eller städades). Ticka från månaden FÖRE anchor så
+                    # historiska månader fylls + anchor-månaden seedas.
+                    # Annars är vi stuck i evig 0-mail-loop eftersom
+                    # det här endpoint:et kräver existerande mail för att
+                    # veta var det ska börja.
+                    from ..game_engine.release_schedule import (
+                        GAME_ANCHOR_DATE,
+                    )
+                    if GAME_ANCHOR_DATE.month == 1:
+                        latest_ym = (
+                            f"{GAME_ANCHOR_DATE.year - 1:04d}-12"
+                        )
+                    else:
+                        latest_ym = (
+                            f"{GAME_ANCHOR_DATE.year:04d}-"
+                            f"{GAME_ANCHOR_DATE.month - 1:02d}"
+                        )
+                else:
+                    latest_ym = (
+                        f"{latest_due[0].year:04d}-"
+                        f"{latest_due[0].month:02d}"
+                    )
+
+        # Tick alla månader mellan latest_ym+1 och current_game_ym
+        if latest_ym >= current_game_ym:
+            return 0  # inget nytt att ticka
+
+        # Bygg list över year_months att ticka (max 12 per körning så
+        # vi inte hänger en request om en elev varit borta länge)
+        ly, lm = (int(p) for p in latest_ym.split("-"))
+        cy, cm = (int(p) for p in current_game_ym.split("-"))
+        to_tick: list[str] = []
+        ny, nm = ly, lm
+        while True:
+            nm += 1
+            if nm > 12:
+                nm = 1
+                ny += 1
+            if (ny, nm) > (cy, cm):
+                break
+            to_tick.append(f"{ny:04d}-{nm:02d}")
+            if len(to_tick) >= 12:
+                break
+
+        if not to_tick:
+            return 0
+
+        # Bygg profile (samma seed som vid skapandet)
+        profile = generate_profile(
+            seed=student_id,
+            archetype="random",
+            starting_level=starting_level,
+            name=display_name,
+            partner_model=partner_model,
+        )
+
+        # Hämta student-objektet i master för tick_month
+        with master_session() as ms2:
+            stu_full = ms2.get(Student, student_id)
+            if stu_full is None:
+                return 0
+
+            for ym in to_tick:
+                try:
+                    tick_month(
+                        stu_full,
+                        profile,
+                        ym,
+                        spend_profile=spend_profile,
+                        starting_level=starting_level,
+                    )
+                    # Auto-betala fakturor i den månaden — eleven har
+                    # passerat den i speltid, så autogiro har hunnit dra
+                    # alla löpande utgifter
+                    _auto_pay_historical_invoices(stu_full, ym)
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "_auto_tick_private_months_if_due: tick %s "
+                        "failed för student %s",
+                        ym, student_id,
+                    )
+                    break
+
+        return len(to_tick)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_auto_tick_private_months_if_due failed för student %s",
+            student_id,
+        )
+        return 0
+
+
+_AUTOGIRO_DEBIT_CACHE: dict[int, float] = {}
+_AUTOGIRO_DEBIT_TTL = 60.0  # cache-gated 60s · billig nog att köra ofta
+
+
+def _auto_debit_signed_upcomings_if_due(student_id: int) -> int:
+    """Drag pengar från signerade UpcomingTransaction:s vars
+    expected_date passerat (i spel-tid).
+
+    Vid signering (autogiro=True via BankID) markerar vi en upcoming
+    som auktoriserad. När förfallodagen kommer SKA banken dra pengarna
+    automatiskt. Tidigare buggen: ingen auto-debit fanns → eleven
+    signerade på Jan 1, dag 2 visade banken '1 d sen' istället för
+    'drogs Jan 1'.
+
+    Skapar Transaction(amount=−belopp, account_id=debit_account_id),
+    sätter UpcomingTransaction.matched_transaction_id. Om saldo
+    saknas → markerar UpcomingTransaction.autogiro=False och låter
+    raden bli osignerad igen så eleven måste betala manuellt eller
+    fylla på lönekontot. Idempotent: dedup via tx.hash.
+
+    Cache-gated 60s/elev. Tysta fel — får inte ta ner request.
+    """
+    import time as _t_ad
+    last = _AUTOGIRO_DEBIT_CACHE.get(student_id, 0.0)
+    if _t_ad.time() - last < _AUTOGIRO_DEBIT_TTL:
+        return 0
+    _AUTOGIRO_DEBIT_CACHE[student_id] = _t_ad.time()
+
+    try:
+        from datetime import datetime as _dt_ad
+        from decimal import Decimal as _Dec_ad
+        from hashlib import sha256 as _sha_ad
+        from ..business.game_clock import (
+            current_game_date_for_student as _cgdfs,
+        )
+        from ..school.engines import (
+            scope_context as _sctx_ad, scope_for_student as _sfs_ad,
+        )
+        from ..school.models import Student as _Stu_ad
+
+        with master_session() as ms:
+            stu = ms.get(_Stu_ad, student_id)
+            if stu is None:
+                return 0
+            scope_key = _sfs_ad(stu)
+
+        today_game = _cgdfs(student_id)
+        n_debited = 0
+        with _sctx_ad(scope_key):
+            with session_scope() as s:
+                # Hitta signerade upcomings vars förfallodag passerat
+                # och som ännu inte är matchade mot Transaction.
+                due = (
+                    s.query(UpcomingTransaction)
+                    .filter(
+                        UpcomingTransaction.autogiro.is_(True),
+                        UpcomingTransaction.matched_transaction_id.is_(None),
+                        UpcomingTransaction.expected_date <= today_game,
+                    )
+                    .all()
+                )
+                if not due:
+                    return 0
+
+                # Default-konto för debit · första checking om upcoming
+                # inte explicit pekar på ett.
+                default_acc = (
+                    s.query(Account)
+                    .filter(Account.type == "checking")
+                    .order_by(Account.id.asc())
+                    .first()
+                )
+                if default_acc is None:
+                    return 0
+
+                for u in due:
+                    acc_id = u.debit_account_id or default_acc.id
+                    # Saldo-kontroll · går vi minus → markera failed
+                    # (autogiro-False) så eleven får signera om eller
+                    # fylla på kontot manuellt.
+                    bal_q = s.query(
+                        __import__("sqlalchemy").func.coalesce(
+                            __import__("sqlalchemy").func.sum(
+                                Transaction.amount,
+                            ), 0,
+                        ),
+                    ).filter(Transaction.account_id == acc_id)
+                    base = s.get(Account, acc_id)
+                    bal = (
+                        (_Dec_ad(str(base.opening_balance or 0)))
+                        + (_Dec_ad(str(bal_q.scalar() or 0)))
+                    )
+                    if bal < u.amount:
+                        # Otillräckligt saldo · släpp signaturen så
+                        # raden blir osignerad och eleven kan agera
+                        u.autogiro = False
+                        continue
+
+                    # Idempotent hash · samma signering får aldrig
+                    # skapa två transaktioner.
+                    raw = (
+                        f"autogiro|{student_id}|{u.id}|"
+                        f"{u.expected_date.isoformat()}|{u.amount}"
+                    )
+                    tx_hash = _sha_ad(raw.encode()).hexdigest()[:32]
+                    existing = (
+                        s.query(Transaction)
+                        .filter(Transaction.hash == tx_hash)
+                        .first()
+                    )
+                    if existing is not None:
+                        # Redan dragen tidigare körning · matcha
+                        u.matched_transaction_id = existing.id
+                        continue
+
+                    tx = Transaction(
+                        account_id=acc_id,
+                        date=u.expected_date,
+                        amount=-_Dec_ad(str(u.amount)),
+                        currency="SEK",
+                        raw_description=f"Autogiro · {u.name}",
+                        normalized_merchant=u.name,
+                        hash=tx_hash,
+                        is_transfer=False,
+                        user_verified=True,
+                    )
+                    s.add(tx)
+                    s.flush()
+                    u.matched_transaction_id = tx.id
+
+                    # Om upcoming länkar till en MailItem → markera
+                    # mailet som paid också (annars dyker faktura
+                    # upp som ohanterad i postlådan trots dragning).
+                    related_mail = (
+                        s.query(MailItem)
+                        .filter(MailItem.upcoming_id == u.id)
+                        .first()
+                    )
+                    if related_mail is not None:
+                        related_mail.status = "paid"
+                    n_debited += 1
+                s.commit()
+        return n_debited
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_auto_debit_signed_upcomings_if_due failed för student %s",
+            student_id,
+        )
+        return 0
+
+
+_RECEIVED_AT_NORMALIZED: dict[int, float] = {}
+_RECEIVED_AT_NORMALIZE_TTL = 600.0  # 10 min · idempotent
+
+
+def _normalize_mail_received_at_if_seed_stamped(student_id: int) -> int:
+    """Migrationsfix · stäm ihop MailItem.received_at med spel-tid.
+
+    Kontext: tidigare seed-flöden stämplade alla MailItems med
+    server_default=func.now() (= real-tid när seed kördes). Resultatet
+    blev att postlådan visade "Senaste utskick 7 maj 19:39" och
+    fakturadatum "7 maj 2026" på ALLA mail trots att de gällde januari.
+
+    Två normaliseringsfall:
+    A. due_date satt → sätt received_at = due_date - 14d (3d för lönespec)
+       så fakturadatum/lönespec-datum visas i samma månad som due_date.
+    B. due_date saknas (info-mail) → konvertera real-tid → spel-tid via
+       real_to_game_datetime(student.created_at, m.received_at). Då
+       hamnar info-mail som "Du kan nu driva eget" på rätt spel-vecka.
+
+    Idempotent · normaliserar bara om received_at är "far off" (>60d
+    från due_date eller >30d efter aktuell spel-tid). Cache-gated 10 min.
+    """
+    import time as _t_norm
+    last = _RECEIVED_AT_NORMALIZED.get(student_id, 0.0)
+    if _t_norm.time() - last < _RECEIVED_AT_NORMALIZE_TTL:
+        return 0
+    _RECEIVED_AT_NORMALIZED[student_id] = _t_norm.time()
+
+    try:
+        from datetime import (
+            datetime as _dt_n, timedelta as _td_n, time as _time_n,
+        )
+        from ..db.models import MailItem as _MI_n
+        from ..school.engines import (
+            scope_context as _sctx_n, scope_for_student as _sfs_n,
+        )
+        from ..game_engine.release_schedule import (
+            real_to_game_datetime as _r2g_n, game_date_for as _gdf_n,
+        )
+
+        with master_session() as ms:
+            stu = ms.get(Student, student_id)
+            if stu is None or stu.created_at is None:
+                return 0
+            scope_key = _sfs_n(stu)
+            stu_created_at = stu.created_at
+
+        # Beräkna nuvarande spel-tid · för cutoff i fall B
+        try:
+            gy_now, gm_now, gd_now = _gdf_n(stu_created_at)
+            now_game = _dt_n(gy_now, gm_now, max(1, min(28, gd_now)))
+        except Exception:
+            now_game = None
+
+        n_normalized = 0
+        with _sctx_n(scope_key):
+            with session_scope() as s:
+                rows = s.query(_MI_n).all()
+                for m in rows:
+                    if m.received_at is None:
+                        continue
+                    if m.due_date is not None:
+                        # Fall A · faktura/lönespec
+                        diff_days = abs(
+                            (m.received_at.date() - m.due_date).days
+                        )
+                        if diff_days <= 60:
+                            continue
+                        offset_days = (
+                            3 if m.mail_type == "salary_slip" else 14
+                        )
+                        arrival_d = m.due_date - _td_n(days=offset_days)
+                        m.received_at = _dt_n.combine(
+                            arrival_d, _time_n(8, 30),
+                        )
+                        n_normalized += 1
+                    else:
+                        # Fall B · info-mail utan due_date
+                        if now_game is None:
+                            continue
+                        # Är received_at i framtiden enligt spel-tid?
+                        if m.received_at <= now_game + _td_n(days=30):
+                            continue
+                        try:
+                            game_dt = _r2g_n(stu_created_at, m.received_at)
+                            m.received_at = game_dt
+                            n_normalized += 1
+                        except Exception:
+                            continue
+        return n_normalized
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_normalize_mail_received_at: failed för student %s",
+            student_id,
+        )
+        return 0
+
+
+# Eskaleringssteg · (min_days_overdue, level, kind, fee, label, pent_safety, pent_economy)
+_DUNNING_STEPS = [
+    (5,  1, "påminnelse",  60,  "Påminnelse",                       -2, 0),
+    (14, 2, "påminnelse2", 60,  "Sista påminnelsen",                -3, -1),
+    (30, 3, "inkasso",     180, "Inkassokrav",                      -5, -3),
+    (60, 4, "kronofogden", 600, "Kronofogden · betalningsföreläggande", -10, -8),
+]
+
+
+def _run_dunning_for_student(
+    student_id: int, *, force_run: bool = False,
+) -> None:
+    """Eskalera obetalda fakturor för en elev. Idempotent + cache-gated.
+    Kallas från /v2/hub och /v2/postladan. Tysta fel — får aldrig ta
+    ner request:en eftersom det är "live"-uppdatering, inte kärndata.
+
+    Sätter scope-ContextVar internt så helpern fungerar både via
+    request-flödet (där middleware sätter den) och vid direkt-anrop
+    från tester / batch-jobb.
+
+    `force_run`: kringgår både 60s-cache och 12h-spärren för nya elever.
+    Avsedd för tester som verifierar dunning-logik utan att behöva
+    backdatera student.created_at.
+    """
+    import time as _t_dun
+    from datetime import date as _d_dun, datetime as _dt_dun, timedelta as _td_dun
+    if not force_run:
+        last = _dunning_cache.get(student_id, 0.0)
+        if _t_dun.time() - last < _DUNNING_CACHE_TTL:
+            return
+    _dunning_cache[student_id] = _t_dun.time()
+
+    # Resolva scope-key från student_id om ContextVar:n inte är satt
+    from ..school.engines import (
+        scope_for_student as _sfs_dun, scope_context as _sctx_dun,
+        get_current_scope as _gcs_dun,
+    )
+    from ..school.models import Student as _Stu_dun
+
+    # Spärr · skippa dunning för helt nya elever. Seed-flödet skapar
+    # 4 mån historiska fakturor som auto-betalas, men sker async via
+    # bakgrundsjobb — ifall eleven hinner öppna postlådan innan
+    # seed-sweepen klar skulle dunning eskalera oseedade-betalda
+    # invoices till inkasso/kronofogden direkt → eleven startar med
+    # massa anmärkningar. 12 timmars buffer ger seed-jobbet tid.
+    if not force_run:
+        try:
+            with master_session() as _ms_dun:
+                stu_dun = _ms_dun.get(_Stu_dun, student_id)
+                if stu_dun is not None and stu_dun.created_at is not None:
+                    age_h = (
+                        _dt_dun.utcnow() - stu_dun.created_at
+                    ).total_seconds() / 3600.0
+                    if age_h < 12.0:
+                        return
+        except Exception:
+            pass
+
+    scope_key = _gcs_dun()
+    if not scope_key:
+        with master_session() as ms:
+            stu = ms.get(_Stu_dun, student_id)
+            if stu is None:
+                return
+            scope_key = _sfs_dun(stu)
+
+    try:
+        with _sctx_dun(scope_key), session_scope() as s:
+            today = _d_dun.today()
+            # Hämta alla potentiellt overdue fakturor + påminnelser
+            # som inte är betalda/förfallna.
+            candidates = (
+                s.query(MailItem)
+                .filter(
+                    MailItem.mail_type.in_(("invoice", "reminder")),
+                    MailItem.status.in_(("unhandled", "viewed", "exported")),
+                    MailItem.due_date.isnot(None),
+                    MailItem.due_date <= today - _td_dun(days=5),
+                )
+                .all()
+            )
+            for orig in candidates:
+                # Kolla om den är BETALD via matchad upcoming
+                if _is_paid_via_upcoming(s, orig):
+                    orig.status = "paid"
+                    s.flush()
+                    continue
+
+                days_overdue = (today - orig.due_date).days
+                # Hitta högsta lämpliga eskaleringsnivå
+                target_step = None
+                for step in _DUNNING_STEPS:
+                    if days_overdue >= step[0]:
+                        target_step = step
+                if target_step is None:
+                    continue
+
+                # Idempotens: kolla om reminder för samma original +
+                # nivå redan finns i postlådan
+                existing = (
+                    s.query(MailItem)
+                    .filter(
+                        MailItem.mail_type == "reminder",
+                        MailItem.parent_mail_id == orig.id,
+                        MailItem.reminder_level == target_step[1],
+                    )
+                    .first()
+                )
+                if existing is not None:
+                    continue
+
+                _create_dunning_mail(s, orig, target_step, student_id)
+
+                # Vid kronofogden-nivå: skapa betalningsanmärkning
+                if target_step[1] == 4:
+                    _create_payment_mark(s, orig, target_step)
+
+                # Pentagon-delta
+                _, _, _, _, _, pent_safety, pent_economy = target_step
+                if pent_safety != 0 or pent_economy != 0:
+                    try:
+                        from ..game_engine.pentagon import apply_pentagon_delta
+                        if pent_safety != 0:
+                            apply_pentagon_delta(
+                                student_id, axis="safety",
+                                requested_delta=pent_safety,
+                                reason_kind=f"dunning_level_{target_step[1]}",
+                                reason_id=orig.id,
+                                reason_table="mail_items",
+                                explanation=f"{target_step[4]} · {orig.sender}",
+                            )
+                        if pent_economy != 0:
+                            apply_pentagon_delta(
+                                student_id, axis="economy",
+                                requested_delta=pent_economy,
+                                reason_kind=f"dunning_level_{target_step[1]}",
+                                reason_id=orig.id,
+                                reason_table="mail_items",
+                                explanation=f"{target_step[4]} · {orig.sender}",
+                            )
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "dunning: pentagon-delta misslyckades",
+                        )
+
+                # Vid level 3+ markera original som "expired" (ses inte
+                # längre som ohanterad i postlådans active-counter)
+                if target_step[1] >= 3:
+                    orig.status = "expired"
+                    s.flush()
+
+                # Lärar-spårning
+                try:
+                    from ..school.activity import log_activity
+                    log_activity(
+                        kind=f"dunning.{target_step[2]}",
+                        summary=f"{target_step[4]} skapad: {orig.sender}",
+                        payload={
+                            "original_mail_id": orig.id,
+                            "level": target_step[1],
+                            "fee": target_step[3],
+                            "days_overdue": days_overdue,
+                        },
+                    )
+                except Exception:
+                    pass
+            s.commit()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "dunning: helper failed för student=%s — sväljer", student_id,
+        )
+
+
+def _is_paid_via_upcoming(s, mail) -> bool:
+    """Är fakturan betald? Via mail.status='paid' ELLER kopplad
+    UpcomingTransaction har matched_transaction_id satt."""
+    if mail.status == "paid":
+        return True
+    if mail.upcoming_id is not None:
+        upc = s.get(UpcomingTransaction, mail.upcoming_id)
+        if upc is not None and upc.matched_transaction_id is not None:
+            return True
+    return False
+
+
+def _create_dunning_mail(s, orig, step, student_id: int) -> None:
+    """Skapa ny MailItem(mail_type='reminder') i postlådan + en
+    UpcomingTransaction för avgiften."""
+    from datetime import date as _d_dun, timedelta as _td_dun
+    import hashlib as _hl_dun
+    from decimal import Decimal as _Dec
+    _, level, _kind, fee, label, _, _ = step
+    today = _d_dun.today()
+    fee_due = today + _td_dun(days=14)
+
+    # Sender · "Inkasso AB" på inkasso-nivå, "Kronofogden" på level 4
+    if level == 4:
+        sender = "Kronofogdemyndigheten"
+        sender_short = "KFM"
+        sender_kind = "skv"
+    elif level == 3:
+        sender = f"Inkasso · {orig.sender}"
+        sender_short = "INK"
+        sender_kind = "other"
+    else:
+        sender = orig.sender
+        sender_short = orig.sender_short
+        sender_kind = orig.sender_kind
+
+    body = _build_dunning_body(orig, step)
+    new_mail = MailItem(
+        sender=sender,
+        sender_short=sender_short,
+        sender_kind=sender_kind,
+        sender_meta=f"påminnelse · nivå {level}",
+        mail_type="reminder",
+        subject=f"{label} · {orig.subject}",
+        body_meta=(
+            f"Avgift {fee} kr · ursprung {orig.subject}"
+        ),
+        body=body,
+        amount=_Dec(-fee),
+        due_date=fee_due,
+        status="unhandled",
+        is_recurring=False,
+        parent_mail_id=orig.id,
+        reminder_level=level,
+    )
+    s.add(new_mail)
+    s.flush()
+
+
+def _build_dunning_body(orig, step) -> str:
+    """Mänsklig text-body för reminder-mailet — pedagogiskt + realistiskt."""
+    _, level, _kind, fee, label, _, _ = step
+    orig_amt = abs(float(orig.amount or 0))
+    if level == 1:
+        return (
+            f"Hej,\n\nVi har inte tagit emot din betalning för "
+            f"{orig.subject} på {orig_amt:.0f} kr.\n\n"
+            f"Vänligen betala omgående. För denna påminnelse "
+            f"tillkommer en avgift på {fee} kr (lagstadgat max).\n\n"
+            f"Använd OCR + bankgiro från ursprungsfakturan."
+        )
+    if level == 2:
+        return (
+            f"Sista påminnelsen.\n\n"
+            f"Vi har fortfarande inte tagit emot din betalning för "
+            f"{orig.subject} på {orig_amt:.0f} kr.\n\n"
+            f"Om vi inte ser betalning inom 14 dagar lämnas ärendet "
+            f"till inkasso. En ny avgift på {fee} kr har lagts till."
+        )
+    if level == 3:
+        return (
+            f"INKASSOKRAV\n\n"
+            f"Ärendet har överlämnats till inkassobolag för indrivning.\n\n"
+            f"Skuld: {orig_amt:.0f} kr (ursprung: {orig.subject})\n"
+            f"Inkassoavgift: {fee} kr (max enl. inkassolagen § 5)\n"
+            f"Dröjsmålsränta tickar dagligen.\n\n"
+            f"Betala omgående för att undvika att ärendet lämnas till "
+            f"Kronofogden — det skulle ge en betalningsanmärkning på "
+            f"din kreditprofil i 3 år."
+        )
+    # level 4 — Kronofogden
+    return (
+        f"BETALNINGSFÖRELÄGGANDE — KRONOFOGDEMYNDIGHETEN\n\n"
+        f"Ett betalningsföreläggande har utfärdats mot dig.\n\n"
+        f"Skuld: {orig_amt:.0f} kr (ursprung: {orig.subject})\n"
+        f"Ansökningsavgift: {fee} kr\n\n"
+        f"En betalningsanmärkning har registrerats hos UC. "
+        f"Anmärkningen påverkar din möjlighet att få lån, hyra "
+        f"bostad och teckna abonnemang i 3 år.\n\n"
+        f"Bestrid eller betala inom 10 dagar."
+    )
+
+
+def _create_payment_mark(s, orig, step) -> None:
+    """Skapa PaymentMark för UC-score-effekt vid kronofogden-eskalering."""
+    from datetime import date as _d_dun
+    from decimal import Decimal as _Dec
+    from ..db.models import PaymentMark
+    today = _d_dun.today()
+    expires = _d_dun(today.year + 3, today.month, min(today.day, 28))
+    s.add(PaymentMark(
+        occurred_on=today,
+        creditor=orig.sender,
+        amount=abs(_Dec(str(orig.amount or 0))),
+        kind="kronofogden",
+        notes=(
+            f"Auto-skapad via dunning-flödet. "
+            f"Ursprung: {orig.subject} · {step[4]}"
+        ),
+        expires_at=expires,
+    ))
+    s.flush()
+
+
+def _seed_initial_student_data_safe(
+    student_id: int,
+    spend_profile: str,
+    starting_level: int,
+    partner_model: str,
+) -> None:
+    """Bakgrunds-säker wrapper kring _seed_initial_student_data.
+
+    Serializerad via _seed_semaphore (max 2 samtidiga) så batch-create
+    inte spränger connection-pool eller minne. Hämtar Student-raden
+    från master och delegerar. Tystas helt mot exceptioner — det här
+    körs som FastAPI BackgroundTask och en exception skulle förloras
+    tyst ändå, men loggas här så vi ser misslyckanden i Cloud Logging.
+    """
+    with _seed_semaphore:
+        try:
+            with master_session() as s:
+                stu = s.get(Student, student_id)
+                if stu is None:
+                    return
+                s.expunge(stu)
+            _seed_initial_student_data(
+                stu,
+                spend_profile=spend_profile,
+                starting_level=starting_level,
+                partner_model=partner_model,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "BackgroundTask: _seed_initial_student_data failed "
+                "för student %s — eleven kan ha tomma vyer tills "
+                "auto-recovery i student-detail kör",
+                student_id,
+            )
 
 
 def _seed_initial_student_data(
@@ -15436,9 +18323,31 @@ def _seed_initial_student_data(
                 sp.housing_monthly = int(profile.housing.monthly_cost)
                 sp.gross_salary_monthly = int(profile.monthly_gross)
                 sp.net_salary_monthly = int(profile.monthly_net)
+                # Synca yrke + arbetsgivare så hub-character-kortet
+                # ('Klara · Elektriker') matchar löne-transaktionen
+                # ('Lön 2025-10 · Polis'). Tidigare buggen kom av att
+                # school.profile_fixtures slumpade ett yrke med sin RNG
+                # medan game_engine.profile_generator slumpade ETT ANNAT
+                # → eleven såg två olika yrken på samma karaktär.
+                # game_engine är source-of-truth.
+                sp.profession = profile.yrke_display
+                # Arbetsgivaren finns på AnstallningsAvtal (master)
+                # men sätts via en separat synk i Sprint 7. Här fyller
+                # vi i ett rimligt default så hub inte blir tomt.
+                if not sp.employer:
+                    sp.employer = profile.yrke_display + " AB"
                 sp.has_mortgage = profile.housing.type in (
                     "bostadsratt", "villa", "radhus",
                 )
+                # Synca staden så hub-character-kort + postlåda-fakturor
+                # ("Umeå Bostäder", "Umeå kommun") matchar. school-
+                # profile_fixtures.generate_profile och game_engine-
+                # profile_generator.generate_profile delar inte RNG, så
+                # samma seed gav olika städer i de två systemen → eleven
+                # bodde i Umeå enligt hub men fick Stockholm Bostäder i
+                # postlådan. game_engine är source-of-truth eftersom det
+                # är det som driver postlåda + bank + tick.
+                sp.city = profile.city_display
                 # Synca också familje-status så insurance-coverage-gaps,
                 # KALP, hub-text använder samma värde som game_engine.
                 # Annars kan profile_fixtures säga "sambo" medan game_
@@ -15516,38 +18425,48 @@ def _seed_initial_student_data(
                     student.id,
                 )
 
-    try:
-        # === Steg 2 (FÖRRA MÅNADEN, april) ===
-        # Förra månaden HAR redan hänt — fakturor är betalda via
-        # autogiro, lönen är dragen, utgifter är genomförda. Eleven
-        # ska se den som färdig historik (ingen "ohanterad" faktura).
-        tick_month(
-            student,
-            profile,
-            year_month,
-            spend_profile=spend_profile,
-            starting_level=starting_level,
-        )
-        # Auto-betala alla fakturor från förra månaden — skapa
-        # autogiro-transaktioner från lönekonto + markera mail
-        # som status="paid" så de inte ligger kvar i postlådan
-        # som ohanterade.
-        _auto_pay_historical_invoices(student, year_month)
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "_seed_initial_student_data: tick_month (förra mån) failed för %s",
-            student.id,
-        )
+    # === Steg 2 (HISTORISKA MÅNADER) ===
+    # Spel-tiden börjar på GAME_ANCHOR_DATE (2026-01-01). Vi seedar
+    # 3 månader BAKÅT från anchor (okt/nov/dec 2025) som "redan har
+    # hänt" — eleven ser etablerad bankhistorik + 3 lönespec-rader
+    # i Arbetsgivar-widgeten vid första inloggningen.
+    from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+    anchor_y, anchor_m = GAME_ANCHOR_DATE.year, GAME_ANCHOR_DATE.month
+    historical_months: list[str] = []
+    for back in range(3, 0, -1):  # 3, 2, 1 mån bakåt från anchor
+        ty = anchor_y
+        tm = anchor_m - back
+        while tm <= 0:
+            tm += 12
+            ty -= 1
+        historical_months.append(f"{ty:04d}-{tm:02d}")
 
-    # === Steg 2b (NUVARANDE MÅNAD, maj) ===
-    # Tick även innevarande månad — då släpps fakturor + lön via
-    # realtid-projektion (auto-detect i tick_month sätter
-    # release_base = NOW när year_month >= current_ym). Eleven
-    # ser nya fakturor rulla in över 5 skoldagar.
-    today2 = _d.today()
-    current_ym = f"{today2.year:04d}-{today2.month:02d}"
-    if current_ym != year_month:  # Skippa om vi seedat current redan
+    for hist_ym in historical_months:
+        try:
+            tick_month(
+                student,
+                profile,
+                hist_ym,
+                spend_profile=spend_profile,
+                starting_level=starting_level,
+            )
+            _auto_pay_historical_invoices(student, hist_ym)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "_seed_initial_student_data: tick_month (%s) failed "
+                "för %s",
+                hist_ym, student.id,
+            )
+
+    # === Steg 2b (NUVARANDE SPEL-MÅNAD = anchor 2026-01) ===
+    # Spelaren börjar i anchor-månaden. Ticka den med release_base =
+    # student.created_at så hyra dag 1 dyker upp direkt, lönespec
+    # dag 22 efter ~3 h och lön dag 25 efter ~3.5 h. Tick_month auto-
+    # detect gör fel jämförelse (lex 2026-01 < 2026-05 = real-ym)
+    # och skulle markera anchor som historik.
+    current_ym = f"{anchor_y:04d}-{anchor_m:02d}"
+    if current_ym not in historical_months:
         try:
             tick_month(
                 student,
@@ -15555,6 +18474,7 @@ def _seed_initial_student_data(
                 current_ym,
                 spend_profile=spend_profile,
                 starting_level=starting_level,
+                release_base=student.created_at,
             )
         except Exception:
             import logging
@@ -15563,6 +18483,163 @@ def _seed_initial_student_data(
                 "failed för %s",
                 student.id,
             )
+
+    # === Steg 2d · CATCH-ALL · säkerställ att INGA seedade invoices
+    # eller reminders är överliggande. Eleven får ALDRIG starta med
+    # betalningsanmärkningar/inkasso/kronofogden som triggades av seed-
+    # data. Three-step belt-and-suspenders:
+    #   1. Markera ALLA overdue invoice/reminder-mail som paid/handled
+    #      (sweepar både fakturor från fixed_expenses-seed och dunning-
+    #      skapade reminders som hängde på dem).
+    #   2. Radera alla PaymentMark från seed-perioden (kronofogden-
+    #      skapade marks ska inte följa med en helt ny karaktär).
+    #   3. Skapa autogiro-transaktioner så bankkontot stämmer.
+    try:
+        from ..db.models import (
+            MailItem as _MI_sweep,
+            Account as _Acc_sweep,
+            Transaction as _Tx_sweep,
+            PaymentMark as _PM_sweep,
+        )
+        from hashlib import sha256 as _sha_sweep
+        with scope_context(scope_key):
+            with session_scope() as s:
+                # SPEL-TID, inte real-tid · annars markeras alla
+                # januari-fakturor som paid eftersom Jan 5 < May 7
+                # (real-tid när seed kör). Det resulterade i att
+                # postlådan visade "betald" på fakturor från senare
+                # i januari trots att eleven är på Jan 2 i spel-tid.
+                #
+                # Vi använder current_game_date_for_student() (inte
+                # current_game_date()) eftersom seed körs i bakgrunds-
+                # jobb utan actor-ContextVar satt. Variant-funktionen
+                # tar student-id direkt och slår upp created_at.
+                from ..business.game_clock import (
+                    current_game_date_for_student,
+                )
+                today_sweep = current_game_date_for_student(student.id)
+                lonekonto = (
+                    s.query(_Acc_sweep)
+                    .filter(_Acc_sweep.type == "checking")
+                    .order_by(_Acc_sweep.id.asc())
+                    .first()
+                )
+                # Sweep både invoice OCH reminder-mail (dunning genererar
+                # reminders med mail_type="reminder" — de stannade kvar
+                # som "Övrigt" → eleven började med inkasso/kronofogden)
+                stuck = (
+                    s.query(_MI_sweep)
+                    .filter(
+                        _MI_sweep.mail_type.in_(["invoice", "reminder"]),
+                        _MI_sweep.status.in_(
+                            ["unhandled", "viewed", "exported"],
+                        ),
+                    )
+                    .all()
+                )
+                for m in stuck:
+                    # Reminders saknar amount eller har påminnelseavgift
+                    # (60/180/600 kr); de bokför vi INTE (det betyder
+                    # att läraren kan se historiken men eleven är
+                    # 'handled' utan kontoavdrag — fail-safe).
+                    if m.mail_type == "reminder":
+                        m.status = "handled"
+                        # Säkerställ omedelbar synlighet
+                        m.released_at = None
+                        continue
+                    # Endast invoices vars due_date passerats betalas
+                    # här (fakturor som ska komma framöver behåller
+                    # sin status så friktion finns kvar).
+                    if (
+                        m.due_date is not None
+                        and m.due_date >= today_sweep
+                    ):
+                        continue
+                    # Säkerställ att historiska mails är synliga direkt
+                    # — annars gömmer _released_filter dem tills release_
+                    # at-tiden passerats (t.ex. lönespec dag 22 efter
+                    # student-skapandet i bakgrunden).
+                    m.released_at = None
+                    if m.amount is None:
+                        m.status = "paid"
+                        continue
+                    # Använd SAMMA hash-format som _auto_pay_historical_
+                    # invoices så båda funktionerna dedupliceras mot
+                    # varandra. Tidigare hade catch-all-sweepen sitt
+                    # eget 'seedsweep|...' format → samma faktura fick
+                    # två autogiro-transaktioner (en per format).
+                    ym_for_hash = (
+                        f"{m.due_date.year:04d}-{m.due_date.month:02d}"
+                        if m.due_date else "na"
+                    )
+                    raw = f"autopaid|{student.id}|{ym_for_hash}|{m.id}"
+                    tx_hash = _sha_sweep(raw.encode()).hexdigest()[:32]
+                    existing = (
+                        s.query(_Tx_sweep)
+                        .filter(_Tx_sweep.hash == tx_hash)
+                        .first()
+                    )
+                    if (
+                        existing is None
+                        and lonekonto is not None
+                        and m.due_date is not None
+                    ):
+                        # Skippa autogiro-tx för mails utan due_date —
+                        # Transaction.date är NOT NULL och vi vill inte
+                        # crasha hela sweepen för en konstig rad.
+                        s.add(_Tx_sweep(
+                            account_id=lonekonto.id,
+                            date=m.due_date,
+                            amount=m.amount,
+                            currency="SEK",
+                            raw_description=f"Autogiro · {m.sender}",
+                            normalized_merchant=m.sender,
+                            hash=tx_hash,
+                            is_transfer=False,
+                            user_verified=True,
+                        ))
+                    m.status = "paid"
+
+                # Radera ALLA PaymentMark som dunning eventuellt skapade
+                # under seed-flödet. En helt ny karaktär ska inte ha
+                # betalningsanmärkningar — om läraren vill simulera det
+                # konfigurerar de explicit via lärar-verktyget.
+                s.query(_PM_sweep).delete()
+                s.commit()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_seed_initial_student_data: catch-all seed-sweep failed "
+            "för %s — eleven kan starta med en kvarliggande overdue "
+            "invoice (icke-kritiskt)",
+            student.id,
+        )
+
+    # === Steg 2c · KV-startbudget (Sprint 7) ===
+    # Pedagogiskt: eleven ska INTE öppna /v2/budget och se en tom
+    # tabell. Onboarding-uppdrag #1 är "Skapa din budget" — vi seedar
+    # KV-schablonerna som utgångsläge så eleven kan justera dem nedåt
+    # eller uppåt och direkt se konsekvenserna i pentagon.
+    # Familje-aware via suggest_budget(profile.family.*).
+    try:
+        from ..budget.seed import seed_initial_budget_for_months
+        with scope_context(scope_key):
+            with session_scope() as s:
+                # Budget för senaste historiska månaden + innevarande.
+                # Att seeda alla 4 historiska gör budgeten brusig och
+                # adderar lite värde — eleven justerar bara framåt.
+                months_to_seed = [historical_months[-1]]
+                if current_ym not in months_to_seed:
+                    months_to_seed.append(current_ym)
+                seed_initial_budget_for_months(
+                    s, profile=profile, year_months=months_to_seed,
+                )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_seed_initial_student_data: budget seed failed för %s",
+            student.id,
+        )
 
     # === Steg 3-4: pension + boende ===
     with scope_context(scope_key):
@@ -16430,12 +19507,38 @@ def _gather_axis_events_for(
 
 
 def _short_date_label(dt: Optional[datetime]) -> str:
+    """Formattera real-tid-datetime som SPEL-tid-label ('14 jan').
+
+    Pentagon-händelser, lärar-tick-historik och liknande lagrar dt
+    som datetime.utcnow() (real-tid) men eleven förväntar sig spel-tid
+    eftersom hela appen agerar som om "nu" är jan/feb 2026, inte maj.
+
+    Konvertering: 1 real-timme = 1 spel-vecka sedan student.created_at.
+    Faller tillbaka till real-tid-formatering om scope/elev saknas.
+    """
     if dt is None:
         return "—"
     months = [
         "jan", "feb", "mar", "apr", "maj", "jun",
         "jul", "aug", "sep", "okt", "nov", "dec",
     ]
+    # Försök konvertera real-tid → spel-tid via student.created_at
+    try:
+        from ..school.engines import (
+            get_current_actor_student as _gcas_sd,
+        )
+        from ..game_engine.release_schedule import (
+            real_to_game_datetime as _r2g,
+        )
+        sid = _gcas_sd()
+        if sid is not None:
+            with master_session() as _ms_sd:
+                _stu_sd = _ms_sd.get(Student, sid)
+                if _stu_sd is not None and _stu_sd.created_at is not None:
+                    g_dt = _r2g(_stu_sd.created_at, dt)
+                    return f"{g_dt.day} {months[g_dt.month - 1]}"
+    except Exception:
+        pass
     return f"{dt.day} {months[dt.month - 1]}"
 
 
@@ -16594,6 +19697,50 @@ class V2NotificationsResponse(BaseModel):
     items: list[V2Notification]
 
 
+# In-memory TTL-cache för /v2/notifications-svar.
+# Frontend pollar var 30:e sekund från NotifBell + Sidebar → med 15 s TTL
+# fångar vi ena pollen ur två som cache-hit. Per-process-cache är OK
+# eftersom Cloud Run kör --max-instances=1 i school-läge.
+_NOTIF_CACHE_TTL_SECONDS = 15.0
+_notif_cache: dict[
+    tuple[str, int], tuple[float, "V2NotificationsResponse"]
+] = {}
+
+
+def _notif_cache_get(
+    key: tuple[str, int],
+) -> Optional["V2NotificationsResponse"]:
+    import time as _t_n
+    entry = _notif_cache.get(key)
+    if entry is None:
+        return None
+    expires_at, value = entry
+    if expires_at < _t_n.monotonic():
+        _notif_cache.pop(key, None)
+        return None
+    return value
+
+
+def _notif_cache_set(
+    key: tuple[str, int], value: "V2NotificationsResponse",
+) -> None:
+    import time as _t_n
+    _notif_cache[key] = (
+        _t_n.monotonic() + _NOTIF_CACHE_TTL_SECONDS, value,
+    )
+
+
+def invalidate_notif_cache(
+    role: Optional[str] = None, target_id: Optional[int] = None,
+) -> None:
+    """Töm notis-cachen — anropas av endpoints som ändrar notif-state
+    (t.ex. mark-all-read, ny lärarmeddelande)."""
+    if role is None or target_id is None:
+        _notif_cache.clear()
+        return
+    _notif_cache.pop((role, target_id), None)
+
+
 def _time_label_for(dt: datetime) -> str:
     now = datetime.utcnow()
     delta = now - dt
@@ -16619,13 +19766,20 @@ def _time_label_for(dt: datetime) -> str:
 def get_v2_notifications(
     info: TokenInfo = Depends(require_token),
 ) -> V2NotificationsResponse:
-    """Live-notiser för eleven · aggregerade från flera källor.
+    """Live-notiser · aggregerade från flera källor.
 
-    Frontend pollar denna var 30:e sekund för att simulera realtid.
-    Returnerar sortering nyast först.
+    Frontend pollar denna var 30-60:e sekund från NotifBell + Sidebar.
+    Per-användare-cachat 15 s in-memory så samma poll inte triggar
+    samma 5+ master-DB-queries två gånger inom poll-intervallet.
     """
     if info.role == "teacher" and info.teacher_id is not None:
-        return _build_teacher_notifications(info.teacher_id)
+        cache_key = ("teacher", info.teacher_id)
+        cached = _notif_cache_get(cache_key)
+        if cached is not None:
+            return cached
+        result = _build_teacher_notifications(info.teacher_id)
+        _notif_cache_set(cache_key, result)
+        return result
 
     if info.role != "student" or info.student_id is None:
         # Tom payload för demo / okänd roll
@@ -16637,7 +19791,21 @@ def get_v2_notifications(
             items=[],
         )
 
-    sid = info.student_id
+    cache_key = ("student", info.student_id)
+    cached = _notif_cache_get(cache_key)
+    if cached is not None:
+        return cached
+    result = _build_student_notifications(info.student_id)
+    _notif_cache_set(cache_key, result)
+    return result
+
+
+def _build_student_notifications(
+    sid: int,
+) -> V2NotificationsResponse:
+    """Aggregator för elev-notiser. Kallas från GET /v2/notifications
+    (cachat 15 s) och kan kallas direkt av andra endpoints som vill
+    ha samma vy."""
     notifs: list[V2Notification] = []
     now = datetime.utcnow()
     cutoff = now - timedelta(days=14)
@@ -16734,20 +19902,27 @@ def get_v2_notifications(
             .limit(10)
             .all()
         )
-        for prog in fb_progress:
-            if prog.feedback_at is None:
-                continue
-            # Kontrollera om eleven läst feedbacken
-            already_read = (
-                ms.query(_FR)
+        # Batcha FeedbackRead-lookups i ETT query istället för en
+        # per progress-rad. Tidigare N+1: med 10 reflektioner blev
+        # det 11 queries per notif-poll, och frontend pollar var
+        # 30:e sekund per användare → konstant overhead.
+        progress_ids = [p.id for p in fb_progress if p.id is not None]
+        read_progress_ids: set[int] = set()
+        if progress_ids:
+            read_rows = (
+                ms.query(_FR.source_id)
                 .filter(
                     _FR.student_id == sid,
                     _FR.kind == "module_step",
-                    _FR.source_id == prog.id,
+                    _FR.source_id.in_(progress_ids),
                 )
-                .first()
+                .all()
             )
-            unread = already_read is None
+            read_progress_ids = {row[0] for row in read_rows}
+        for prog in fb_progress:
+            if prog.feedback_at is None:
+                continue
+            unread = prog.id not in read_progress_ids
             notifs.append(V2Notification(
                 id=f"fb-{prog.id}",
                 kind="teacher",
@@ -16803,6 +19978,101 @@ def get_v2_notifications(
                         unread=True,
                         target_route="/v2/postladan",
                     ))
+
+                # 5. Pending sociala events (StudentEvent · pending status)
+                # Filtrera deadline >= today så historiska seed-events
+                # (jan-apr) inte triggar notiser som leder till tom
+                # Händelser-vy. Konsistent med /v2/events/pending.
+                from ..db.models import StudentEvent as _SE_notif
+                pending_events = (
+                    s.query(_SE_notif)
+                    .filter(
+                        _SE_notif.status == "pending",
+                        _SE_notif.deadline >= now.date(),
+                    )
+                    .order_by(_SE_notif.deadline.asc())
+                    .limit(8)
+                    .all()
+                )
+                for ev in pending_events:
+                    icon_map = {
+                        "social": "♥", "family": "✦", "culture": "♪",
+                        "sport": "▲", "mat": "◉", "lifestyle": "✧",
+                        "opportunity": "★", "unexpected": "!",
+                    }
+                    icon_e = icon_map.get(ev.category, "●")
+                    days_left = (ev.deadline - now.date()).days
+                    deadline_str = (
+                        f"deadline {ev.deadline.strftime('%-d %b')}"
+                        if days_left > 1
+                        else (
+                            "deadline imorgon" if days_left == 1
+                            else "deadline IDAG"
+                        )
+                    )
+                    body_parts = [
+                        f"<em>{ev.title}</em>",
+                        f"{int(float(ev.cost))} kr" if ev.cost > 0 else "",
+                        deadline_str,
+                    ]
+                    body_e = " · ".join(p for p in body_parts if p)
+                    src_prefix = (
+                        "BJUDNING · " if ev.source == "classmate_invite"
+                        else "HÄNDELSE · "
+                    )
+                    notifs.append(V2Notification(
+                        id=f"event-{ev.id}",
+                        kind="social",
+                        icon=icon_e,
+                        occurred_at=ev.created_at or now,
+                        time_label=_time_label_for(ev.created_at or now),
+                        title=f"{src_prefix}{ev.category.upper()}",
+                        body=body_e,
+                        unread=True,
+                        target_route="/v2/handelser",
+                    ))
+    except Exception:
+        pass
+
+    # 6. Inkomna klasskompis-bjudningar (master-DB · ClassEventInvite)
+    try:
+        from ..school.social_models import ClassEventInvite as _CEI
+        from ..school.models import Student as _Stu_inv
+        invites = (
+            ms.query(_CEI)
+            .filter(
+                _CEI.to_student_id == sid,
+                _CEI.status == "pending",
+                _CEI.deadline >= now.date(),
+            )
+            .order_by(_CEI.deadline.asc())
+            .limit(8)
+            .all()
+        )
+        for inv in invites:
+            from_name = "klasskompis"
+            from_st = ms.get(_Stu_inv, inv.from_student_id)
+            if from_st is not None:
+                from_name = from_st.display_name or from_name
+            cost_str = (
+                f"{int(float(inv.swish_amount))} kr"
+                if inv.swish_amount and inv.swish_amount > 0
+                else "gratis"
+            )
+            notifs.append(V2Notification(
+                id=f"invite-{inv.id}",
+                kind="social",
+                icon="♥",
+                occurred_at=inv.created_at or now,
+                time_label=_time_label_for(inv.created_at or now),
+                title=f"BJUDNING · {from_name}",
+                body=(
+                    f"<em>{inv.event_title}</em> · {cost_str} · "
+                    f"deadline {inv.deadline.strftime('%-d %b')}"
+                ),
+                unread=True,
+                target_route="/v2/handelser",
+            ))
     except Exception:
         pass
 

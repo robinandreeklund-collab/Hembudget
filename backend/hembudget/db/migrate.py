@@ -717,6 +717,19 @@ def run_migrations(engine: Engine) -> list[str]:
                 "delivery_capacity",
                 "delivery_capacity INTEGER NOT NULL DEFAULT 1",
             ),
+            # Sprint 8 · industry_key + city_key för 10-bransch-väljaren
+            ("industry_key", "industry_key VARCHAR(40)"),
+            ("city_key", "city_key VARCHAR(40)"),
+            # Auto-tick · spelmotorn drar fram veckor automatiskt baserat
+            # på real-tid (inte manuell "Stega vecka"-knapp).
+            ("last_auto_tick_at", "last_auto_tick_at DATETIME"),
+            # Anti-repetition för leverans-quiz · JSON list[int] med
+            # senaste 10 fråge-id:n så eleven inte ser samma fråga
+            # tvång leveranser i rad.
+            (
+                "recent_quiz_question_ids",
+                "recent_quiz_question_ids TEXT",
+            ),
         ]
         for col_name, col_sql in biz_company_columns:
             if col_name not in cols:
@@ -760,6 +773,9 @@ def run_migrations(engine: Engine) -> list[str]:
             # Strukturerad fakturadata · JSON för Postgres / TEXT för
             # SQLite. SQLAlchemy JSON-kolumnen mappar transparent.
             ("invoice_data", "invoice_data TEXT"),
+            # Dunning · auto-eskalering av obetalda fakturor
+            ("parent_mail_id", "parent_mail_id INTEGER"),
+            ("reminder_level", "reminder_level INTEGER"),
         ]
         for col_name, col_sql in mail_columns:
             if col_name not in mail_cols:

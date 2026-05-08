@@ -156,16 +156,34 @@ def init_master_engine() -> Engine:
     is_sqlite = url.startswith("sqlite:")
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
-        # Cloud SQL db-f1-micro har max 25 connections totalt.
-        # Cloud Run kan skala till flera instanser, så vi måste vara
-        # konservativa: 2 per engine × 2 engines × 3 instanser = 12.
-        # Plus internal Cloud SQL-connections (~5) → ~17 totalt under
-        # tak 25. Tidigare 5+5=10 per engine kraschade alla nya
-        # connections när Cloud Run skalade upp ("loaded_dbapi.connect"
-        # failed på ALLA requests).
+        # PgBouncer-mode · containern kör PgBouncer som lokal proxy.
+        # App-side hålls LITEN pool (5+5=10) eftersom PgBouncer själv
+        # multiplexar mot Cloud SQL. Stor app-pool är spill — den
+        # håller bara TCP-conn till PgBouncer (lokala, gratis), men
+        # PgBouncer släpper bara ut PGBOUNCER_POOL_SIZE (default 8)
+        # samtidiga server-side queries oavsett.
+        #
+        # expire_on_commit=False · annars triggar SQLAlchemy lazy-load
+        # på "released" objects efter commit, vilket öppnar en NY
+        # connection mid-request. För connection-känsliga setups är
+        # det giftigt.
+        #
+        # pool_timeout=15 · fail-fast vid pool-exhaustion. PgBouncer
+        # har sin egen query_wait_timeout=30 så hela request-budgeten
+        # blir ~45 s (klient ger upp innan).
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=2,
-            pool_recycle=1800, pool_timeout=10,
+            pool_pre_ping=True,
+            pool_size=5,
+            max_overflow=5,
+            pool_recycle=1800,
+            pool_timeout=15,
+            connect_args={
+                "connect_timeout": 5,
+                "application_name": (
+                    f"hembudget-master@"
+                    f"{__import__('os').environ.get('K_REVISION', 'local')}"
+                ),
+            },
         )
     engine = create_engine(url, **engine_kwargs)
 
@@ -432,6 +450,62 @@ def _run_master_migrations(engine: Engine) -> None:
             "business_mode_enabled BOOLEAN NOT NULL DEFAULT 0",
         )
 
+    # Self-healing-backfill: om en elev redan har ett bolag i sin scope-
+    # DB men business_mode_enabled är FALSE betyder det att flaggan har
+    # tappats någon gång (t.ex. ephemeral-deploy som blåste bort raden,
+    # eller ett misslyckat write-back). Återställ FLAG:en så eleven inte
+    # förlorar tillgång till sitt företag vid varje deploy.
+    #
+    # Detta gäller bara Postgres-shared-läget där alla scope-tabeller
+    # ligger i samma DB med tenant_id. SQLite-per-scope-mode (lokalt
+    # / dev) skippas eftersom det skulle kräva att vi öppnar varje fil.
+    if "business_mode_enabled" in _cols("students") and is_postgres:
+        try:
+            with engine.begin() as conn:
+                # Hämta alla scope-nycklar som har minst ett bolag.
+                # tenant_id är t.ex. "s_42" (solo-elev) eller "f_7"
+                # (familj — alla familjemedlemmar delar scope).
+                rows = conn.execute(_text(
+                    "SELECT DISTINCT tenant_id FROM companies "
+                    "WHERE tenant_id IS NOT NULL"
+                )).fetchall()
+                solo_ids: list[int] = []
+                family_ids: list[int] = []
+                for (key,) in rows:
+                    if not key:
+                        continue
+                    if key.startswith("s_"):
+                        try:
+                            solo_ids.append(int(key[2:]))
+                        except ValueError:
+                            pass
+                    elif key.startswith("f_"):
+                        try:
+                            family_ids.append(int(key[2:]))
+                        except ValueError:
+                            pass
+                if solo_ids:
+                    conn.execute(
+                        _text(
+                            "UPDATE students SET business_mode_enabled = TRUE "
+                            "WHERE id = ANY(:ids) AND business_mode_enabled = FALSE"
+                        ),
+                        {"ids": solo_ids},
+                    )
+                if family_ids:
+                    conn.execute(
+                        _text(
+                            "UPDATE students SET business_mode_enabled = TRUE "
+                            "WHERE family_id = ANY(:ids) AND business_mode_enabled = FALSE"
+                        ),
+                        {"ids": family_ids},
+                    )
+        except Exception:
+            _log.exception(
+                "business_mode_enabled-backfill misslyckades — "
+                "fortsätter (icke-kritiskt)",
+            )
+
     # BatchArtifact.exported_to_my_batches (idé 3 i dev_v1.md):
     # bank-flödet kräver att bank-artefakter passerar /my-batches via
     # explicit export. Befintliga artefakter som redan är importerade
@@ -536,6 +610,213 @@ def _run_master_migrations(engine: Engine) -> None:
     if sn_cols and "opening_message" not in sn_cols:
         _add("salary_negotiations", "opening_message TEXT")
 
+    # Sprint 8 · företag-vs-jobb-balans-fält på student_profiles
+    sp_cols = _cols("student_profiles")
+    if sp_cols and "weekly_hours_employed" not in sp_cols:
+        _add(
+            "student_profiles",
+            "weekly_hours_employed INTEGER NOT NULL DEFAULT 40",
+        )
+    if sp_cols and "employment_status" not in sp_cols:
+        _add(
+            "student_profiles",
+            "employment_status VARCHAR(20) NOT NULL DEFAULT 'employed'",
+        )
+    if sp_cols and "consecutive_overload_weeks" not in sp_cols:
+        _add(
+            "student_profiles",
+            "consecutive_overload_weeks INTEGER NOT NULL DEFAULT 0",
+        )
+
+    # === ClassCompanyShare · Allabolag-aggregat-cache ===
+    # Nya kolumner har lagts till i flera omgångar (Fas B: bolagsverket-
+    # status; Fas G: UC + nivå-progression). create_all skapar BARA NYA
+    # tabeller — så befintlig prod-Postgres saknar de nya kolumnerna →
+    # 'column does not exist' när /v2/allabolag SELECT:ar ClassCompanyShare.
+    ccs_cols = _cols("class_company_shares")
+    if ccs_cols:
+        ccs_columns = [
+            # Fas B · Bolagsverket / årsredovisning
+            ("annual_report_status",
+                "annual_report_status VARCHAR(20) NOT NULL DEFAULT 'not_due'"),
+            ("annual_report_year", "annual_report_year INTEGER"),
+            ("annual_report_decided_at", "annual_report_decided_at DATETIME"),
+            # Fas G · företags-UC + nivå-progression
+            ("uc_score", "uc_score INTEGER NOT NULL DEFAULT 50"),
+            ("uc_rating", "uc_rating VARCHAR(4) NOT NULL DEFAULT 'B'"),
+            ("company_level",
+                "company_level VARCHAR(20) NOT NULL DEFAULT 'startup'"),
+            ("level_unlocked_at", "level_unlocked_at DATETIME"),
+            # Aggregat (kan ha lagts till efter initial deploy)
+            ("n_employees", "n_employees INTEGER NOT NULL DEFAULT 0"),
+            ("n_invoices_open", "n_invoices_open INTEGER NOT NULL DEFAULT 0"),
+            ("n_invoices_overdue",
+                "n_invoices_overdue INTEGER NOT NULL DEFAULT 0"),
+            ("reputation", "reputation INTEGER NOT NULL DEFAULT 50"),
+            ("week_no", "week_no INTEGER NOT NULL DEFAULT 0"),
+            ("margin_pct",
+                "margin_pct " + (
+                    "DOUBLE PRECISION" if is_postgres else "FLOAT"
+                ) + " NOT NULL DEFAULT 0"),
+            ("kassa", "kassa INTEGER NOT NULL DEFAULT 0"),
+            ("revenue_4w", "revenue_4w INTEGER NOT NULL DEFAULT 0"),
+            ("profit_4w", "profit_4w INTEGER NOT NULL DEFAULT 0"),
+            ("is_published",
+                "is_published BOOLEAN NOT NULL DEFAULT 1"),
+            ("class_label", "class_label VARCHAR(60)"),
+            ("city_key", "city_key VARCHAR(40)"),
+        ]
+        for col_name, col_sql in ccs_columns:
+            if col_name not in ccs_cols:
+                _add("class_company_shares", col_sql)
+
+    # === Auto-migration · saknade NULLABLE-kolumner i master-DB ===
+    # Säkerhetsnät: jämför varje master-tabell mot SQLAlchemy-modellens
+    # kolumner. Saknas en NULLABLE-kolumn i DB:n → ADD COLUMN automatiskt.
+    # NOT NULL kräver explicit migration ovan med säker DEFAULT.
+    try:
+        _master_auto_add_nullable_columns(engine)
+    except Exception:
+        _log.exception("master auto-migration misslyckades")
+
+    # === FK · v2_onboarding_events.student_id → students.id ON DELETE CASCADE.
+    # Tabellen skapades utan ondelete=CASCADE, så befintlig FK-constraint
+    # i Postgres blockerar DELETE på Student när det finns onboarding-events
+    # → IntegrityError → 500 i UI när läraren raderar en elev.
+    # `create_all()` ändrar ALDRIG constraints på existerande tabeller,
+    # så vi måste DROP + ADD constraint:en själva. Idempotent: vi kollar
+    # om CASCADE redan finns innan vi ändrar.
+    if is_postgres:
+        try:
+            with engine.begin() as conn:
+                row = conn.execute(_text(
+                    """
+                    SELECT con.conname, con.confdeltype
+                    FROM pg_constraint con
+                    JOIN pg_class rel ON rel.oid = con.conrelid
+                    WHERE rel.relname = 'v2_onboarding_events'
+                      AND con.contype = 'f'
+                      AND con.conkey @> ARRAY[(
+                        SELECT attnum FROM pg_attribute
+                        WHERE attrelid = rel.oid AND attname = 'student_id'
+                      )::smallint]
+                    LIMIT 1
+                    """
+                )).fetchone()
+                if row is not None:
+                    conname, deltype = row[0], row[1]
+                    if deltype != "c":  # 'c' = CASCADE
+                        conn.execute(_text(
+                            f'ALTER TABLE v2_onboarding_events '
+                            f'DROP CONSTRAINT "{conname}"'
+                        ))
+                        conn.execute(_text(
+                            "ALTER TABLE v2_onboarding_events "
+                            "ADD CONSTRAINT v2_onboarding_events_student_id_fkey "
+                            "FOREIGN KEY (student_id) REFERENCES students(id) "
+                            "ON DELETE CASCADE"
+                        ))
+                        _log.info(
+                            "migration: v2_onboarding_events FK "
+                            "uppdaterad till ON DELETE CASCADE",
+                        )
+        except Exception:
+            _log.exception(
+                "migration: kunde inte uppdatera "
+                "v2_onboarding_events FK till CASCADE",
+            )
+
+
+def _master_auto_add_nullable_columns(engine: Engine) -> None:
+    """Auto-migration för saknade nullable-kolumner i master-DB-tabeller.
+
+    Speglar `db/migrate.py::_auto_add_nullable_columns` men för MasterBase
+    istället för Base (TenantMixin). Säkert att köra varje uppstart —
+    bara nullable-kolumner läggs till. NOT NULL kräver explicit migration
+    ovan med säker DEFAULT.
+
+    Detta är ett säkerhetsnät så framtida MasterBase-utbyggnader inte
+    kraschar prod om man glömmer lägga till explicit ALTER ovan.
+    """
+    from sqlalchemy import inspect as _inspect, text as _text
+    from .models import MasterBase
+
+    is_postgres = engine.dialect.name == "postgresql"
+    inspector = _inspect(engine)
+    log_ = logging.getLogger(__name__)
+
+    def _table_exists(name: str) -> bool:
+        try:
+            return inspector.has_table(name)
+        except Exception:
+            return False
+
+    def _existing_cols(name: str) -> set[str]:
+        try:
+            return {c["name"] for c in inspector.get_columns(name)}
+        except Exception:
+            return set()
+
+    for table in MasterBase.metadata.sorted_tables:
+        if not _table_exists(table.name):
+            continue
+        existing = _existing_cols(table.name)
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            if column.primary_key:
+                continue
+            if not column.nullable:
+                if column.default is None and column.server_default is None:
+                    log_.warning(
+                        "master auto-migration: skippar %s.%s "
+                        "(NOT NULL utan DEFAULT — kräver explicit migration)",
+                        table.name, column.name,
+                    )
+                    continue
+            col_type = column.type.compile(dialect=engine.dialect)
+            null_clause = "" if column.nullable else " NOT NULL"
+            default_clause = ""
+            if column.server_default is not None:
+                try:
+                    default_clause = (
+                        f" DEFAULT {column.server_default.arg}"
+                    )
+                except Exception:
+                    default_clause = ""
+            elif column.default is not None and column.default.is_scalar:
+                v = column.default.arg
+                if isinstance(v, bool):
+                    default_clause = (
+                        f" DEFAULT {'TRUE' if v else 'FALSE'}"
+                        if is_postgres else f" DEFAULT {1 if v else 0}"
+                    )
+                elif isinstance(v, (int, float)):
+                    default_clause = f" DEFAULT {v}"
+                elif isinstance(v, str):
+                    default_clause = f" DEFAULT '{v}'"
+            col_sql = (
+                f"{column.name} {col_type}{default_clause}{null_clause}"
+            )
+            stmt = f"ALTER TABLE {table.name} ADD COLUMN {col_sql}"
+            try:
+                with engine.begin() as conn:
+                    conn.execute(_text(stmt))
+                log_.info(
+                    "master auto-migration: %s.%s tillagd",
+                    table.name, column.name,
+                )
+            except Exception as exc:
+                msg = str(exc).lower()
+                if "already exists" in msg or "duplicate" in msg:
+                    pass
+                else:
+                    log_.exception(
+                        "master auto-migration: kunde inte lägga till "
+                        "%s.%s (SQL: %s)",
+                        table.name, column.name, col_sql,
+                    )
+
 
 @contextmanager
 def master_session() -> Iterator[Session]:
@@ -591,12 +872,28 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     url = _master_db_url()
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Cloud SQL db-f1-micro · max 25 connections totalt.
-        # Konservativt med flera Cloud Run-instanser: 2 per engine
-        # × 2 engines × 3 instanser = 12. Plus internal ~5 = ~17.
+        # Scope-engine bär all dashboard-trafik (V1-endpoints
+        # /budget/*, /balances/*, /events/* m.fl. — frontend fyrar
+        # 13+ parallella requests vid dashboard-load). Master-engine
+        # är knappt använd (verifierat via /healthz/db: master.checkedout=0
+        # medan scope.checkedout=5+overflow=3 är fullt).
+        # 8+8 = max 16 per revision på Cloud SQL db-g1-small (50 cap).
+        # Med pool_pre_ping fångar vi stale connections och med
+        # pool_recycle=300 (5 min) cyklas connections regelbundet så
+        # idle-in-transaction från gammal revision släpper.
+        # PgBouncer-mode · liten app-pool, stora pool sköts på proxy.
+        # 5+5 = max 10 client-conn till PgBouncer (lokala TCP, gratis).
+        # PgBouncer aggregerar dessa mot ~8 server-conn till Cloud SQL.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=2,
-            pool_recycle=1800, pool_timeout=10,
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_recycle=1800, pool_timeout=15,
+            connect_args={
+                "connect_timeout": 5,
+                "application_name": (
+                    f"hembudget-scope@"
+                    f"{__import__('os').environ.get('K_REVISION', 'local')}"
+                ),
+            },
         )
     engine = create_engine(url, **engine_kwargs)
 

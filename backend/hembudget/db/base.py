@@ -53,10 +53,15 @@ def _current_tenant() -> Optional[str]:
 
 @event.listens_for(Session, "do_orm_execute")
 def _scope_select_filter(state):
-    """Auto-filter alla SELECT på tenant_id om en scope-context är
-    aktiv. Påverkar bara entiteter som ärver TenantMixin (= scope-DB-
-    modellerna), så master-DB-queries går orörda."""
-    if not state.is_select:
+    """Auto-filter alla SELECT/UPDATE/DELETE på tenant_id om en scope-
+    context är aktiv. Påverkar bara entiteter som ärver TenantMixin
+    (= scope-DB-modellerna), så master-DB-queries går orörda.
+
+    KRITISKT att den även fångar UPDATE/DELETE — annars raderar
+    `query(Model).delete()` ALLA rader i tabellen, inte bara aktuell
+    tenant. Bug funnen 2026-05-04 efter att v2_delete_student wipe:ade
+    all elevdata istället för bara den eleven som skulle raderas."""
+    if not (state.is_select or state.is_update or state.is_delete):
         return
     if state.is_relationship_load:
         return
@@ -154,12 +159,37 @@ def session_scope() -> Iterator[Session]:
             session = maker()
             try:
                 yield session
-                session.commit()
+                try:
+                    session.commit()
+                except Exception:
+                    # commit-fel propageras inte ut — vi vill inte
+                    # maskera ev. exception från endpoint:en.
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "session_scope: commit failed",
+                    )
+                    raise
             except Exception:
-                session.rollback()
+                # Robust cleanup: rollback OCH close måste KÖRAS men
+                # får INTE ersätta original-exceptionen.
+                try:
+                    session.rollback()
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "session_scope: rollback efter exception "
+                        "misslyckades — original-exception propageras",
+                    )
                 raise
             finally:
-                session.close()
+                try:
+                    session.close()
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "session_scope: session.close() misslyckades "
+                        "— ignorerar",
+                    )
             return
 
         # School-mode UTAN scope_key → använd shared-scope-engine
@@ -180,12 +210,32 @@ def session_scope() -> Iterator[Session]:
                 session = session_maker()
                 try:
                     yield session
-                    session.commit()
+                    try:
+                        session.commit()
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "session_scope (shared): commit failed",
+                        )
+                        raise
                 except Exception:
-                    session.rollback()
+                    try:
+                        session.rollback()
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "session_scope (shared): rollback "
+                            "misslyckades — original propageras",
+                        )
                     raise
                 finally:
-                    session.close()
+                    try:
+                        session.close()
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "session_scope (shared): close misslyckades",
+                        )
                 return
         except Exception:
             import logging

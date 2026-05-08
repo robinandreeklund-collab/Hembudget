@@ -38,7 +38,12 @@ export function EditorialAuthShell({
       {topNavRight && <nav className="ed-top-nav" aria-label="Konto">{topNavRight}</nav>}
 
       <header className="ed-brand" aria-hidden="true">
-        <div className="ed-brand-name">Ekonomilabbet</div>
+        <div className="ed-brand-name">
+          Ekonomilabbet
+          <span className="beta-pill" style={{ fontSize: 10, marginLeft: 12 }}>
+            Beta
+          </span>
+        </div>
         <div className="ed-brand-tagline">Konsekvensdriven ekonomi och lärande</div>
       </header>
 

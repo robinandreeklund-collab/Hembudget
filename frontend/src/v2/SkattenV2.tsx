@@ -22,6 +22,7 @@ import {
   type TaxDeductionKind,
 } from "./api";
 import { V2Banner } from "./V2Banner";
+import { getToken } from "@/api/client";
 import "./skatten.css";
 
 const SEK = (n: number) =>
@@ -109,7 +110,7 @@ export function SkattenV2() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
+            Authorization: `Bearer ${getToken() || ""}`,
           },
           body: JSON.stringify({ year: data.year }),
         });

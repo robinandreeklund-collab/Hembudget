@@ -124,6 +124,9 @@ def seed_default_insurance_policies(
     - hyresratt → hem + olycksfall = active
     - bostadsratt → hem + olycksfall + bostadsrättsforsakring = active
     - villa/radhus → hem + olycksfall + villa-försäkring = active
+    - None / okänt → ALLA "considered" (lärare seedar manuellt utan
+      bostads-kontext, eller test → vi vågar inte gissa vilka som
+      passar utan att veta hur eleven bor)
 
     Övriga (livförsäkring, sjukvård) lämnas "considered" så eleven
     medvetet kan välja att aktivera.
@@ -132,8 +135,10 @@ def seed_default_insurance_policies(
     provider + kind + name) men UPPDATERAR status om policy redan finns
     men borde vara aktiv. Returnerar antal nya rader skapade.
     """
-    # Vilka policies ska sättas till "active" beroende på boende
-    active_kinds = {"hem", "olycksfall"}
+    # Utan känd bostadstyp aktiverar vi inget — eleven bestämmer.
+    active_kinds: set[str] = set()
+    if housing_type in ("hyresratt", "bostadsratt", "villa", "radhus"):
+        active_kinds.update({"hem", "olycksfall"})
     if housing_type == "bostadsratt":
         active_kinds.add("bostadsrattsforsakring")
     elif housing_type in ("villa", "radhus"):

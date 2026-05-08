@@ -1,0 +1,223 @@
+/**
+ * Faktura-shell · ger varje brev i postlådan en strukturerad
+ * fakturalook (avsändare-block, badge, mottagare/datum-meta-grid,
+ * stor subject + betalningsblock med OCR/bankgiro).
+ *
+ * Används av MailDetailV2 — wrappar de olika body-layouterna
+ * (InvoiceLayout, SalarySlipLayout, CcInvoiceLayout, plain text).
+ */
+
+.v2-lan-root .faktura-shell {
+  background: rgba(15, 21, 37, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* === HEADER · avsändare + badge ============================ */
+.v2-lan-root .fs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 24px 28px;
+  border-bottom: 2px solid var(--line);
+  background: rgba(15, 21, 37, 0.55);
+}
+.v2-lan-root .fs-head-left {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.v2-lan-root .fs-sender-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.v2-lan-root .fs-sender-block {
+  min-width: 0;
+}
+.v2-lan-root .fs-sender-name {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #fff;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+.v2-lan-root .fs-sender-meta {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-mid);
+  letter-spacing: 0.2px;
+  line-height: 1.5;
+}
+.v2-lan-root .fs-head-right {
+  flex-shrink: 0;
+}
+.v2-lan-root .fs-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  border: 1.5px solid currentColor;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+/* === META-GRID · mottagare + datum + fakturanr + förfaller === */
+.v2-lan-root .fs-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+}
+.v2-lan-root .fs-meta-cell {
+  padding: 18px 24px;
+  border-right: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.01);
+}
+.v2-lan-root .fs-meta-cell:last-child {
+  border-right: 0;
+}
+.v2-lan-root .fs-meta-cell-emphasis {
+  background: rgba(220, 76, 43, 0.06);
+}
+.v2-lan-root .fs-meta-eye {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.v2-lan-root .fs-meta-val {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  line-height: 1.3;
+}
+.v2-lan-root .fs-meta-val-name {
+  font-style: italic;
+  color: var(--warm);
+}
+.v2-lan-root .fs-meta-val-mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+.v2-lan-root .fs-meta-val-due {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* === SUBJECT · stor === */
+.v2-lan-root .fs-subject {
+  padding: 22px 28px 24px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(15, 21, 37, 0.4);
+}
+.v2-lan-root .fs-subject-h {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  color: #fff;
+  margin: 0;
+}
+.v2-lan-root .fs-subject-meta {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-mid);
+  letter-spacing: 0.2px;
+}
+
+/* === BETALNINGSBLOCK · pedagogisk faktura-style === */
+.v2-lan-root .fs-pay-block {
+  margin-top: 28px;
+  padding: 18px 22px 22px;
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  background: rgba(220, 76, 43, 0.04);
+}
+.v2-lan-root .fs-pay-eye {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.v2-lan-root .fs-pay-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 18px 28px;
+}
+.v2-lan-root .fs-pay-cell-eye {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  margin-bottom: 4px;
+}
+.v2-lan-root .fs-pay-cell-val {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.2;
+}
+.v2-lan-root .fs-pay-cell-mono {
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+.v2-lan-root .fs-pay-cell-due {
+  color: var(--accent);
+  font-weight: 700;
+}
+.v2-lan-root .fs-pay-cell-amount {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* === Mobil — komprimera meta-grid till 2 kolumner === */
+@media (max-width: 720px) {
+  .v2-lan-root .fs-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .v2-lan-root .fs-meta-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .v2-lan-root .fs-meta-cell:nth-child(odd) {
+    border-right: 1px solid var(--line);
+  }
+  .v2-lan-root .fs-meta-cell:nth-child(even) {
+    border-right: 0;
+  }
+}

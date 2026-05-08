@@ -990,28 +990,40 @@ def ytd_income_by_person(
         .all()
     )
 
+    # PRE-FETCH alla potentiella match-transactions för hela året i ETT
+    # query — istället för en query per upcoming (3658+ anrop på 1h
+    # enligt Cloud SQL Query Insights). Vi behöver bara id+date+amount
+    # för in-memory linear-scan.
+    income_tx_rows = (
+        session.query(Transaction.date, Transaction.amount)
+        .filter(
+            Transaction.date >= start,
+            Transaction.date < end,
+            Transaction.amount > 0,
+            Transaction.is_transfer.is_(False),
+        )
+        .all()
+    )
+    # Bucket per (year, month) → lista av amounts (float)
+    _tx_amounts_by_month: dict[tuple[int, int], list[float]] = {}
+    for tx_date, tx_amount in income_tx_rows:
+        key = (tx_date.year, tx_date.month)
+        _tx_amounts_by_month.setdefault(key, []).append(float(tx_amount))
+
     def _has_near_tx(up: UpcomingTransaction) -> bool:
         """True om det finns en inkomst-Transaction inom samma månad med
         ungefär samma belopp — då är upcomings:en bara en dublett som
-        matchern missat länka."""
+        matchern missat länka.
+
+        In-memory scan över förut-laddad bucket (se _tx_amounts_by_month
+        ovan). Tidigare körde detta en SQL per upcoming → N+1."""
         ed = up.expected_date
-        month_start = date(ed.year, ed.month, 1)
-        next_month = date(
-            ed.year + 1, 1, 1,
-        ) if ed.month == 12 else date(ed.year, ed.month + 1, 1)
         target = float(up.amount)
-        q = (
-            session.query(Transaction.id)
-            .filter(
-                Transaction.date >= month_start,
-                Transaction.date < next_month,
-                Transaction.amount > 0,
-                Transaction.is_transfer.is_(False),
-                func.abs(Transaction.amount - target) <= 2.0,
-            )
-            .first()
-        )
-        return q is not None
+        amounts = _tx_amounts_by_month.get((ed.year, ed.month), ())
+        for amt in amounts:
+            if abs(amt - target) <= 2.0:
+                return True
+        return False
 
     manual_incomes = [
         up for up in manual_incomes_q

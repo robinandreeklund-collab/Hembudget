@@ -12,8 +12,9 @@
  * - Öppna i edit-vyn för att lägga till/ändra/ta bort steg
  * - Ta bort egna moduler
  *
- * Routas via /teacher/v2/moduler (lista) och /teacher/v2/moduler/:id
- * (detalj/edit).
+ * Routas via /teacher/v2/moduler (lista) och /teacher/v2/modul/:id
+ * (detalj/edit). Singular "modul" på edit-routen för att undvika
+ * route-kollision med /teacher/v2/moduler/:studentId (per-elev-vy).
  */
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -22,8 +23,22 @@ import {
   type V2RosterRow,
   type V2TeacherModuleOut,
 } from "./api";
+import { useAuth } from "../hooks/useAuth";
 import { V2Banner } from "./V2Banner";
 import "./larare.css";
+
+type AIStepDraft = {
+  kind: "read" | "watch" | "reflect" | "task" | "quiz";
+  title: string;
+  body?: string;
+  sort_order?: number;
+};
+
+type AIModuleDraft = {
+  title: string;
+  summary: string;
+  steps: AIStepDraft[];
+};
 
 const SHORT_DATE = (iso: string | null): string => {
   if (!iso) return "—";
@@ -45,6 +60,87 @@ export function TeacherModuleLibraryV2() {
   );
   const [message, setMessage] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { teacherMeta } = useAuth();
+  const aiEnabled = Boolean(teacherMeta?.ai_enabled);
+
+  // AI-skiss-state
+  const [showAI, setShowAI] = useState(false);
+  const [aiPrompt, setAIPrompt] = useState("");
+  const [aiBusy, setAIBusy] = useState(false);
+  const [aiDraft, setAIDraft] = useState<AIModuleDraft | null>(null);
+  const [aiError, setAIError] = useState<string | null>(null);
+
+  async function aiGenerate() {
+    const prompt = aiPrompt.trim();
+    if (prompt.length < 10) {
+      setAIError("Skriv minst 10 tecken som beskriver modulen.");
+      return;
+    }
+    setAIBusy(true);
+    setAIError(null);
+    setAIDraft(null);
+    try {
+      const res = await v2Api.teacherAIGenerateModuleDraft(prompt);
+      const parsed = res.parsed;
+      if (!parsed || !Array.isArray(parsed.steps) || parsed.steps.length === 0) {
+        setAIError(
+          "AI-svaret kunde inte tolkas som en modul. Prova en annan formulering.",
+        );
+        return;
+      }
+      setAIDraft({
+        title: parsed.title,
+        summary: parsed.summary || "",
+        steps: parsed.steps,
+      });
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      if (msg.includes("503")) {
+        setAIError("AI-funktioner är inte aktiverade på ditt konto.");
+      } else if (msg.includes("502")) {
+        setAIError(
+          "AI-tjänsten gick inte att nå. Försök igen om en stund.",
+        );
+      } else {
+        setAIError(msg);
+      }
+    } finally {
+      setAIBusy(false);
+    }
+  }
+
+  async function acceptAIDraft() {
+    if (!aiDraft) return;
+    setAIBusy(true);
+    setAIError(null);
+    try {
+      const mod = await v2Api.teacherCreateModule({
+        title: aiDraft.title,
+        summary: aiDraft.summary || undefined,
+        is_template: false,
+      });
+      let order = 0;
+      for (const st of aiDraft.steps) {
+        if (!st.kind || !st.title) continue;
+        await v2Api.teacherCreateModuleStep(mod.id, {
+          kind: st.kind,
+          title: st.title,
+          content: st.body || undefined,
+          sort_order: st.sort_order ?? order,
+        });
+        order += 1;
+      }
+      setShowAI(false);
+      setAIDraft(null);
+      setAIPrompt("");
+      flash(`Modulen "${aiDraft.title}" skapad från AI-skissen.`);
+      navigate(`/teacher/v2/modul/${mod.id}`);
+    } catch (e) {
+      setAIError(String((e as Error)?.message || e));
+    } finally {
+      setAIBusy(false);
+    }
+  }
 
   async function load() {
     try {
@@ -69,7 +165,7 @@ export function TeacherModuleLibraryV2() {
       const cloned = await v2Api.teacherCloneModule(m.id);
       flash(`Klonad: "${cloned.title}"`);
       load();
-      navigate(`/teacher/v2/moduler/${cloned.id}`);
+      navigate(`/teacher/v2/modul/${cloned.id}`);
     } catch (e) {
       setError(String((e as Error)?.message || e));
     }
@@ -152,6 +248,16 @@ export function TeacherModuleLibraryV2() {
               egen kopia, redigera stegen och tilldela till elever.
             </p>
             <div className="larare-actions">
+              {aiEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setShowAI(true)}
+                  className="larare-tb-btn ai"
+                  title="Låt AI skissa en modul från en kort beskrivning"
+                >
+                  ✦ AI-skiss
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
@@ -253,13 +359,35 @@ export function TeacherModuleLibraryV2() {
         )}
       </div>
 
+      {showAI && (
+        <AISkissModal
+          prompt={aiPrompt}
+          setPrompt={setAIPrompt}
+          draft={aiDraft}
+          busy={aiBusy}
+          error={aiError}
+          onGenerate={aiGenerate}
+          onAccept={acceptAIDraft}
+          onClose={() => {
+            if (aiBusy) return;
+            setShowAI(false);
+            setAIDraft(null);
+            setAIError(null);
+          }}
+          onReset={() => {
+            setAIDraft(null);
+            setAIError(null);
+          }}
+        />
+      )}
+
       {showCreate && (
         <CreateModuleModal
           onClose={() => setShowCreate(false)}
           onCreated={(m) => {
             setShowCreate(false);
             flash(`Modulen "${m.title}" skapad.`);
-            navigate(`/teacher/v2/moduler/${m.id}`);
+            navigate(`/teacher/v2/modul/${m.id}`);
           }}
         />
       )}
@@ -344,7 +472,7 @@ function ModuleTable({
         >
           <div>
             <Link
-              to={`/teacher/v2/moduler/${m.id}`}
+              to={`/teacher/v2/modul/${m.id}`}
               style={{
                 fontFamily: "Source Serif 4, Georgia, serif",
                 fontSize: 14,
@@ -395,7 +523,7 @@ function ModuleTable({
             }}
           >
             <Link
-              to={`/teacher/v2/moduler/${m.id}`}
+              to={`/teacher/v2/modul/${m.id}`}
               className="attn-go"
               style={pillBtnStyle("#a5b4fc", "rgba(99,102,241,0.10)")}
             >
@@ -948,4 +1076,278 @@ function pillBtnStyle(color: string, bg: string): React.CSSProperties {
     cursor: "pointer",
     textDecoration: "none",
   };
+}
+
+// === AI-skiss-modal · Sonnet skissar en modul från en beskrivning ===
+function AISkissModal({
+  prompt, setPrompt, draft, busy, error,
+  onGenerate, onAccept, onClose, onReset,
+}: {
+  prompt: string;
+  setPrompt: (s: string) => void;
+  draft: AIModuleDraft | null;
+  busy: boolean;
+  error: string | null;
+  onGenerate: () => void;
+  onAccept: () => void;
+  onClose: () => void;
+  onReset: () => void;
+}) {
+  const KIND_LABEL: Record<AIStepDraft["kind"], string> = {
+    read: "Läs",
+    watch: "Titta",
+    reflect: "Reflektera",
+    task: "Uppgift",
+    quiz: "Quiz",
+  };
+  return (
+    <ModalShell
+      title="AI-skissad modul"
+      eye="✦ AI-skiss"
+      onClose={onClose}
+    >
+      {!draft && (
+        <>
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 13.5,
+              color: "var(--text-mid)",
+              marginTop: 0,
+              marginBottom: 12,
+            }}
+          >
+            Beskriv vilken modul du vill ha. Sonnet skissar titel,
+            sammanfattning och 3–6 steg av blandad typ (läs / reflektera
+            / uppgift / quiz). Du kan ändra allt efteråt innan eleven får
+            den.
+          </p>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="t.ex. 'En modul om att göra sin första månadsbudget — fokus på att skilja behov från önskemål, med en quiz på slutet'"
+            rows={5}
+            disabled={busy}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid var(--line-strong)",
+              color: "#fff",
+              padding: "10px 12px",
+              borderRadius: 6,
+              fontFamily: "var(--mono)",
+              fontSize: 12,
+              resize: "vertical",
+            }}
+          />
+          {error && (
+            <div
+              style={{
+                marginTop: 10,
+                color: "#fca5a5",
+                fontSize: 12,
+                fontFamily: "var(--mono)",
+              }}
+            >
+              {error}
+            </div>
+          )}
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginTop: 18,
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="larare-tb-btn"
+            >
+              Avbryt
+            </button>
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={busy || prompt.trim().length < 10}
+              className="larare-tb-btn solid"
+            >
+              {busy ? "Skissar…" : "Skissa modul"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {draft && (
+        <>
+          <div
+            style={{
+              marginBottom: 14,
+              padding: "12px 14px",
+              background: "rgba(139, 92, 246, 0.06)",
+              borderLeft: "3px solid #a78bfa",
+              borderRadius: 4,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 9,
+                letterSpacing: "1.2px",
+                textTransform: "uppercase",
+                color: "#a78bfa",
+                marginBottom: 4,
+              }}
+            >
+              ✦ Skiss · granska innan du sparar
+            </div>
+            <div
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 18,
+                fontWeight: 500,
+                marginBottom: 4,
+              }}
+            >
+              {draft.title}
+            </div>
+            {draft.summary && (
+              <div
+                style={{
+                  fontFamily: "var(--serif)",
+                  fontSize: 13,
+                  color: "var(--text-mid)",
+                  lineHeight: 1.5,
+                }}
+              >
+                {draft.summary}
+              </div>
+            )}
+          </div>
+          <div
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 9.5,
+              letterSpacing: "1.2px",
+              textTransform: "uppercase",
+              color: "var(--text-dim)",
+              marginBottom: 8,
+            }}
+          >
+            Steg ({draft.steps.length})
+          </div>
+          <ol
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            {draft.steps.map((st, i) => (
+              <li
+                key={i}
+                style={{
+                  border: "1px solid var(--line)",
+                  borderRadius: 4,
+                  padding: "10px 12px",
+                  background: "rgba(255,255,255,0.02)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "baseline",
+                    marginBottom: 4,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 9,
+                      letterSpacing: "1.1px",
+                      textTransform: "uppercase",
+                      color: "#a78bfa",
+                      padding: "2px 8px",
+                      border: "1px solid #a78bfa",
+                      borderRadius: 99,
+                    }}
+                  >
+                    {KIND_LABEL[st.kind] || st.kind}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "var(--serif)",
+                      fontSize: 14,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {st.title}
+                  </span>
+                </div>
+                {st.body && (
+                  <div
+                    style={{
+                      fontFamily: "var(--serif)",
+                      fontSize: 12.5,
+                      color: "var(--text-mid)",
+                      lineHeight: 1.5,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {st.body.length > 240
+                      ? st.body.slice(0, 240) + "…"
+                      : st.body}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
+          {error && (
+            <div
+              style={{
+                marginTop: 10,
+                color: "#fca5a5",
+                fontSize: 12,
+                fontFamily: "var(--mono)",
+              }}
+            >
+              {error}
+            </div>
+          )}
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginTop: 18,
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={busy}
+              className="larare-tb-btn"
+            >
+              Skissa om
+            </button>
+            <button
+              type="button"
+              onClick={onAccept}
+              disabled={busy}
+              className="larare-tb-btn solid"
+            >
+              {busy ? "Sparar…" : "Spara modul + öppna"}
+            </button>
+          </div>
+        </>
+      )}
+    </ModalShell>
+  );
 }

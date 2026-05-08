@@ -483,3 +483,129 @@ button.ed-demo-tile, button.ed-choice { font: inherit; }
     opacity: 1; transform: none; animation: none;
   }
 }
+
+/* === Beta-kod-block i signup-formulär === */
+.ed-beta-block {
+  margin: 8px 0;
+  padding: 14px 16px;
+  background: rgba(220, 76, 43, 0.06);
+  border-left: 3px solid var(--ed-accent, #dc4c2b);
+  border-radius: 4px;
+}
+.ed-beta-eye {
+  font-family: var(--ed-mono, "JetBrains Mono", monospace);
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--ed-accent, #dc4c2b);
+  margin-bottom: 6px;
+}
+.ed-beta-help {
+  font-family: var(--ed-serif, "Source Serif 4", Georgia, serif);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.ed-beta-help a {
+  color: var(--ed-gold, #fbbf24);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ed-beta-help a:hover {
+  color: #fff;
+}
+.ed-beta-block input.ed-input {
+  letter-spacing: 1px;
+  font-family: var(--ed-mono, "JetBrains Mono", monospace);
+}
+
+/* === Global beta-pill (visas i topbar / bredvid brand) === */
+.beta-pill {
+  display: inline-block;
+  font-family: var(--ed-mono, "JetBrains Mono", monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  margin-left: 8px;
+  border: 1px solid var(--ed-accent, #dc4c2b);
+  color: var(--ed-accent, #dc4c2b);
+  border-radius: 99px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* === WaitlistBlock · intresseanmälan till beta-väntelistan === */
+.ed-waitlist-block {
+  margin: 8px 0;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+}
+.ed-waitlist-block.ed-waitlist-done {
+  background: rgba(110, 231, 183, 0.06);
+  border: 1px solid rgba(110, 231, 183, 0.4);
+  border-style: solid;
+}
+.ed-waitlist-eye {
+  font-family: var(--ed-mono, "JetBrains Mono", monospace);
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--ed-gold, #fbbf24);
+  margin-bottom: 6px;
+}
+.ed-waitlist-block.ed-waitlist-done .ed-waitlist-eye {
+  color: #6ee7b7;
+}
+.ed-waitlist-help {
+  font-family: var(--ed-serif, "Source Serif 4", Georgia, serif);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.ed-waitlist-help strong {
+  color: var(--ed-gold, #fbbf24);
+  font-weight: 600;
+}
+.ed-waitlist-row {
+  margin-bottom: 6px;
+}
+.ed-waitlist-error {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(220, 38, 38, 0.08);
+  color: #fca5a5;
+  border-left: 2px solid #dc2626;
+  border-radius: 3px;
+  font-family: var(--ed-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+}
+.ed-waitlist-btn {
+  margin-top: 10px;
+  display: inline-block;
+  appearance: none;
+  background: transparent;
+  color: var(--ed-gold, #fbbf24);
+  border: 1px solid var(--ed-gold, #fbbf24);
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-family: var(--ed-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ed-waitlist-btn:hover:not(:disabled) {
+  background: var(--ed-gold, #fbbf24);
+  color: #0f172a;
+}
+.ed-waitlist-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

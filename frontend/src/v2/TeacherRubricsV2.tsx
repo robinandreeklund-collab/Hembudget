@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { V2Banner } from "./V2Banner";
 import { useAutoStartTeacherGuide } from "./guides/GuideContext";
+import { getToken } from "@/api/client";
 
 type Criterion = {
   key: string;
@@ -45,7 +46,7 @@ async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
     ...opts,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
+      Authorization: `Bearer ${getToken() || ""}`,
       ...(opts.headers || {}),
     },
   });

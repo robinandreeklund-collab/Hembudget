@@ -58,6 +58,7 @@ export function TeacherArbetsformedlingenOverviewPage() {
   const { studentId } = useParams<{ studentId: string }>();
   const sid = studentId ? parseInt(studentId, 10) : 0;
   const [overview, setOverview] = useState<V2TeacherAFOverview | null>(null);
+  const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
   const [applications, setApplications] = useState<
     V2ArbetsformedlingenApplication[]
   >([]);
@@ -262,8 +263,16 @@ export function TeacherArbetsformedlingenOverviewPage() {
                 {applications.map((a) => (
                   <tr
                     key={a.id}
+                    onClick={() =>
+                      setSelectedAppId(selectedAppId === a.id ? null : a.id)
+                    }
                     style={{
                       borderBottom: "1px solid rgba(99,102,241,0.08)",
+                      cursor: "pointer",
+                      background:
+                        selectedAppId === a.id
+                          ? "rgba(99,102,241,0.08)"
+                          : "transparent",
                     }}
                   >
                     <td style={{ padding: "8px 4px" }}>
@@ -281,14 +290,10 @@ export function TeacherArbetsformedlingenOverviewPage() {
                     >
                       {STATUS_LABEL[a.status] || a.status}
                     </td>
-                    <td
-                      style={{ padding: "8px 4px", textAlign: "right" }}
-                    >
+                    <td style={{ padding: "8px 4px", textAlign: "right" }}>
                       {a.match_score}
                     </td>
-                    <td
-                      style={{ padding: "8px 4px", textAlign: "right" }}
-                    >
+                    <td style={{ padding: "8px 4px", textAlign: "right" }}>
                       {a.final_score ?? "—"}
                     </td>
                     <td style={{ padding: "8px 4px" }}>
@@ -298,8 +303,134 @@ export function TeacherArbetsformedlingenOverviewPage() {
                 ))}
               </tbody>
             </table>
+
+            {/* === Detaljvy · klick på rad expanderar === */}
+            {selectedAppId && (() => {
+              const a = applications.find((x) => x.id === selectedAppId);
+              if (!a) return null;
+              return (
+                <div
+                  style={{
+                    marginTop: 24,
+                    padding: "20px 24px",
+                    background: "rgba(15,21,37,0.7)",
+                    border: "1px solid rgba(99,102,241,0.2)",
+                    borderRadius: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      marginBottom: 14,
+                    }}
+                  >
+                    <h3
+                      style={{
+                        fontFamily: "var(--serif)",
+                        fontSize: 18,
+                        fontWeight: 700,
+                        margin: 0,
+                      }}
+                    >
+                      {a.yrke_display} · {a.employer_name}
+                    </h3>
+                    <button
+                      onClick={() => setSelectedAppId(null)}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        color: "#aab",
+                        padding: "4px 12px",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                        fontFamily: "var(--mono)",
+                        fontSize: 10,
+                      }}
+                    >
+                      Stäng
+                    </button>
+                  </div>
+
+                  {a.cover_letter_text && (
+                    <DetailSection
+                      label="Personligt brev (rond 1)"
+                      body={a.cover_letter_text}
+                    />
+                  )}
+
+                  {a.case_answer_text && (
+                    <DetailSection
+                      label="Case-svar (rond 3)"
+                      body={a.case_answer_text}
+                    />
+                  )}
+
+                  {a.ai_feedback_md && (
+                    <DetailSection
+                      label="AI-feedback per rond"
+                      body={a.ai_feedback_md}
+                      muted
+                    />
+                  )}
+
+                  {a.job_ad_data && (
+                    <DetailSection
+                      label="Annonsen eleven såg"
+                      body={JSON.stringify(a.job_ad_data, null, 2)}
+                      muted
+                      mono
+                    />
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function DetailSection({
+  label, body, muted = false, mono = false,
+}: {
+  label: string;
+  body: string;
+  muted?: boolean;
+  mono?: boolean;
+}) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div
+        style={{
+          fontFamily: "var(--mono)",
+          fontSize: 9.5,
+          letterSpacing: "1.4px",
+          textTransform: "uppercase",
+          color: "#a78bfa",
+          marginBottom: 8,
+        }}
+      >
+        ● {label}
+      </div>
+      <div
+        style={{
+          fontFamily: mono ? "var(--mono)" : "var(--serif)",
+          fontSize: mono ? 11 : 14,
+          color: muted ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.85)",
+          whiteSpace: "pre-wrap",
+          lineHeight: 1.55,
+          padding: "10px 12px",
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 4,
+          maxHeight: 280,
+          overflowY: "auto",
+        }}
+      >
+        {body}
       </div>
     </div>
   );

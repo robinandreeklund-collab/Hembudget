@@ -288,6 +288,10 @@ def _create_mail_for_episode(
         amount=Decimal(-gross_loss) if gross_loss > 0 else None,
         due_date=None,
         status="unhandled",
+        received_at=__import__("datetime").datetime.combine(
+            occurred_on,
+            __import__("datetime").time(10, 0),
+        ),
     )
 
 

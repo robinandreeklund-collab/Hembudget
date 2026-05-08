@@ -1,0 +1,146 @@
+/**
+ * v2-mode-flip · 1:1 med prototyp /proposals/vol-7/elev.html
+ * (vol-7 rad 1939-1957, 8254-8287).
+ *
+ * Strategi (matchar prototypen exakt):
+ *   1. På V2-paths slipper html/body/#root sin globala height:100% från
+ *      index.css. Body scrollar naturligt under en fixed topbar.
+ *   2. Backdrop (radial-gradients + grid-pattern) ligger på <body> via
+ *      ::before/::after så den aldrig flyttar/flippar.
+ *   3. body[data-mode] styr backdrop-färg (orange privat / indigo biz).
+ *   4. .v2-flip-target (= prototypens .app) är ett block med padding-top
+ *      för att lämna plats åt fixed topbaren · och 3D-flippas vid mode-byte.
+ *   5. .v2-flip-perspective sätter perspective på wrappern.
+ *
+ * Resultat: en enda body-scrollbar · topbar och backdrop står still vid
+ * mode-byte · BARA datan flippar i 3D · färgtemat byts mitt i flippen.
+ */
+
+
+/* === V2-shell · ersätter index.css h-full + flex-col-constraints ===
+ * När App.tsx renderar V2 slipper vi den höjd-låsta layouten som V1
+ * behöver för sidebaren. Body får växa fritt och scrolla naturligt —
+ * exakt som i prototypens .app under en fixed .topbar. */
+html:has(.v2-shell),
+body:has(.v2-shell) {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+#root:has(.v2-shell) {
+  height: auto;
+  min-height: 100%;
+}
+.v2-shell {
+  position: relative;
+  min-height: 100vh;
+}
+
+
+/* === Persistent backdrop · alltid på body, aldrig flippad ===
+ * Kopierat från prototyp rad 31-52. */
+body:has(.v2-shell) {
+  background: linear-gradient(180deg, #0a0e1a 0%, #0f1525 60%, #0a0e1a 100%);
+}
+body:has(.v2-shell)::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 25% 35%, rgba(220, 76, 43, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(251, 191, 36, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 80%, rgba(99, 102, 241, 0.08) 0%, transparent 60%);
+  transition: background 0.5s ease;
+}
+body:has(.v2-shell)::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(0deg, transparent 49.5%, rgba(255, 255, 255, 0.022) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255, 255, 255, 0.022) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  opacity: 0.6;
+}
+
+/* Företag-tema · indigo backdrop. Matchar prototyp rad 1973-1980. */
+body[data-mode="business"]::before {
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 35%, rgba(99, 102, 241, 0.20) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(168, 85, 247, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 80%, rgba(14, 165, 233, 0.10) 0%, transparent 60%) !important;
+}
+
+
+/* === Mode-paneler · matchar prototypens .panel-system ===
+ * Båda panelerna (privat + företag) är permanent mountade i DOM:en;
+ * body[data-mode] styr vilken som visas via display. Detta är kritiskt
+ * för en SMOOTH flip-animation: när modet byts mid-flip är swappen ren
+ * CSS — inga React-renders, inga API-anrop, inga layout-recomputes
+ * mid-animation. Identiskt med prototyp vol-7 rad 117-118 där
+ * .panel.active-klassen växlas mellan siblings i DOM:en. */
+.v2-mode-panel-private,
+.v2-mode-panel-business {
+  /* Block-default. Body[data-mode] överrider till none nedan. */
+  display: block;
+}
+body[data-mode="business"] .v2-mode-panel-private {
+  display: none;
+}
+body:not([data-mode="business"]) .v2-mode-panel-business {
+  display: none;
+}
+
+
+/* === Flip-target · BARA datan flippar (matchar prototypens .app) === */
+
+.v2-flip-perspective {
+  perspective: 2400px;
+  position: relative;
+  z-index: 1;
+}
+
+.v2-flip-target {
+  /* Plats åt fixed topbar (56px) — matchar prototyp rad 116. */
+  padding-top: 56px;
+  position: relative;
+  z-index: 5;
+  transform-style: preserve-3d;
+  background: transparent;
+  /* INGEN egen scroll · INGEN min-height som triggar flex-stretch · INGEN
+   * overflow. Body scrollar; vi är ett vanligt block-element. */
+}
+
+/* Animation · identisk med prototyp rad 1948-1957 */
+.v2-flip-target.flip-out {
+  animation: v2-flip-out 0.5s cubic-bezier(0.7, 0, 0.8, 0.3) forwards;
+}
+.v2-flip-target.flip-in {
+  animation: v2-flip-in 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+@keyframes v2-flip-out {
+  from { transform: rotateY(0deg) scale(1); opacity: 1; }
+  to   { transform: rotateY(85deg) scale(0.96); opacity: 0; }
+}
+@keyframes v2-flip-in {
+  from { transform: rotateY(-85deg) scale(0.96); opacity: 0; }
+  to   { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+
+/* Reduced-motion: respektera användarens preferens · skippa rotation */
+@media (prefers-reduced-motion: reduce) {
+  .v2-flip-target.flip-out,
+  .v2-flip-target.flip-in {
+    animation: v2-flip-fade 0.25s ease forwards;
+  }
+  @keyframes v2-flip-fade {
+    from { opacity: 1; }
+    50%  { opacity: 0; }
+    to   { opacity: 1; }
+  }
+}

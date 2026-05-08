@@ -152,6 +152,13 @@ def _build_mail(
         due_date=occurred_on if (cost or 0) > 0 else None,
         status="unhandled",
         released_at=released_at,
+        # received_at = SPEL-tid · annars stämplas alla event-mail med
+        # real-tid (utcnow) vid seed-körning och eleven ser "7 maj"
+        # i postlådan trots att händelsen är i januari.
+        received_at=__import__("datetime").datetime.combine(
+            occurred_on,
+            __import__("datetime").time(10, 0),
+        ),
     )
 
 
@@ -274,6 +281,53 @@ def apply_event(
         s.add(claim)
         s.flush()
         claim_id = claim.id
+        # Försäkringsutbetalning · skapa Transaction på elevens lönekonto
+        # så pengarna faktiskt landar på saldot. Annars syns
+        # utbetalningen bara i /v2/forsakringar utan att påverka kontot.
+        if (
+            claim.status == "paid"
+            and claim.amount_paid is not None
+            and claim.amount_paid > 0
+        ):
+            try:
+                from ...db.models import Account, Transaction
+                import hashlib as _hl_ins
+                lonekonto = (
+                    s.query(Account)
+                    .filter(Account.type == "checking")
+                    .order_by(Account.id.asc())
+                    .first()
+                )
+                if lonekonto is not None:
+                    desc = (
+                        f"Försäkringsutbetalning · {template.display}"
+                    )
+                    tx_hash = _hl_ins.sha256(
+                        f"claim|{student_scope}|{template.key}|"
+                        f"{occurred.isoformat()}|{int(claim.amount_paid)}".encode()
+                    ).hexdigest()[:32]
+                    tx = Transaction(
+                        account_id=lonekonto.id,
+                        date=occurred,
+                        amount=Decimal(claim.amount_paid),  # positivt
+                        currency="SEK",
+                        raw_description=desc,
+                        normalized_merchant=(
+                            "Folksam" if "folksam" in (
+                                template.key or ""
+                            ).lower() else "Försäkringsbolaget"
+                        ),
+                        hash=tx_hash,
+                        is_transfer=False,
+                        user_verified=True,
+                    )
+                    s.add(tx)
+                    s.flush()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "claim → Transaction misslyckades — sväljer",
+                )
 
     return EventOccurrence(
         template_key=template.key,

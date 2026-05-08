@@ -23,6 +23,7 @@ import {
 import { V2Banner } from "./V2Banner";
 import { LoginQrModal } from "./LoginQrModal";
 import { printAllLoginQrs } from "./printAllLoginQrs";
+import { getToken } from "@/api/client";
 import "./larare.css";
 
 const ARCHETYPE_LABEL: Record<V2CharacterArchetype, string> = {
@@ -56,6 +57,21 @@ export function TeacherCreateStudentV2() {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<V2CreatedStudentRow | null>(null);
   const [qrStudentId, setQrStudentId] = useState<number | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  // Pågående eller nyligen klara raderings-jobb. Pollas under
+  // pågående delete så UI kan visa "Raderar…" / "Klar" / "Fel".
+  const [deleteJobs, setDeleteJobs] = useState<{
+    rows: Array<{
+      student_id: number;
+      student_name: string;
+      status: "queued" | "running" | "done" | "failed";
+      started_at: number;
+      finished_at: number | null;
+      error: string | null;
+    }>;
+    pending_count: number;
+  }>({ rows: [], pending_count: 0 });
   const navigate = useNavigate();
 
   async function load() {
@@ -67,9 +83,114 @@ export function TeacherCreateStudentV2() {
     }
   }
 
+  async function bulkDeleteAll() {
+    if (!data || data.rows.length === 0) return;
+    const count = data.rows.length;
+    const first = window.confirm(
+      `Radera ALLA ${count} elever permanent?\n\n` +
+      `All scope-data, BankID-sessioner, profiler och login-koder ` +
+      `försvinner. Detta GÅR INTE att ångra.\n\n` +
+      `Klicka OK för att gå vidare till bekräftelse.`,
+    );
+    if (!first) return;
+    const second = window.prompt(
+      `Skriv "RADERA ${count}" för att bekräfta:`,
+    );
+    if (second !== `RADERA ${count}`) {
+      alert("Bekräftelse-text matchade inte. Avbryter.");
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      // Starta bakgrunds-job (returnerar omedelbart)
+      await v2Api.teacherDeleteAllMyStudents();
+      // Polla status var 2:a sekund tills done/failed
+      const startedAt = Date.now();
+      while (true) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const status = await v2Api.teacherBulkDeleteStatus();
+        if (status.status === "done") {
+          alert(
+            `Radering klar: ${status.deleted_count ?? 0} elever borta`
+            + (status.failed_count
+              ? `, ${status.failed_count} misslyckades`
+              : ""),
+          );
+          break;
+        }
+        if (status.status === "failed") {
+          alert(
+            `Radering misslyckades: ${status.error || "okänt fel"}`,
+          );
+          break;
+        }
+        // Skydd mot evig loop (max 5 min)
+        if (Date.now() - startedAt > 5 * 60 * 1000) {
+          alert(
+            "Radering tar längre än 5 min — fortsätter i bakgrund. "
+            + "Ladda om sidan för att se aktuellt status.",
+          );
+          break;
+        }
+      }
+      await load();
+    } catch (e) {
+      alert(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   useEffect(() => {
     load();
+    // Hämta super-admin-status. Importerar api dynamiskt för att inte
+    // ändra existerande imports.
+    import("../api/client").then(({ api }) => {
+      api<{ is_super_admin: boolean }>("/admin/ai/me")
+        .then((d) => {
+          if (d && typeof d.is_super_admin === "boolean") {
+            setIsSuperAdmin(d.is_super_admin);
+          }
+        })
+        .catch(() => undefined);
+    });
   }, []);
+
+  // Polla delete-jobs medan det finns pågående raderingar.
+  // Stoppar automatiskt när alla jobs är klara (pending_count=0)
+  // för att inte hamra servern i onödan.
+  useEffect(() => {
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    async function poll() {
+      try {
+        const next = await v2Api.teacherDeleteJobs();
+        if (cancelled) return;
+        const prevPending = deleteJobs.pending_count;
+        setDeleteJobs(next);
+        // Om något jobb just klarade — refresha listan
+        if (prevPending > 0 && next.pending_count < prevPending) {
+          load();
+        }
+      } catch {
+        /* tyst — UI fortsätter försöka */
+      }
+      if (cancelled) return;
+      if (deleteJobs.pending_count > 0) {
+        timeout = setTimeout(poll, 2000);
+      }
+    }
+
+    if (deleteJobs.pending_count > 0) {
+      timeout = setTimeout(poll, 2000);
+    }
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteJobs.pending_count]);
 
   if (error && !data) {
     return (
@@ -127,8 +248,7 @@ export function TeacherCreateStudentV2() {
               }}
             >
               Karaktärsgenerering · 8-teckens-kod · partner-modell · Nivå 1
-              default. Eleven får v2 aktiverat direkt och hamnar på
-              v2-onboardingen vid första inloggning.
+              default.
             </p>
           </div>
           <div className="larare-head-meta">
@@ -252,23 +372,146 @@ export function TeacherCreateStudentV2() {
             )}
           </div>
           {data.rows.length > 0 && (
-            <button
-              type="button"
-              onClick={async () => {
-                const r = await printAllLoginQrs();
-                if (r.error) alert(r.error);
-              }}
-              className="larare-tb-btn solid"
-              style={{
-                background: "var(--warm, #fbbf24)",
-                color: "#422006",
-                borderColor: "var(--warm, #fbbf24)",
-              }}
-            >
-              🖨 Skriv ut alla koder ({data.rows.length})
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  const r = await printAllLoginQrs();
+                  if (r.error) alert(r.error);
+                }}
+                className="larare-tb-btn solid"
+                style={{
+                  background: "var(--warm, #fbbf24)",
+                  color: "#422006",
+                  borderColor: "var(--warm, #fbbf24)",
+                }}
+              >
+                🖨 Skriv ut alla koder ({data.rows.length})
+              </button>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={bulkDeleteAll}
+                  disabled={bulkDeleting}
+                  className="larare-tb-btn solid"
+                  title="Super-admin: radera ALLA mina elever permanent"
+                  style={{
+                    background: bulkDeleting
+                      ? "rgba(239,68,68,0.4)"
+                      : "rgba(239,68,68,0.9)",
+                    color: "#fff",
+                    borderColor: "rgba(239,68,68,1)",
+                    cursor: bulkDeleting ? "wait" : "pointer",
+                  }}
+                >
+                  {bulkDeleting
+                    ? "⏳ Raderar…"
+                    : `🗑 Radera ALLA elever (${data.rows.length})`}
+                </button>
+              )}
+            </div>
           )}
         </div>
+
+        {/* Status-banner för pågående/nyligen klara raderingar */}
+        {deleteJobs.rows.length > 0 && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: "12px 16px",
+              background: "rgba(220,76,43,0.05)",
+              border: "1px solid rgba(220,76,43,0.25)",
+              borderRadius: 6,
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 11,
+              color: "rgba(255,255,255,0.85)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 9.5,
+                letterSpacing: 1.4,
+                textTransform: "uppercase",
+                color: "rgba(220,76,43,0.85)",
+                marginBottom: 8,
+              }}
+            >
+              ● Raderingar
+              {deleteJobs.pending_count > 0
+                ? ` · ${deleteJobs.pending_count} pågår`
+                : ""}
+            </div>
+            {deleteJobs.rows.map((job) => {
+              const elapsed = Math.max(
+                0,
+                Math.round(
+                  ((job.finished_at ?? Date.now() / 1000) - job.started_at)
+                ),
+              );
+              const icon =
+                job.status === "done"
+                  ? "✓"
+                  : job.status === "failed"
+                  ? "✕"
+                  : job.status === "running"
+                  ? "⏳"
+                  : "○";
+              const color =
+                job.status === "done"
+                  ? "#6ee7b7"
+                  : job.status === "failed"
+                  ? "#fca5a5"
+                  : job.status === "running"
+                  ? "#fda594"
+                  : "rgba(255,255,255,0.5)";
+              const label =
+                job.status === "done"
+                  ? "Klar"
+                  : job.status === "failed"
+                  ? "Fel"
+                  : job.status === "running"
+                  ? "Raderar…"
+                  : "I kö";
+              return (
+                <div
+                  key={job.student_id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "4px 0",
+                  }}
+                >
+                  <span style={{ color, width: 16 }}>{icon}</span>
+                  <span style={{ flex: 1, color: "#fff" }}>
+                    {job.student_name}
+                  </span>
+                  <span style={{ color, width: 80 }}>{label}</span>
+                  <span
+                    style={{
+                      color: "rgba(255,255,255,0.4)",
+                      width: 50,
+                      textAlign: "right",
+                    }}
+                  >
+                    {elapsed}s
+                  </span>
+                  {job.error && (
+                    <span
+                      style={{
+                        color: "#fca5a5",
+                        fontSize: 10,
+                        flex: 2,
+                      }}
+                    >
+                      {job.error}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {data.rows.length === 0 ? (
           <div
@@ -331,8 +574,14 @@ export function TeacherCreateStudentV2() {
                   )) return;
                   try {
                     await v2Api.teacherDeleteStudent(row.student_id);
-                    const next = await v2Api.teacherListCreatedStudents();
+                    // Eleven försvinner direkt från listan via soft-delete.
+                    // Hämta delete-jobs så UI kan visa "Raderar…"-banner.
+                    const [next, jobs] = await Promise.all([
+                      v2Api.teacherListCreatedStudents(),
+                      v2Api.teacherDeleteJobs(),
+                    ]);
                     setData(next);
+                    setDeleteJobs(jobs);
                   } catch (e) {
                     alert(`Fel: ${String((e as Error)?.message || e)}`);
                   }
@@ -379,7 +628,7 @@ function CreateForm({
   // Bug #1 · hämta lärarens klasser för dropdown
   useEffect(() => {
     fetch("/v2/teacher/classes", {
-      headers: { Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}` },
+      headers: { Authorization: `Bearer ${getToken() || ""}` },
     })
       .then((r) => (r.ok ? r.json() : []))
       .then(setClasses)

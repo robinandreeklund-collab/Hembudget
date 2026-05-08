@@ -19,6 +19,7 @@ import {
 } from "./api";
 import { V2Banner } from "./V2Banner";
 import "./lan.css";
+import "./faktura-shell.css";
 
 const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
@@ -33,15 +34,161 @@ const SHORT_DATE = (iso: string | null): string => {
   });
 };
 
-const TIME_DATE = (iso: string): string => {
-  const d = new Date(iso);
-  return d.toLocaleString("sv-SE", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+// TIME_DATE-helper togs bort när sender_meta-raden ersattes med
+// strukturerad faktura-meta (Org.nr + adress).
+
+// === Avsändar-meta-uppslag · ger fakturalook med riktig org-nr + adress ===
+// Mappar sender_short / sender substring till officiella detaljer som
+// visas i fakturalookens header. Pedagogiskt: eleven ser hur en riktig
+// faktura ser ut med organisationsnummer, adress och kontaktuppgifter.
+type SenderMeta = {
+  fullName: string;
+  orgNumber: string;
+  address: string[];
+  website?: string;
 };
+const SENDER_META: Record<string, SenderMeta> = {
+  // Hyresvärdar (sender innehåller "Bostäder")
+  "Bostäder": {
+    fullName: "Bostadsförvaltning AB",
+    orgNumber: "556421-7892",
+    address: ["Hyrestorget 4", "112 30 Stockholm"],
+    website: "www.bostader.se",
+  },
+  // Försäkringsbolag
+  Folksam: {
+    fullName: "Folksam ömsesidig sakförsäkring",
+    orgNumber: "502006-1619",
+    address: ["106 60 Stockholm"],
+    website: "www.folksam.se",
+  },
+  Trygg: {
+    fullName: "Trygg-Hansa Försäkring AB",
+    orgNumber: "516406-0763",
+    address: ["106 26 Stockholm"],
+    website: "www.trygghansa.se",
+  },
+  // Telekom
+  Telia: {
+    fullName: "Telia Sverige AB",
+    orgNumber: "556430-0142",
+    address: ["169 94 Solna"],
+    website: "www.telia.se",
+  },
+  Bahnhof: {
+    fullName: "Bahnhof AB",
+    orgNumber: "556519-9493",
+    address: ["Box 7702", "103 95 Stockholm"],
+    website: "www.bahnhof.se",
+  },
+  // Energi
+  Tibber: {
+    fullName: "Tibber AB",
+    orgNumber: "559107-0570",
+    address: ["Kungsbron 1", "111 22 Stockholm"],
+    website: "www.tibber.com",
+  },
+  // Kollektivtrafik
+  Västtrafik: {
+    fullName: "Västtrafik AB",
+    orgNumber: "556558-5012",
+    address: ["Box 405", "401 26 Göteborg"],
+    website: "www.vasttrafik.se",
+  },
+  Lokaltrafik: {
+    fullName: "Regionens kollektivtrafik",
+    orgNumber: "232100-0016",
+    address: ["Stora Torget 1"],
+    website: "www.lokaltrafik.se",
+  },
+  // Banker
+  SEB: {
+    fullName: "Skandinaviska Enskilda Banken AB",
+    orgNumber: "502032-9081",
+    address: ["106 40 Stockholm"],
+    website: "www.seb.se",
+  },
+  Nordea: {
+    fullName: "Nordea Bank Abp",
+    orgNumber: "516406-0120",
+    address: ["105 71 Stockholm"],
+    website: "www.nordea.se",
+  },
+  Avanza: {
+    fullName: "Avanza Bank AB",
+    orgNumber: "556573-5668",
+    address: ["Box 1399", "111 93 Stockholm"],
+    website: "www.avanza.se",
+  },
+  // Myndigheter
+  Skatteverket: {
+    fullName: "Skatteverket",
+    orgNumber: "202100-5448",
+    address: ["171 94 Solna"],
+    website: "www.skatteverket.se",
+  },
+  Försäkringskassan: {
+    fullName: "Försäkringskassan",
+    orgNumber: "202100-5521",
+    address: ["103 51 Stockholm"],
+    website: "www.forsakringskassan.se",
+  },
+  Pensionsmyndigheten: {
+    fullName: "Pensionsmyndigheten",
+    orgNumber: "202100-6255",
+    address: ["106 87 Stockholm"],
+    website: "www.pensionsmyndigheten.se",
+  },
+  CSN: {
+    fullName: "Centrala studiestödsnämnden",
+    orgNumber: "202100-1819",
+    address: ["851 82 Sundsvall"],
+    website: "www.csn.se",
+  },
+  // Arbetsgivare
+  Arbetsgivaren: {
+    fullName: "Arbetsgivaren AB",
+    orgNumber: "556xxx-xxxx",
+    address: [],
+  },
+};
+
+function lookupSender(sender: string): SenderMeta {
+  // Prova exakt match först, sen substring
+  if (SENDER_META[sender]) return SENDER_META[sender];
+  for (const key of Object.keys(SENDER_META)) {
+    if (sender.includes(key)) {
+      // För "Linköping Bostäder" → använd "Bostäder"-template men byt namn
+      if (key === "Bostäder") {
+        return {
+          ...SENDER_META[key],
+          fullName: sender + " AB",
+        };
+      }
+      return SENDER_META[key];
+    }
+  }
+  // Fallback för okänd avsändare — generera plausibel meta
+  return {
+    fullName: sender,
+    orgNumber: "—",
+    address: [],
+  };
+}
+
+// Faktura-typ-badge utifrån mail_type + sender_kind
+function fakturaBadge(
+  mail_type: string,
+  sender_kind: string,
+): { label: string; color: string } {
+  if (mail_type === "salary_slip") return { label: "LÖNESPEC", color: "#3b82f6" };
+  if (mail_type === "reminder") return { label: "PÅMINNELSE", color: "#dc2626" };
+  if (mail_type === "authority") return { label: "MYNDIGHETSPOST", color: "#16a34a" };
+  if (mail_type === "info") return { label: "INFORMATION", color: "#64748b" };
+  // invoice — variera baserat på sender_kind
+  if (sender_kind === "cred") return { label: "KREDITKORTSFAKTURA", color: "#6366f1" };
+  return { label: "FAKTURA", color: "#dc4c2b" };
+}
 
 export function MailDetailV2() {
   const { mailId } = useParams<{ mailId: string }>();
@@ -144,6 +291,12 @@ export function MailDetailV2() {
   };
   const senderBg = senderColors[m.sender_kind] || senderColors.other;
 
+  // Faktura-meta för shellen
+  const senderMeta = lookupSender(m.sender);
+  const badge = fakturaBadge(m.mail_type, m.sender_kind);
+  const fakturaNumber = data.invoice?.invoice_number
+    || (m.ocr_reference ? `#${m.ocr_reference.slice(0, 10)}` : null);
+
   return (
     <div className="v2-lan-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
@@ -153,127 +306,83 @@ export function MailDetailV2() {
           Tillbaka till postlådan
         </Link>
 
-        <article
-          style={{
-            background: "rgba(15,21,37,0.7)",
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-          }}
-        >
-          {/* Header */}
-          <header
-            style={{
-              padding: "24px 28px",
-              borderBottom: "1px solid var(--line)",
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 18,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ minWidth: 260, flex: "1 1 60%" }}>
+        <article className="faktura-shell">
+          {/* === FAKTURA HEADER · avsändare + badge + meta === */}
+          <header className="fs-head">
+            <div className="fs-head-left">
               <div
-                style={{
-                  display: "flex",
-                  gap: 14,
-                  alignItems: "center",
-                  marginBottom: 12,
-                }}
+                className="fs-sender-logo"
+                style={{ background: senderBg }}
               >
-                <div
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 8,
-                    background: senderBg,
-                    display: "grid",
-                    placeItems: "center",
-                    fontFamily: "var(--mono)",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#fff",
-                    flexShrink: 0,
-                  }}
-                >
-                  {m.sender_short || m.sender.slice(0, 3).toUpperCase()}
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontFamily: "var(--serif)",
-                      fontSize: 16,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {m.sender}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "var(--mono)",
-                      fontSize: 10,
-                      color: "var(--text-mid)",
-                    }}
-                  >
-                    {m.sender_meta || `${m.mail_type} · ${TIME_DATE(m.received_at)}`}
-                  </div>
+                {m.sender_short || m.sender.slice(0, 3).toUpperCase()}
+              </div>
+              <div className="fs-sender-block">
+                <div className="fs-sender-name">{senderMeta.fullName}</div>
+                <div className="fs-sender-meta">
+                  Org.nr {senderMeta.orgNumber}
+                  {senderMeta.address.map((line, i) => (
+                    <span key={i}> · {line}</span>
+                  ))}
+                  {senderMeta.website && <span> · {senderMeta.website}</span>}
                 </div>
               </div>
-              <div
-                style={{
-                  fontFamily: "var(--serif)",
-                  fontSize: 22,
-                  fontWeight: 700,
-                  letterSpacing: "-0.4px",
-                }}
-              >
-                {m.subject}
-              </div>
-              {m.body_meta && (
-                <div
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 11,
-                    color: "var(--text-mid)",
-                    marginTop: 6,
-                  }}
-                >
-                  {m.body_meta}
-                </div>
-              )}
             </div>
-            <div
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 11,
-                color: "var(--text-mid)",
-                lineHeight: 1.7,
-                textAlign: "right",
-                minWidth: 200,
-              }}
-            >
-              {m.due_date && (
-                <>
-                  Förfaller <strong>{SHORT_DATE(m.due_date)}</strong>
-                  <br />
-                </>
-              )}
-              {m.amount != null && (
-                <>
-                  Belopp:{" "}
-                  <strong>
-                    {m.amount > 0 ? "+ " : "− "}
-                    {SEK(Math.abs(m.amount))} kr
-                  </strong>
-                  <br />
-                </>
-              )}
-              {m.ocr_reference && (
-                <>
-                  OCR <strong>{m.ocr_reference}</strong>
-                </>
-              )}
+            <div className="fs-head-right">
+              <span
+                className="fs-badge"
+                style={{
+                  borderColor: badge.color,
+                  color: badge.color,
+                }}
+              >
+                {badge.label}
+              </span>
             </div>
           </header>
+
+          {/* === META-RAD · kund + datum + fakturanr + förfaller === */}
+          <div className="fs-meta-grid">
+            <div className="fs-meta-cell">
+              <div className="fs-meta-eye">Mottagare</div>
+              <div className="fs-meta-val fs-meta-val-name">
+                {(data as { recipient_name?: string }).recipient_name || "Privatperson"}
+              </div>
+            </div>
+            <div className="fs-meta-cell">
+              <div className="fs-meta-eye">
+                {m.mail_type === "salary_slip" ? "Utbetald" : "Fakturadatum"}
+              </div>
+              <div className="fs-meta-val">
+                {SHORT_DATE(m.received_at)}
+              </div>
+            </div>
+            {fakturaNumber && (
+              <div className="fs-meta-cell">
+                <div className="fs-meta-eye">
+                  {m.mail_type === "salary_slip" ? "Lönespec" : "Fakturanr"}
+                </div>
+                <div className="fs-meta-val fs-meta-val-mono">
+                  {fakturaNumber}
+                </div>
+              </div>
+            )}
+            {m.due_date && m.mail_type !== "salary_slip" && (
+              <div className="fs-meta-cell fs-meta-cell-emphasis">
+                <div className="fs-meta-eye">Förfaller</div>
+                <div className="fs-meta-val fs-meta-val-due">
+                  {SHORT_DATE(m.due_date)}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* === SUBJECT (stor) === */}
+          <div className="fs-subject">
+            <h1 className="fs-subject-h">{m.subject}</h1>
+            {m.body_meta && (
+              <div className="fs-subject-meta">{m.body_meta}</div>
+            )}
+          </div>
 
           {/* Body */}
           <div style={{ padding: "24px 28px" }}>
@@ -320,6 +429,47 @@ export function MailDetailV2() {
                 }}
               >
                 {exportMsg}
+              </div>
+            )}
+
+            {/* === BETALNINGSBLOCK · pedagogiskt fakturalik ruta === */}
+            {(m.bankgiro || m.ocr_reference) && m.mail_type !== "salary_slip"
+              && m.mail_type !== "info" && (
+              <div className="fs-pay-block">
+                <div className="fs-pay-eye">● Betalning</div>
+                <div className="fs-pay-grid">
+                  {m.bankgiro && (
+                    <div>
+                      <div className="fs-pay-cell-eye">Bankgiro</div>
+                      <div className="fs-pay-cell-val">{m.bankgiro}</div>
+                    </div>
+                  )}
+                  {m.ocr_reference && (
+                    <div>
+                      <div className="fs-pay-cell-eye">OCR / referens</div>
+                      <div className="fs-pay-cell-val fs-pay-cell-mono">
+                        {m.ocr_reference}
+                      </div>
+                    </div>
+                  )}
+                  {m.due_date && (
+                    <div>
+                      <div className="fs-pay-cell-eye">Förfaller</div>
+                      <div className="fs-pay-cell-val fs-pay-cell-due">
+                        {SHORT_DATE(m.due_date)}
+                      </div>
+                    </div>
+                  )}
+                  {m.amount != null && (
+                    <div>
+                      <div className="fs-pay-cell-eye">Att betala</div>
+                      <div className="fs-pay-cell-val fs-pay-cell-amount">
+                        {m.amount > 0 ? "+ " : ""}
+                        {SEK(Math.abs(m.amount))} kr
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

@@ -15,7 +15,7 @@
  *
  * All data live från /v2/postladan.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   v2Api,
@@ -51,7 +51,8 @@ type TabKey =
   | "invoice"
   | "salary_slip"
   | "authority"
-  | "other";
+  | "other"
+  | "handled";
 
 const TAB_TO_FILTER: Record<
   TabKey,
@@ -63,6 +64,7 @@ const TAB_TO_FILTER: Record<
   salary_slip: "salary_slip",
   authority: "authority",
   other: "other",
+  handled: undefined,  // klient-filter på status
 };
 
 const MAIL_TYPE_LABEL: Record<V2MailType, string> = {
@@ -90,18 +92,30 @@ export function PostladanV2() {
   const [tab, setTab] = useState<TabKey>("all");
   const navigate = useNavigate();
 
+  // Stale-response-skydd · när eleven bläddrar snabbt mellan flikarna
+  // hinner gamla in-flight-fetches komma tillbaka EFTER att tab bytts.
+  // Då skriver setData över med fel-tabbens filtrerade data och listan
+  // blinkar tom/ofullständig. Använder en epoch som ökar vid varje
+  // tab-byte och bara accepterar svar från senaste epochen.
+  const epochRef = useRef(0);
+
   function load(currentTab: TabKey) {
+    const myEpoch = ++epochRef.current;
     v2Api
       .postladan(TAB_TO_FILTER[currentTab])
-      .then(setData)
-      .catch((e) => setError(String((e as Error)?.message || e)));
+      .then((d) => {
+        if (myEpoch !== epochRef.current) return;  // stale, kasta
+        setData(d);
+      })
+      .catch((e) => {
+        if (myEpoch !== epochRef.current) return;
+        setError(String((e as Error)?.message || e));
+      });
   }
 
   useEffect(() => {
     load(tab);
-    // Bug #14 + #15 · Realtid via polling var 15:e sekund.
-    // Lärar-postlådan-injection och nya brev syns automatiskt.
-    const interval = setInterval(() => load(tab), 15000);
+    const interval = setInterval(() => load(tab), 30000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -138,11 +152,44 @@ export function PostladanV2() {
     );
   }
 
-  const { summary, items } = data;
+  const { summary, items: rawItems } = data;
   // "Övrigt" = allt utöver invoice/salary_slip/authority/info (typiskt
   // reminder). Räknat på backend som other_count + info-tabben är
   // separat: prototypens "Övrigt" mappar till info_count + reminder.
   const ovrigtCount = summary.info_count + summary.other_count;
+
+  // === Filter-logik per flik ===
+  // Allt        → AKTIVA brev (visa progress, dölj historik)
+  // Ohanterade  → endast status=unhandled
+  // Fakturor    → ALLA fakturor (inkl. paid) så eleven ser historik per kategori
+  // Lönespecar  → ALLA lönespecar
+  // Myndighet   → ALLA myndighetsbrev
+  // Övrigt      → ALLA reminder/info-brev
+  // Hanterade   → status=paid/exported/handled (alla månader, alla typer)
+  //
+  // Tidigare gömde jag paid-items från kategori-flikarna → de blev tomma
+  // när seed-sweep markerat allt som paid. Nu visar varje kategori-flik
+  // hela sin historik så eleven kan jämföra månader inom samma kategori.
+  const HANDLED_STATUSES = new Set(["paid", "exported", "handled"]);
+  let items = rawItems;
+  if (tab === "handled") {
+    items = rawItems.filter((m) => HANDLED_STATUSES.has(m.status));
+  } else if (tab === "all") {
+    items = rawItems.filter((m) => !HANDLED_STATUSES.has(m.status));
+  }
+  // För Fakturor/Lönespecar/Myndighet/Övrigt/Ohanterade: visa allt
+  // backend returnerade — ingen extra filtrering. Backend filtrerar
+  // redan på mail_type så listan är korrekt scopad.
+
+  // Hanterade-räknaren ska vara KONSTANT oavsett vald flik. Backend-
+  // summaryt är dock tab-beroende eftersom backend filtrerar items
+  // före count. Vi använder summary.total_count - summary.unhandled_count
+  // som approximation när vi inte har full data, eller exakt från
+  // rawItems när tab är 'all' eller 'handled' (backend returnerar då
+  // alla mails).
+  const handledCount = (tab === "all" || tab === "handled")
+    ? rawItems.filter((m) => HANDLED_STATUSES.has(m.status)).length
+    : Math.max(0, summary.total_count - summary.unhandled_count);
 
   function fmtDateTime(iso: string | null): string {
     if (!iso) return "—";
@@ -333,6 +380,17 @@ export function PostladanV2() {
           >
             Övrigt <span className="count">{ovrigtCount}</span>
           </a>
+          <a
+            className={`mail-tab${tab === "handled" ? " active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setTab("handled");
+            }}
+            href="#"
+            title="Allt som är betalt, exporterat eller annars klart · alla månader"
+          >
+            Hanterade <span className="count">{handledCount}</span>
+          </a>
         </div>
 
         {/* LIST */}
@@ -382,8 +440,14 @@ export function PostladanV2() {
                   ? `+ ${SEK(m.amount)}`
                   : `${SEK(m.amount)}`;
 
-              const dueText =
-                m.status === "paid"
+              const isSalary = m.mail_type === "salary_slip";
+              const dueText = isSalary
+                ? m.status === "paid"
+                  ? `utbetald ${m.due_date ? SHORT_DATE(m.due_date) : ""}`.trim()
+                  : m.due_date
+                  ? `utbetalas ${SHORT_DATE(m.due_date)}`
+                  : "lönespec"
+                : m.status === "paid"
                   ? "betald"
                   : m.status === "exported"
                   ? `betalas ${SHORT_DATE(m.due_date)}`

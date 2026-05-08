@@ -18,9 +18,78 @@
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { v2Api, type BankData, type LoanData } from "./api";
+import {
+  v2Api,
+  type BankData,
+  type LoanData,
+  type V2LoanApplyResponse,
+  type V2LoanKind,
+} from "./api";
 import { V2Banner } from "./V2Banner";
 import "./lan.css";
+
+// Realistiska intervall per lånetyp — speglar backend-_LOAN_KIND_SPECS
+type LoanKindSpec = {
+  key: V2LoanKind;
+  label: string;
+  blurb: string;
+  minAmount: number;
+  maxAmount: number;
+  minTerm: number;
+  maxTerm: number;
+  defaultAmount: number;
+  defaultTerm: number;
+  warning?: string;
+};
+
+const LOAN_KIND_SPECS: LoanKindSpec[] = [
+  {
+    key: "privatlan",
+    label: "Privatlån",
+    blurb: "För renovering, resa, möbler. Pengarna går in på lönekontot.",
+    minAmount: 10_000,
+    maxAmount: 500_000,
+    minTerm: 12,
+    maxTerm: 144,
+    defaultAmount: 100_000,
+    defaultTerm: 60,
+  },
+  {
+    key: "billan",
+    label: "Billån",
+    blurb: "Bunden till bilköpet. Pengarna går till säljaren.",
+    minAmount: 50_000,
+    maxAmount: 500_000,
+    minTerm: 36,
+    maxTerm: 84,
+    defaultAmount: 200_000,
+    defaultTerm: 60,
+  },
+  {
+    key: "bolan",
+    label: "Bolån",
+    blurb: "För bostadsköp. Lägst ränta — men kräver kontantinsats 15 %.",
+    minAmount: 200_000,
+    maxAmount: 5_000_000,
+    minTerm: 120,
+    maxTerm: 600,
+    defaultAmount: 2_000_000,
+    defaultTerm: 360,
+  },
+  {
+    key: "smslan",
+    label: "SMS-lån",
+    blurb: "Snabbutbetalning utan kreditprövning. EXTREMT hög ränta.",
+    minAmount: 1_000,
+    maxAmount: 30_000,
+    minTerm: 1,
+    maxTerm: 12,
+    defaultAmount: 5_000,
+    defaultTerm: 6,
+    warning:
+      "Effektiv årsränta 30–60 %. Du betalar tillbaka mycket mer än du lånar.",
+  },
+];
 
 const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
@@ -46,6 +115,95 @@ export function LanV2() {
   const [extraAccountId, setExtraAccountId] = useState<number | null>(null);
   const [extraBusy, setExtraBusy] = useState(false);
   const [extraMsg, setExtraMsg] = useState<string | null>(null);
+
+  // Ansök om nytt lån-state
+  const [applyKind, setApplyKind] = useState<V2LoanKind | null>(null);
+  const [applyAmount, setApplyAmount] = useState<string>("");
+  const [applyTerm, setApplyTerm] = useState<string>("");
+  const [applyPurpose, setApplyPurpose] = useState<string>("");
+  const [applyAccountId, setApplyAccountId] = useState<number | null>(null);
+  const [applyOffer, setApplyOffer] =
+    useState<V2LoanApplyResponse | null>(null);
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  function openApply(kind: V2LoanKind) {
+    const spec = LOAN_KIND_SPECS.find((s) => s.key === kind)!;
+    setApplyKind(kind);
+    setApplyAmount(String(spec.defaultAmount));
+    setApplyTerm(String(spec.defaultTerm));
+    setApplyPurpose("");
+    setApplyOffer(null);
+    setApplyError(null);
+    const checking = bank?.accounts.find((a) => a.type === "checking");
+    setApplyAccountId(checking?.id || bank?.accounts[0]?.id || null);
+  }
+
+  function closeApply() {
+    setApplyKind(null);
+    setApplyOffer(null);
+    setApplyError(null);
+  }
+
+  async function runApplyCheck() {
+    if (!applyKind) return;
+    const amt = parseFloat(
+      applyAmount.replace(/\s/g, "").replace(",", "."),
+    );
+    const term = parseInt(applyTerm, 10);
+    if (isNaN(amt) || amt <= 0) {
+      setApplyError("Ange giltigt lånebelopp");
+      return;
+    }
+    if (isNaN(term) || term <= 0) {
+      setApplyError("Ange löptid (mån)");
+      return;
+    }
+    setApplyError(null);
+    setApplyBusy(true);
+    try {
+      const res = await v2Api.loanApply({
+        loan_kind: applyKind,
+        amount: amt,
+        term_months: term,
+        purpose: applyPurpose || undefined,
+        debit_account_id: applyAccountId || undefined,
+        accept_offer: false,
+      });
+      setApplyOffer(res);
+    } catch (e) {
+      setApplyError(String((e as Error)?.message || e));
+    } finally {
+      setApplyBusy(false);
+    }
+  }
+
+  async function acceptApplyOffer() {
+    if (!applyKind || !applyOffer || !applyOffer.approved) return;
+    const amt = parseFloat(
+      applyAmount.replace(/\s/g, "").replace(",", "."),
+    );
+    const term = parseInt(applyTerm, 10);
+    setApplyBusy(true);
+    setApplyError(null);
+    try {
+      const res = await v2Api.loanApply({
+        loan_kind: applyKind,
+        amount: amt,
+        term_months: term,
+        purpose: applyPurpose || undefined,
+        debit_account_id: applyAccountId || undefined,
+        accept_offer: true,
+      });
+      setApplyOffer(res);
+      // Refetcha lan-data så nya lånet syns
+      refresh();
+    } catch (e) {
+      setApplyError(String((e as Error)?.message || e));
+    } finally {
+      setApplyBusy(false);
+    }
+  }
 
   function refresh() {
     v2Api
@@ -420,6 +578,267 @@ export function LanV2() {
                 }}
               >
                 {extraMsg}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* === ANSÖK OM NYTT LÅN === */}
+        <div className="section-eye" style={{ marginTop: 32 }}>
+          Ansök om nytt lån
+        </div>
+        <p
+          style={{
+            fontFamily: "var(--serif)",
+            fontSize: 13.5,
+            color: "var(--text-mid)",
+            marginTop: 4,
+            marginBottom: 16,
+          }}
+        >
+          Du kan ansöka om fyra olika lånetyper. Banken bedömer din
+          kreditprofil (UC) och din betalningsförmåga (KALP). Lånetagning
+          påverkar din wellbeing — för bra eller sämre.
+        </p>
+        <div className="acct-grid">
+          {LOAN_KIND_SPECS.map((spec) => (
+            <div
+              key={spec.key}
+              className={`acct${
+                spec.key === "smslan" ? " warning" : ""
+              }`}
+            >
+              <div>
+                <div className="acct-eye">
+                  {spec.key === "smslan" ? "Varning" : "Ansök"}
+                </div>
+                <div className="acct-name">{spec.label}</div>
+                <div className="acct-num" style={{ fontSize: 11.5 }}>
+                  {spec.blurb}
+                </div>
+                <div
+                  className="acct-num"
+                  style={{ marginTop: 6, color: "var(--text-dim)" }}
+                >
+                  {SEK(spec.minAmount)}–{SEK(spec.maxAmount)} kr ·
+                  {" "}{spec.minTerm}–{spec.maxTerm} mån
+                </div>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  className="cta-btn"
+                  onClick={() => openApply(spec.key)}
+                  style={{ marginTop: 10, padding: "8px 14px" }}
+                >
+                  Ansök →
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* INLINE APPLY-FORMULÄR */}
+        {applyKind && (
+          <div
+            className={`lan-apply-form${
+              applyKind === "smslan" ? " danger" : ""
+            }`}
+          >
+            <div className="lan-apply-form-head">
+              <div className="lan-apply-form-eye">
+                ● Ansökan ·{" "}
+                {LOAN_KIND_SPECS.find((s) => s.key === applyKind)?.label}
+              </div>
+              <button
+                type="button"
+                className="cta-btn ghost"
+                onClick={closeApply}
+                style={{ padding: "4px 12px", fontSize: 9.5 }}
+              >
+                Stäng
+              </button>
+            </div>
+
+            {LOAN_KIND_SPECS.find((s) => s.key === applyKind)?.warning && (
+              <div className="lan-apply-form-warn">
+                ⚠{" "}
+                {
+                  LOAN_KIND_SPECS.find((s) => s.key === applyKind)
+                    ?.warning
+                }
+              </div>
+            )}
+
+            <div className="lan-apply-grid">
+              <div>
+                <label className="lan-form-label">Belopp (kr)</label>
+                <input
+                  type="text"
+                  value={applyAmount}
+                  onChange={(e) => setApplyAmount(e.target.value)}
+                  className="lan-input"
+                />
+              </div>
+              <div>
+                <label className="lan-form-label">Löptid (mån)</label>
+                <input
+                  type="text"
+                  value={applyTerm}
+                  onChange={(e) => setApplyTerm(e.target.value)}
+                  className="lan-input"
+                />
+              </div>
+              <div>
+                <label className="lan-form-label">
+                  Konto för utbetalning
+                </label>
+                <select
+                  value={applyAccountId || ""}
+                  onChange={(e) =>
+                    setApplyAccountId(parseInt(e.target.value, 10) || null)
+                  }
+                  className="lan-input"
+                >
+                  {bank?.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="lan-form-label">Syfte (frivilligt)</label>
+              <input
+                type="text"
+                value={applyPurpose}
+                onChange={(e) => setApplyPurpose(e.target.value)}
+                placeholder="t.ex. ny bil, renovering, semester"
+                className="lan-input"
+              />
+            </div>
+
+            <div className="lan-apply-actions">
+              {!applyOffer && (
+                <button
+                  type="button"
+                  className="cta-btn"
+                  onClick={runApplyCheck}
+                  disabled={applyBusy}
+                >
+                  {applyBusy ? "Prövar..." : "Pröva utan att binda mig"}
+                </button>
+              )}
+              {applyOffer && applyOffer.approved && !applyOffer.loan_id && (
+                <button
+                  type="button"
+                  className="cta-btn"
+                  onClick={acceptApplyOffer}
+                  disabled={applyBusy}
+                >
+                  {applyBusy
+                    ? "Genomför..."
+                    : `Godkänn — ta lånet (${SEK(applyOffer.offered_monthly_payment || 0)} kr/mån)`}
+                </button>
+              )}
+              {applyOffer && (
+                <button
+                  type="button"
+                  className="cta-btn ghost"
+                  onClick={() => {
+                    setApplyOffer(null);
+                  }}
+                >
+                  Räkna om
+                </button>
+              )}
+            </div>
+
+            {applyError && (
+              <div className="lan-apply-error">{applyError}</div>
+            )}
+
+            {applyOffer && (
+              <div
+                className={`lan-apply-result ${
+                  applyOffer.loan_id
+                    ? "taken"
+                    : applyOffer.approved
+                      ? "ok"
+                      : "fail"
+                }`}
+              >
+                {applyOffer.loan_id ? (
+                  <>
+                    <div className="lan-apply-result-head ok">
+                      ✓ Lånet är genomfört · saldo finns på ditt konto
+                    </div>
+                    <div className="lan-apply-result-meta">
+                      {applyOffer.lender} ·{" "}
+                      {SEK(applyOffer.offered_monthly_payment || 0)} kr/mån
+                      {" "}· ränta{" "}
+                      {((applyOffer.offered_rate || 0) * 100).toFixed(2)} %
+                    </div>
+                  </>
+                ) : applyOffer.approved ? (
+                  <>
+                    <div className="lan-apply-result-head ok">
+                      ✓ Godkänd av {applyOffer.lender}
+                    </div>
+                    <div className="lan-apply-result-meta">
+                      <strong>Score:</strong> {applyOffer.score} (grad{" "}
+                      {applyOffer.grade}) ·{" "}
+                      <strong>Ränta:</strong>{" "}
+                      {((applyOffer.offered_rate || 0) * 100).toFixed(2)} %
+                      {" "}· <strong>Per mån:</strong>{" "}
+                      {SEK(applyOffer.offered_monthly_payment || 0)} kr
+                      {" "}· <strong>Totalt återbetalas:</strong>{" "}
+                      {SEK(applyOffer.offered_total_repay || 0)} kr
+                    </div>
+                    <div className="lan-apply-result-foot">
+                      KALP{" "}
+                      {applyOffer.kalp_passed
+                        ? `passerad (+${SEK(applyOffer.kalp_left_after_all)} kr/mån kvar efter allt)`
+                        : `EJ passerad (saknar ${SEK(Math.abs(applyOffer.kalp_left_after_all))} kr/mån)`}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="lan-apply-result-head fail">
+                      ✗ Avslag
+                    </div>
+                    <div className="lan-apply-result-meta">
+                      {applyOffer.decline_reason}
+                    </div>
+                    {applyOffer.score > 0 && (
+                      <div className="lan-apply-result-foot">
+                        Score: {applyOffer.score} (grad {applyOffer.grade})
+                      </div>
+                    )}
+                  </>
+                )}
+                {applyOffer.warnings.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    {applyOffer.warnings.map((w, i) => (
+                      <div key={i} className="lan-apply-warning-row">
+                        ⚠ {w}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {applyOffer.wellbeing_impact.length > 0 && (
+                  <div className="lan-apply-result-foot">
+                    Wellbeing-påverkan:{" "}
+                    {applyOffer.wellbeing_impact
+                      .map(
+                        (w) =>
+                          `${w.axis} ${w.delta > 0 ? "+" : ""}${w.delta}`,
+                      )
+                      .join(" · ")}
+                  </div>
+                )}
               </div>
             )}
           </div>

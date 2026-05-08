@@ -59,9 +59,10 @@ export function FeedbackV2() {
 
   useEffect(() => {
     refresh();
-    // Bug #15 · realtids-poll var 15:e sek så nya meddelanden från
-    // läraren syns utan reload
-    const t = setInterval(refresh, 15000);
+    // 30 s · sänkt från 15 s. /v2/notifications cachat 15 s backend-
+    // sidan så NotifBell visar nya feedback-notiser snabbare än 30 s
+    // ändå.
+    const t = setInterval(refresh, 30000);
     return () => clearInterval(t);
   }, []);
 

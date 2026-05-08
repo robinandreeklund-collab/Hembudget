@@ -362,6 +362,9 @@ EVENT_TEMPLATES: list[EventTemplate] = [
         description="Diskussion om sommarsemester — Norge eller Spanien?",
         kind="lifecycle",
         frequency_per_year=1.0,
+        # Förutsätter "familjen"/"vi" — solo-elever ska inte få
+        # mail om familjesemester när de bor ensamma.
+        family_status_filter=("sambo", "familj_med_barn"),
         cost_range=(8000, 35000),
         pentagon_unmitigated=PentagonImpact(economy=-10, social=+5, leisure=+5),
         sender="Resekonsulten",

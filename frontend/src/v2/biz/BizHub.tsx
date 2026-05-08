@@ -1,48 +1,99 @@
 /**
- * Företagsläget · BizHub.
+ * BizHub · företagsläges-hub som matchar proposals/vol-7 p-biz-hub
+ * (rad 5307-5485 i prototypen).
  *
- * Bug #7-utbyggnad · ersatt CompanyComingSoon. Visas när
- * useCompanyMode() = "business". Innehåller:
- *   - Översikt: bolaget, total intäkt/utgift, resultat
- *   - 6 paneler: Bolagsform, Bokföring, Lön, Kunder/fakturor, Moms, Bolagsskatt
+ * Layout (alltid i denna ordning):
+ *   1. hub-head: rubrik + biz-char-card med snabb-pills
+ *   2. pentagon-stage med biz-pent-now/biz-pent-prev + 5 axlar
+ *   3. biz-event-card · senaste händelse (senaste oöppnade fakturan
+ *      eller senaste nya offertförfrågan)
+ *   4. compass · 7 företags-aktörer som klickbara noder
+ *   5. peda-block "Hur biz & privat hänger ihop" — ordagrant från prototyp
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { bizApi, type BizPentagon, type Company } from "./api";
+import { V2Topbar } from "../V2Topbar";
+import {
+  bizApi,
+  type BizAxis,
+  type BizPentagon,
+  type Company,
+  type CompanyInvoice,
+} from "./api";
 import { BizPentagon as BizPentagonChart } from "./BizPentagon";
+import { BizPentagonFlipCard } from "./BizPentagonFlipCard";
+import { GameTimeWidget } from "../GameTimeWidget";
+import { TimeCapacityBar, useTimeCapacity } from "./TimeCapacityWidget";
+import { api } from "@/api/client";
 import "./biz.css";
+
+
+/** Hub-shell: V2Topbar + dark backdrop · samma wrapper som BizActorShell
+ * fast utan actor-head (eftersom hubben har egen char-card-design).
+ *
+ * OBS: body[data-mode] sätts av V2Topbar.toggleMode (samt initial
+ * useCompanyMode-mount). Vi sätter den INTE här, eftersom BizHub är
+ * permanent mountad inuti CompanyModeWrapper (även när panelet är
+ * display:none) — om vi tvingade "business" i en useEffect skulle
+ * privat-läget gå sönder så fort eleven besökt /v2/hub en gång. */
+function BizHubShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="v2-biz-root">
+      <V2Topbar status={{ role: "student", is_super_admin: false }} />
+      <div className="biz-shell">{children}</div>
+    </div>
+  );
+}
 
 
 const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
 
 
-export function BizHub() {
-  // Säkerställ att body[data-mode="business"] är satt (för indigo topbar)
-  useEffect(() => {
-    document.body.setAttribute("data-mode", "business");
-  }, []);
+type HubStats = {
+  income: number;
+  expense: number;
+  n_invoices_open: number;
+  n_invoices_paid: number;
+  n_invoices_overdue: number;
+  next_vat_due: string | null;
+  unbookkept_count: number;
+};
 
+
+export function BizHub() {
+  // body[data-mode="business"] sätts av BizHubShell · ingen useEffect här.
   const [company, setCompany] = useState<Company | null>(null);
   const [pentagon, setPentagon] = useState<BizPentagon | null>(null);
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<{
-    income: number;
-    expense: number;
-    n_invoices_open: number;
-    n_invoices_paid: number;
-    next_vat_due?: string | null;
-  }>({ income: 0, expense: 0, n_invoices_open: 0, n_invoices_paid: 0 });
+  const [gameTime, setGameTime] = useState<import("../api").HubGameTime | null>(null);
+  const [stats, setStats] = useState<HubStats>({
+    income: 0,
+    expense: 0,
+    n_invoices_open: 0,
+    n_invoices_paid: 0,
+    n_invoices_overdue: 0,
+    next_vat_due: null,
+    unbookkept_count: 0,
+  });
+  const [latestInvoice, setLatestInvoice] = useState<CompanyInvoice | null>(null);
+  const [activeAxis, setActiveAxis] = useState<BizAxis | null>(null);
 
   useEffect(() => {
-    bizApi.modeStatus()
+    bizApi
+      .modeStatus()
       .then((s) => setAllowed(s.enabled))
       .catch(() => setAllowed(false));
   }, []);
 
   useEffect(() => {
     if (allowed !== true) return;
+    // Hämta spel-tid · samma som privat-hubben så datum/animering
+    // matchar mellan vyerna.
+    import("../api").then(({ v2Api }) =>
+      v2Api.gameTime().then(setGameTime).catch(() => undefined)
+    );
     Promise.all([
       bizApi.getCompany(),
       bizApi.listTransactions(500),
@@ -51,14 +102,45 @@ export function BizHub() {
     ])
       .then(([c, txs, invs, vps]) => {
         setCompany(c);
-        const inc = txs.filter((t) => t.kind === "income")
+        const inc = txs
+          .filter((t) => t.kind === "income")
           .reduce((acc, t) => acc + t.amount_excl_vat, 0);
-        const exp = txs.filter((t) => t.kind === "expense" || t.kind === "salary")
+        const exp = txs
+          .filter((t) => t.kind === "expense" || t.kind === "salary")
           .reduce((acc, t) => acc + t.amount_excl_vat, 0);
         const open = invs.filter((i) => i.status === "sent").length;
         const paid = invs.filter((i) => i.status === "paid").length;
+        // is_overdue beräknas backend-side mot SPEL-tid · använd
+        // INTE `new Date()` här, då hamnar vi i real-tid (maj 2026).
+        const overdue = invs.filter(
+          (i) => i.status === "sent" && i.is_overdue,
+        ).length;
         const nextVat = vps.find((v) => v.status === "open")?.due_date || null;
-        setStats({ income: inc, expense: exp, n_invoices_open: open, n_invoices_paid: paid, next_vat_due: nextVat });
+
+        // Pedagogiskt "ofört" = utgifter utan kategori (förenklat:
+        // räkna icke-income-tx som ej angetts category-tag)
+        const unbookkept = txs.filter(
+          (t) =>
+            t.kind !== "income"
+            && (!t.category || t.category === "" || t.category === "övrigt"),
+        ).length;
+
+        setStats({
+          income: inc,
+          expense: exp,
+          n_invoices_open: open,
+          n_invoices_paid: paid,
+          n_invoices_overdue: overdue,
+          next_vat_due: nextVat,
+          unbookkept_count: unbookkept,
+        });
+
+        // Senaste oöppnade/nyaste faktura för biz-event-card
+        const sent = invs
+          .filter((i) => i.status === "sent")
+          .sort((a, b) => b.issued_on.localeCompare(a.issued_on));
+        setLatestInvoice(sent[0] || invs[0] || null);
+
         if (c) {
           bizApi.pentagon().then(setPentagon).catch(() => undefined);
         }
@@ -66,840 +148,1013 @@ export function BizHub() {
       .finally(() => setLoading(false));
   }, [allowed]);
 
-  // Lärar-toggle av — visa info
-  if (allowed === false) {
-    return <BusinessNotAllowed />;
-  }
-
+  if (allowed === false) return <BusinessNotAllowed />;
   if (loading) {
     return (
-      <div style={{ padding: 60, textAlign: "center", color: "#c7d2fe" }}>
-        Laddar bolagets data…
-      </div>
+      <BizHubShell>
+        <div className="biz-empty">Laddar bolagets data…</div>
+      </BizHubShell>
     );
   }
-
-  if (!company) {
-    return <CompanyOnboarding onCreated={(c) => setCompany(c)} />;
-  }
-
-  const profit = stats.income - stats.expense;
+  if (!company) return <CompanyOnboarding onCreated={(c) => setCompany(c)} />;
 
   return (
-    <div className="biz-shell" style={{ paddingTop: 20, paddingBottom: 40 }}>
-      {/* Pentagon + biz-char-card · matchar prototypens p-biz-hub */}
+    <BizHubShell>
+      {/* === 1. HUB-HEAD: rubrik + biz-char-card === */}
+      <div className="biz-hub-head">
+        <div>
+          {gameTime && (
+            <GameTimeWidget gameTime={gameTime} />
+          )}
+          <span className="biz-pill">
+            Företaget · {company.industry_label || "enskild firma"}
+            {pentagon ? ` · vinst ${pentagon.metrics.margin_4w_pct.toFixed(0)}%` : ""}
+          </span>
+          <h1 className="biz-h1" style={{ marginTop: 14 }}>
+            {company.name} — <em>vecka i drift</em>.
+          </h1>
+          <p className="biz-lead">
+            {pentagon && pentagon.metrics.income_4w > 0 ? (
+              <>
+                Omsättning <em>{SEK(pentagon.metrics.income_4w)} kr</em> rullande 4 v.{" "}
+                {stats.n_invoices_overdue > 0 && (
+                  <>
+                    <em>{stats.n_invoices_overdue} kundfaktura</em>
+                    {stats.n_invoices_overdue > 1 ? "or" : ""} förfaller idag.{" "}
+                  </>
+                )}
+                {stats.n_invoices_open > 0 && stats.n_invoices_overdue === 0 && (
+                  <>
+                    <em>{stats.n_invoices_open} öppna fakturor</em> väntar på betalning.{" "}
+                  </>
+                )}
+                Vinstmarginalen är{" "}
+                <strong>{pentagon.metrics.margin_4w_pct.toFixed(0)}%</strong>.
+              </>
+            ) : (
+              <>
+                Bolaget är just startat — ingen omsättning än. Skapa din första
+                offert eller registrera en kund för att komma igång.
+              </>
+            )}
+          </p>
+        </div>
+
+        <BizCharCard company={company} pentagon={pentagon} stats={stats} />
+      </div>
+
+      {/* === 2. PENTAGON-STAGE · klickbara axlar → flip-kort === */}
       {pentagon && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.4fr 1fr",
-            gap: 28,
-            marginBottom: 26,
-            alignItems: "start",
-          }}
-        >
-          <div style={{ position: "relative", paddingTop: 30, paddingBottom: 30 }}>
-            <BizPentagonChart data={pentagon} />
-          </div>
-          <BizCharCard company={company!} pentagon={pentagon} stats={stats} />
-        </div>
+        <BizPentagonFlipCard
+          activeAxis={activeAxis}
+          onClose={() => setActiveAxis(null)}
+          front={
+            <BizPentagonChart
+              data={pentagon}
+              onAxisClick={(ax) => setActiveAxis(ax)}
+            />
+          }
+        />
       )}
-      {/* Bolagets header */}
-      <header
-        style={{
-          padding: 24,
-          marginBottom: 20,
-          background:
-            "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(168,85,247,0.06))",
-          border: "1px solid rgba(99,102,241,0.3)",
-          borderRadius: 14,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <div
-              style={{
-                fontFamily: "JetBrains Mono, monospace",
-                fontSize: 11,
-                color: "#818cf8",
-                letterSpacing: 1.4,
-                fontWeight: 700,
-              }}
-            >
-              {company.form === "ab"
-                ? "Aktiebolag"
-                : company.form === "enskild_firma"
-                  ? "Enskild firma"
-                  : "Handelsbolag"}
-              {company.org_number ? ` · ${company.org_number}` : ""}
+
+      {/* === 2.5 TIDS-KAPACITET · under pentagon (matchar privat-layout) === */}
+      <CapacityBanner />
+
+      {/* === 3. EVENT-CARD · senaste händelse === */}
+      {latestInvoice && (
+        <BizEventCard invoice={latestInvoice} />
+      )}
+
+      {/* === 4. KOMPASS · 7 företags-aktörer === */}
+      <div className="compass">
+        <div className="compass-eye">Företagets aktörer · sju rum att gå in i</div>
+        <div className="compass-grid" style={{ marginBottom: 18 }}>
+          <Link to="/v2/allabolag" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · klass</div>
+            <div className="biz-compass-node-name">Allabolag</div>
+            <div className="biz-compass-node-val">
+              Se hur du står dig <em>mot klassen</em>
             </div>
-            <h1 style={{ color: "white", fontSize: "1.8rem", margin: "6px 0 4px" }}>
-              {company.name}
-            </h1>
-            <div style={{ color: "rgba(255,255,255,0.6)" }}>
-              Startat {company.started_on}
-              {company.share_capital
-                ? ` · Aktiekapital ${SEK(company.share_capital)} kr`
-                : ""}
-              {company.vat_registered
-                ? ` · Momsreg (${company.vat_period})`
-                : " · Ej momsreg"}
-            </div>
-          </div>
-          <Link to="/v2/foretag/installningar" style={btnSecondary()}>
-            Inställningar
           </Link>
-        </div>
-      </header>
-
-      {/* KPI-rad */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-        gap: 12,
-        marginBottom: 24,
-      }}>
-        <Kpi label="Intäkter" value={`${SEK(stats.income)} kr`} color="#34d399" />
-        <Kpi label="Utgifter" value={`${SEK(stats.expense)} kr`} color="#fda594" />
-        <Kpi
-          label="Resultat"
-          value={`${profit >= 0 ? "+" : ""}${SEK(profit)} kr`}
-          color={profit >= 0 ? "#6ee7b7" : "#fda594"}
-        />
-        <Kpi
-          label="Öppna fakturor"
-          value={`${stats.n_invoices_open} st`}
-          color="#fbbf24"
-        />
-        {stats.next_vat_due && (
-          <Kpi
-            label="Nästa moms"
-            value={stats.next_vat_due}
-            color="#c7d2fe"
-          />
-        )}
-      </div>
-
-      {/* Aktör-grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 14,
-        }}
-      >
-        <BizActorCard
-          eye="01"
-          name="Bokföring"
-          desc="Intäkter & utgifter med moms-belopp"
-          to="/v2/foretag/bokforing"
-        />
-        <BizActorCard
-          eye="02"
-          name="Kunder & fakturor"
-          desc="Skapa, skicka, markera betald"
-          to="/v2/foretag/fakturor"
-        />
-        {company.form === "ab" && (
-          <BizActorCard
-            eye="03"
-            name="Lön till mig själv"
-            desc="Beräkna arbetsgivaravgift + skatt"
-            to="/v2/foretag/lon"
-          />
-        )}
-        {company.vat_registered && (
-          <BizActorCard
-            eye="04"
-            name="Momsdeklaration"
-            desc="Kvartalsvis till Skatteverket"
+          <Link to="/v2/foretag/klass-pool" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · klass</div>
+            <div className="biz-compass-node-name">Klass-pool</div>
+            <div className="biz-compass-node-val">
+              Tävla med klasskompisar om <em>samma kund</em>
+            </div>
+          </Link>
+          <Link to="/v2/foretag/jobbannonser" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · klass</div>
+            <div className="biz-compass-node-name">Anställ klasskompis</div>
+            <div className="biz-compass-node-val">
+              Posta jobb · <em>klass-företag-tagg</em>
+            </div>
+          </Link>
+          <Link to="/v2/foretag/offerter" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · biz</div>
+            <div className="biz-compass-node-name">Kunder & offerter</div>
+            <div className="biz-compass-node-val">
+              <em>{stats.n_invoices_paid}</em> aktiva
+            </div>
+          </Link>
+          <Link
+            to="/v2/foretag/fakturor"
+            className={`biz-compass-node${stats.n_invoices_overdue > 0 ? " alert" : ""}`}
+          >
+            <div
+              className="biz-compass-node-eye"
+              style={
+                stats.n_invoices_overdue > 0
+                  ? { color: "#dc4c2b" }
+                  : undefined
+              }
+            >
+              Aktör · biz
+            </div>
+            <div className="biz-compass-node-name">Kundfakturor</div>
+            <div className="biz-compass-node-val">
+              {stats.n_invoices_overdue > 0
+                ? <><em>{stats.n_invoices_overdue}</em> förfaller idag</>
+                : `${stats.n_invoices_open} öppna`}
+            </div>
+          </Link>
+          <Link to="/v2/foretag/leverantorer" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · biz</div>
+            <div className="biz-compass-node-name">Leverantörer</div>
+            <div className="biz-compass-node-val">
+              {stats.expense > 0 ? `${SEK(stats.expense)} kr/4v` : "0 fakturor"}
+            </div>
+          </Link>
+          <Link to="/v2/foretag/bokforing" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Verktyg · biz</div>
+            <div className="biz-compass-node-name">Bokföring</div>
+            <div className="biz-compass-node-val">
+              {stats.unbookkept_count > 0
+                ? `${stats.unbookkept_count} verifikat oförda`
+                : "Allt fört"}
+            </div>
+          </Link>
+          <Link to="/v2/foretag/arsredovisning" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Verktyg · biz</div>
+            <div className="biz-compass-node-name">Årsredovisning</div>
+            <div className="biz-compass-node-val">
+              AI Bolagsverket granskar
+            </div>
+          </Link>
+          <Link to="/v2/foretag/tillvaxt" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Verktyg · biz</div>
+            <div className="biz-compass-node-name">Tillväxt</div>
+            <div className="biz-compass-node-val">
+              Lokaler · utrustning · lån · MCP
+            </div>
+          </Link>
+          <Link
             to="/v2/foretag/moms"
-          />
-        )}
-        {company.form === "ab" && (
-          <BizActorCard
-            eye="05"
-            name="Bolagsskatt"
-            desc="20.6 % på årets resultat"
-            to="/v2/foretag/bolagsskatt"
-          />
-        )}
-        <BizActorCard
-          eye="07"
-          name="Offerter"
-          desc="Inkommande förfrågningar — lämna offert"
-          to="/v2/foretag/offerter"
-        />
-        <BizActorCard
-          eye="08"
-          name="Pågående jobb"
-          desc="Leverera + sätt kvalitet"
-          to="/v2/foretag/jobb"
-        />
-        <BizActorCard
-          eye="09"
-          name="Marknadsföring"
-          desc="Kampanjer + AI-bedömd copy"
-          to="/v2/foretag/marknad"
-        />
-        <BizActorCard
-          eye="10"
-          name="Beslut"
-          desc="Anställa, friskvård, leasing, försäkring"
-          to="/v2/foretag/beslut"
-        />
-        <BizActorCard
-          eye="11"
-          name="Leverantörsfakturor"
-          desc="Inkommande från lärare + slumpevent"
-          to="/v2/foretag/leverantorer"
-        />
-        <BizActorCard
-          eye="06"
-          name="Inställningar"
-          desc="Bolagsnamn, moms, branschkod"
-          to="/v2/foretag/installningar"
-        />
+            className={`biz-compass-node${stats.next_vat_due ? " warn" : ""}`}
+          >
+            <div
+              className="biz-compass-node-eye"
+              style={stats.next_vat_due ? { color: "#fbbf24" } : undefined}
+            >
+              Aktör · biz
+            </div>
+            <div className="biz-compass-node-name">Skatteverket biz</div>
+            <div className="biz-compass-node-val">
+              {stats.next_vat_due
+                ? <>Moms <em>{stats.next_vat_due}</em></>
+                : "Ingen skuld nu"}
+            </div>
+          </Link>
+          <Link to="/v2/foretag/bank" className="biz-compass-node">
+            <div className="biz-compass-node-eye">Aktör · biz</div>
+            <div className="biz-compass-node-name">Banken (företag)</div>
+            <div className="biz-compass-node-val">
+              {pentagon ? `${SEK(pentagon.metrics.kassa)} kr` : "—"}
+            </div>
+          </Link>
+          {/* Beslut är ihopslaget i Tillväxt-vyn */}
+        </div>
+
+        {/* === 5. PEDAGOGIK · "Hur biz & privat hänger ihop" === */}
+        <BizPrivateInfoBox company={company} />
       </div>
 
-      {/* Stega vecka-knapp · spelmotor */}
-      <TickWeekButton />
-
-      {/* Pedagogisk info-box · "Hur biz & privat hänger ihop" */}
-      <BizPrivateInfoBox />
-    </div>
+      {/* Tidigare fanns en "Stega vecka"-knapp här. Borttagen — biz-
+       * motorn driver sig själv via auto_tick_if_due (1 biz-vecka per
+       * real-timme, lazy-ticked vid endpoint-läsning). Inga manuella
+       * steg. */}
+    </BizHubShell>
   );
 }
 
 
-function TickWeekButton() {
-  const [running, setRunning] = useState(false);
-  const [last, setLast] = useState<{
-    week_no: number; new_opps: number;
-    accepted: number; rejected: number;
-    paid: number; events: number;
-    rep: number;
-  } | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function tick() {
-    setRunning(true);
-    setErr(null);
-    try {
-      const r = await bizApi.tick();
-      setLast({
-        week_no: r.week_no,
-        new_opps: r.new_opportunities,
-        accepted: r.quotes_accepted,
-        rejected: r.quotes_rejected,
-        paid: r.invoices_paid_now,
-        events: r.events_triggered,
-        rep: r.reputation_after,
-      });
-    } catch (e) {
-      setErr(String((e as Error).message || e));
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  return (
-    <div style={{
-      marginTop: 18,
-      background: "linear-gradient(120deg, rgba(99,102,241,0.18), rgba(167,139,250,0.12))",
-      border: "1px solid rgba(99,102,241,0.3)",
-      borderRadius: 12, padding: 18,
-      display: "flex", alignItems: "center", gap: 16,
-      flexWrap: "wrap",
-    }}>
-      <div style={{ flex: "1 1 240px" }}>
-        <div style={{
-          fontSize: 9, letterSpacing: 1.3, color: "#818cf8",
-          textTransform: "uppercase",
-          fontFamily: "JetBrains Mono, monospace",
-        }}>
-          Spelmotor · stega tiden
-        </div>
-        <div style={{ fontWeight: 700, fontSize: "1.1rem", marginTop: 4 }}>
-          Stega bolaget en vecka framåt
-        </div>
-        <div style={{ color: "#aab", fontSize: "0.85rem", marginTop: 4 }}>
-          Genererar nya offertförfrågningar, kunder svarar på öppna offerter,
-          gamla fakturor förfaller. Slump-events triggas i avancerat läge.
-        </div>
-      </div>
-      <button
-        onClick={tick}
-        disabled={running}
-        style={{
-          background: "rgba(99,102,241,0.4)",
-          border: "1px solid rgba(99,102,241,0.6)",
-          color: "white", padding: "12px 24px", borderRadius: 8,
-          cursor: running ? "not-allowed" : "pointer",
-          fontWeight: 700, fontSize: "1rem",
-        }}
-      >
-        {running ? "Stegar…" : "Stega vecka →"}
-      </button>
-      {err && (
-        <div style={{ color: "#fda594", flexBasis: "100%" }}>{err}</div>
-      )}
-      {last && (
-        <div style={{
-          flexBasis: "100%", marginTop: 8,
-          padding: 12, borderRadius: 8,
-          background: "rgba(15,21,37,0.5)",
-          fontSize: "0.85rem",
-        }}>
-          <div style={{ color: "#6ee7b7", fontWeight: 600 }}>
-            Vecka {last.week_no} klar
-          </div>
-          <div style={{ color: "rgba(255,255,255,0.8)", marginTop: 4 }}>
-            {last.new_opps} nya förfrågningar
-            {last.accepted > 0 && ` · ${last.accepted} offerter accepterade`}
-            {last.rejected > 0 && ` · ${last.rejected} avslagna`}
-            {last.paid > 0 && ` · ${last.paid} fakturor betalda`}
-            {last.events > 0 && ` · ${last.events} oväntat event`}
-            {" · "}rykte {last.rep}/100
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
+/* ======================================================================
+ * BizCharCard · matchar prototyp rad 5321-5340
+ * ====================================================================== */
 function BizCharCard({
-  company, pentagon, stats,
+  company,
+  pentagon,
+  stats,
 }: {
   company: Company;
-  pentagon: BizPentagon;
-  stats: { income: number; expense: number; n_invoices_open: number; n_invoices_paid: number };
+  pentagon: BizPentagon | null;
+  stats: HubStats;
 }) {
   return (
-    <article
-      style={{
-        padding: 22,
-        background:
-          "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(15,21,37,0.5))",
-        border: "1px solid rgba(99,102,241,0.3)",
-        borderRadius: 16,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: 10,
-          color: "#818cf8",
-          letterSpacing: 1.4,
-          fontWeight: 700,
-          textTransform: "uppercase",
-        }}
-      >
-        Företag · {company.form === "ab" ? "aktiebolag" : "enskild firma"}
-        {company.industry_label ? ` · ${company.industry_label}` : ""}
+    <article className="biz-char-card">
+      <div className="biz-char-eye">
+        Företag ·{" "}
+        {company.form === "ab"
+          ? "aktiebolag"
+          : company.form === "handelsbolag"
+          ? "handelsbolag"
+          : "enskild firma"}
+        {pentagon ? ` · v${weekOfYear(new Date())} i drift` : ""}
       </div>
-      <h2
-        style={{
-          color: "white",
-          fontSize: "1.8rem",
-          margin: "10px 0 4px",
-          fontFamily: "Source Serif 4, Georgia, serif",
-        }}
-      >
-        {company.name}
-      </h2>
-      <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.9rem" }}>
-        Startat {company.started_on}
-        {company.org_number ? ` · ${company.org_number}` : ""}
+      <div className="biz-char-name">
+        {company.name.replace(/\s+(AB|HB|EF)\s*$/, "")}
+        {company.form === "ab" && <em> AB</em>}
+      </div>
+      <div className="biz-char-meta">
+        {company.form === "ab"
+          ? "aktiebolag"
+          : company.form === "handelsbolag"
+          ? "handelsbolag"
+          : "enskild firma"}
+        <span className="biz-char-divider">·</span>
+        {company.industry_label || "tjänster"}
+        {company.org_number && (
+          <>
+            <span className="biz-char-divider">·</span>
+            {company.org_number}
+          </>
+        )}
       </div>
 
-      <div
-        style={{
-          marginTop: 18,
-          paddingTop: 14,
-          borderTop: "1px solid rgba(99,102,241,0.2)",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "JetBrains Mono, monospace",
-            fontSize: 9,
-            color: "#818cf8",
-            letterSpacing: 1.3,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            marginBottom: 8,
-          }}
-        >
-          Status nu
-        </div>
-        <p
-          style={{
-            color: "rgba(255,255,255,0.85)",
-            fontFamily: "Source Serif 4, Georgia, serif",
-            lineHeight: 1.55,
-            margin: 0,
-          }}
-        >
-          Omsättning <em style={{ color: "#c7d2fe" }}>{Math.round(pentagon.metrics.income_4w).toLocaleString("sv-SE")} kr</em> rullande 4 v ·
-          vinstmarginal <strong>{pentagon.metrics.margin_4w_pct.toFixed(0)}%</strong> ·
-          kassa <em>{Math.round(pentagon.metrics.kassa).toLocaleString("sv-SE")} kr</em>.
-          {stats.n_invoices_open > 0 && (
-            <> Du har <strong>{stats.n_invoices_open} öppna fakturor</strong> som väntar på betalning.</>
-          )}
-        </p>
-      </div>
+      <div className="biz-char-section">Status nu</div>
+      <p className="biz-char-prose">
+        {pentagon && pentagon.metrics.income_4w > 0 ? (
+          <>
+            Omsättning <em>{SEK(pentagon.metrics.income_4w)} kr</em> rullande 4 v ·
+            vinstmarginal{" "}
+            <strong>{pentagon.metrics.margin_4w_pct.toFixed(0)}%</strong> · kassa{" "}
+            <em>{SEK(pentagon.metrics.kassa)} kr</em>.
+            {stats.n_invoices_open > 0 && (
+              <>
+                {" "}
+                Du har <strong>{stats.n_invoices_open} öppna fakturor</strong> som
+                väntar på betalning.
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            Bolaget är inte i full drift än. Registrera dina första kunder och
+            skapa offerter för att börja generera omsättning.
+          </>
+        )}
+      </p>
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14 }}>
-        {stats.n_invoices_open > 0 && (
-          <Link to="/v2/foretag/fakturor" style={charPill("alert")}>
+      <div className="biz-char-pills">
+        {stats.n_invoices_overdue > 0 && (
+          <Link to="/v2/foretag/fakturor" className="biz-char-pill alert">
+            {stats.n_invoices_overdue} faktura
+            {stats.n_invoices_overdue > 1 ? "or" : ""} förfaller idag
+          </Link>
+        )}
+        {stats.n_invoices_open > 0 && stats.n_invoices_overdue === 0 && (
+          <Link to="/v2/foretag/fakturor" className="biz-char-pill">
             {stats.n_invoices_open} öppna fakturor
           </Link>
         )}
-        <Link to="/v2/foretag/bokforing" style={charPill()}>
+        <Link to="/v2/foretag/bokforing" className="biz-char-pill">
           Bokföring
         </Link>
-        {company.vat_registered && (
-          <Link to="/v2/foretag/moms" style={charPill()}>
-            Moms
+        {company.vat_registered && stats.next_vat_due && (
+          <Link to="/v2/foretag/moms" className="biz-char-pill">
+            Moms {stats.next_vat_due}
           </Link>
         )}
         {company.form === "ab" && (
-          <Link to="/v2/foretag/lon" style={charPill()}>
+          <Link to="/v2/foretag/lon" className="biz-char-pill">
             Ta ut lön
           </Link>
         )}
-        {company.form === "enskild_firma" && (
-          <Link to="/v2/foretag/eget-uttag" style={charPill()}>
-            Eget uttag
-          </Link>
-        )}
       </div>
     </article>
   );
 }
 
 
-function charPill(variant?: "alert"): React.CSSProperties {
-  const isAlert = variant === "alert";
-  return {
-    padding: "6px 14px",
-    fontSize: "0.78rem",
-    background: isAlert ? "rgba(220,76,43,0.15)" : "rgba(255,255,255,0.05)",
-    border: `1px solid ${isAlert ? "rgba(220,76,43,0.35)" : "rgba(255,255,255,0.18)"}`,
-    color: isAlert ? "#fda594" : "rgba(255,255,255,0.85)",
-    borderRadius: 100,
-    textDecoration: "none",
-    fontWeight: 600,
-  };
-}
-
-
-function BizPrivateInfoBox() {
+/* ======================================================================
+ * BizEventCard · matchar prototyp rad 5400-5414 (senaste händelse)
+ * ====================================================================== */
+function BizEventCard({ invoice }: { invoice: CompanyInvoice }) {
+  // is_overdue räknas backend-side mot SPEL-tid · använd INTE
+  // new Date() (= real-tid maj 2026 medan eleven är på spel-januari).
+  // En faktura med due_on 15 feb sade "förföll" för att maj > feb,
+  // trots att eleven är på 20 januari.
+  const overdue = invoice.status === "sent" && invoice.is_overdue;
   return (
-    <article
-      style={{
-        marginTop: 28,
-        padding: 22,
-        borderLeft: "3px solid #818cf8",
-        background:
-          "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(15,21,37,0.5))",
-        borderRadius: 10,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: 10,
-          color: "#c7d2fe",
-          letterSpacing: 1.4,
-          fontWeight: 700,
-          textTransform: "uppercase",
-        }}
-      >
-        Hur biz & privat hänger ihop
+    <article className="biz-event-card">
+      <div className="biz-event-eye">
+        Händelse · faktura {invoice.invoice_number} ·{" "}
+        {overdue ? "FÖRFALLER IDAG" : invoice.status}
       </div>
-      <h3
-        style={{
-          color: "white",
-          fontSize: "1.3rem",
-          margin: "10px 0",
-          fontFamily: "Source Serif 4, Georgia, serif",
-        }}
-      >
-        Allt är <em style={{ color: "#c7d2fe" }}>du</em>. Två konton, ett liv.
-      </h3>
-      <p
-        style={{
-          color: "rgba(255,255,255,0.75)",
-          fontFamily: "Source Serif 4, Georgia, serif",
-          lineHeight: 1.6,
-          fontSize: "1rem",
-        }}
-      >
-        Privat och företag är <strong>separata bokföringsenheter</strong> men samma
-        person. När du tar ut <em>egen lön</em> från företagskontot landar pengarna
-        direkt på ditt privata lönekonto — det syns i båda bokföringarna. Tjänar
-        företaget bra → privatkontot får mer. Pentagon i privatläge påverkas av
-        företagets resultat. Det är samma stress, samma framgång.
+      <h2 className="biz-event-headline">
+        {invoice.customer_name} —{" "}
+        <em>{overdue ? "förfaller" : "nästa steg"}</em>.
+      </h2>
+      <p className="biz-event-prose">
+        {overdue ? (
+          <>
+            Fakturan på <strong>{SEK(invoice.amount_excl_vat)} kr</strong> till{" "}
+            {invoice.customer_name} förföll{" "}
+            <strong>{invoice.due_on}</strong>. Skicka påminnelse eller
+            markera som betald om du fått pengarna.
+          </>
+        ) : invoice.status === "sent" ? (
+          <>
+            Faktura {invoice.invoice_number} skickad <strong>{invoice.issued_on}</strong> ·
+            förfaller <strong>{invoice.due_on}</strong> · belopp{" "}
+            <strong>{SEK(invoice.amount_excl_vat)} kr</strong> exkl. moms.
+          </>
+        ) : (
+          <>
+            Faktura <strong>{invoice.invoice_number}</strong> markerad som{" "}
+            {invoice.status}.
+          </>
+        )}
       </p>
-      <ul
-        style={{
-          marginTop: 12,
-          padding: 0,
-          listStyle: "none",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 10,
-        }}
-      >
-        {[
-          ["AB-lön", "Eleven betalar privatskatt + arb.giv.avg. 31.42 % från företaget"],
-          ["Eget uttag", "Enskild firma · obeskattat, deklareras vid årsbokslut"],
-          ["Moms in & ut", "25 % på fakturor (ut), kvittas mot inköp (in)"],
-          ["Bolagsskatt", "20.6 % på AB:s årsresultat efter alla kostnader"],
-          ["Resultatöverföring", "Företagets vinst → ditt privat-economy + safety"],
-          ["F-skatt", "Privatskatt-prognos månadsvis (enskild firma)"],
-        ].map(([t, d]) => (
-          <li
-            key={t}
-            style={{
-              padding: 10,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(99,102,241,0.15)",
-              borderRadius: 8,
-            }}
-          >
-            <strong style={{ color: "#c7d2fe" }}>{t}</strong>
-            <div style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.7)", marginTop: 2 }}>
-              {d}
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div
-        style={{
-          marginTop: 14,
-          padding: 12,
-          background: "rgba(99,102,241,0.06)",
-          borderRadius: 6,
-          color: "rgba(255,255,255,0.7)",
-          fontSize: "0.85rem",
-          fontStyle: "italic",
-        }}
-      >
-        💡 Klicka på <strong style={{ color: "#c7d2fe" }}>→ Privat</strong> upptill för att flippa tillbaka
-        till privatekonomin. Allt du gör i biz påverkar din privata pentagon
-        över tid: bättre vinst → mer egen lön → bättre privat-pentagon.
+      <div className="biz-event-actions">
+        <Link to={`/v2/foretag/fakturor`} className="biz-btn solid">
+          Öppna faktura →
+        </Link>
+        <Link to="/v2/foretag/fakturor" className="biz-btn">
+          Se alla
+        </Link>
       </div>
     </article>
   );
 }
 
 
+/* ======================================================================
+ * BizPrivateInfoBox · ordagrant copy från prototyp rad 5458-5484
+ * ====================================================================== */
+function BizPrivateInfoBox({ company }: { company: Company }) {
+  return (
+    <div className="peda">
+      <div className="peda-eye">Hur biz & privat hänger ihop</div>
+      <div className="peda-h">
+        Allt är <em>du</em>. Två konton, ett liv.
+      </div>
+      <p className="peda-prose">
+        Privat och företag är <strong>separata bokföringsenheter</strong> men
+        samma person. När du tar ut <em>egen lön</em> från företagskontot till
+        ditt privatkonto är det en överföring som syns i båda bokföringarna.
+        Tjänar företaget bra → <em>privatkontot</em> får mer. Pentagon i
+        privatläge påverkas av företagets resultat — det är samma person, samma
+        stress, samma framgång.
+      </p>
+      <ul className="peda-bullets">
+        <li>
+          <strong>Egen lön</strong>
+          {company.form === "ab"
+            ? "Du betalar privatskatt + arb.giv.avg. 31,42 % från företaget"
+            : "Du tar ut det du behöver, betalar privatskatt — inte arbetsgivaravgift."}
+        </li>
+        <li>
+          <strong>Egen insättning</strong>Att skjuta in privata pengar i
+          företaget. Räknas som lån/eget kapital.
+        </li>
+        <li>
+          <strong>Skatt</strong>Privatskatt på överskott + moms 25 % på fakturor
+          (utgående).
+        </li>
+        <li>
+          <strong>F-skatt</strong>Du betalar in själv månadsvis baserat på
+          prognos.
+        </li>
+      </ul>
+      <div className="peda-concepts">
+        <span className="peda-concept">Egen lön</span>
+        <span className="peda-concept">Eget kapital</span>
+        <span className="peda-concept">F-skatt</span>
+        <span className="peda-concept">Moms in &amp; ut</span>
+        <span className="peda-concept">Resultatöverföring</span>
+        <span className="peda-concept">Periodisering</span>
+      </div>
+      <div className="peda-tip">
+        När du klickar "Byt till privat" upptill — flippar appen tillbaka. Allt
+        du gör i biz påverkar ditt privata över tid: bättre vinst → mer egen
+        lön → bättre privat-pentagon.
+      </div>
+    </div>
+  );
+}
+
+
+/* ======================================================================
+ * BusinessNotAllowed · samma som tidigare
+ * ====================================================================== */
 function BusinessNotAllowed() {
   return (
-    <div
-      style={{
-        padding: "60px 40px",
-        maxWidth: 720,
-        margin: "40px auto",
-        background:
-          "linear-gradient(135deg, rgba(251,191,36,0.06), rgba(15,21,37,0.5))",
-        border: "1px solid rgba(251,191,36,0.3)",
-        borderRadius: 16,
-        textAlign: "center",
-      }}
-    >
+    <BizHubShell>
       <div
         style={{
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: 11,
-          color: "var(--warm)",
-          letterSpacing: 1.6,
-          fontWeight: 700,
-          textTransform: "uppercase",
+          padding: "60px 40px",
+          maxWidth: 720,
+          margin: "40px auto",
+          background:
+            "linear-gradient(135deg, rgba(251,191,36,0.06), rgba(15,21,37,0.5))",
+          border: "1px solid rgba(251,191,36,0.3)",
+          borderRadius: 16,
+          textAlign: "center",
         }}
       >
-        Företagsläge · INTE AKTIVERAT
+        <div className="biz-eye" style={{ color: "#fbbf24" }}>
+          Företagsläge · INTE AKTIVERAT
+        </div>
+        <h2
+          style={{
+            color: "white",
+            fontSize: "1.8rem",
+            margin: "16px 0",
+            fontFamily: "Source Serif 4, Georgia, serif",
+          }}
+        >
+          Be din lärare aktivera företagsläget.
+        </h2>
+        <p style={{ color: "rgba(255,255,255,0.7)" }}>
+          Företagsläget aktiveras per elev av läraren. När det är på kan du
+          driva enskild firma eller AB parallellt med din privatekonomi.
+        </p>
+        <Link
+          to="/v2/hub"
+          style={{
+            display: "inline-block",
+            marginTop: 18,
+            padding: "10px 20px",
+            background: "#fbbf24",
+            color: "#1a1a1a",
+            borderRadius: 6,
+            textDecoration: "none",
+            fontWeight: 700,
+          }}
+        >
+          ← Tillbaka till privatekonomin
+        </Link>
       </div>
-      <h2
-        style={{
-          color: "white",
-          fontSize: "1.8rem",
-          margin: "16px 0",
-          fontFamily: "Source Serif 4, Georgia, serif",
-        }}
-      >
-        Be din lärare aktivera företagsläget.
-      </h2>
-      <p style={{ color: "rgba(255,255,255,0.7)" }}>
-        Företagsläget aktiveras per elev av läraren. När det är på kan du driva
-        enskild firma eller AB parallellt med din privatekonomi.
-      </p>
-      <Link to="/v2/hub" style={{
-        display: "inline-block", marginTop: 18,
-        padding: "10px 20px",
-        background: "var(--warm, #fbbf24)",
-        color: "#1a1a1a", borderRadius: 6, textDecoration: "none",
-        fontWeight: 700,
-      }}>
-        ← Tillbaka till privatekonomin
-      </Link>
-    </div>
+    </BizHubShell>
   );
 }
 
 
-function Kpi({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div
-      style={{
-        padding: 14,
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 10,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: 9,
-          color: "rgba(255,255,255,0.5)",
-          letterSpacing: 1.3,
-          textTransform: "uppercase",
-          fontWeight: 700,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ color, fontSize: "1.3rem", fontWeight: 700, marginTop: 4 }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-
-function BizActorCard({
-  eye, name, desc, to,
-}: { eye: string; name: string; desc: string; to: string }) {
-  return (
-    <Link
-      to={to}
-      style={{
-        padding: 18,
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(99,102,241,0.2)",
-        borderRadius: 12,
-        textDecoration: "none",
-        display: "block",
-        transition: "all 0.2s",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "rgba(99,102,241,0.08)";
-        e.currentTarget.style.borderColor = "rgba(99,102,241,0.45)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-        e.currentTarget.style.borderColor = "rgba(99,102,241,0.2)";
-      }}
-    >
-      <div
-        style={{
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: 9,
-          color: "#818cf8",
-          letterSpacing: 1.3,
-          fontWeight: 700,
-        }}
-      >
-        Bolag · {eye}
-      </div>
-      <strong style={{ color: "white", fontSize: "1.05rem", marginTop: 6, display: "block" }}>
-        {name}
-      </strong>
-      <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.85rem", marginTop: 4 }}>
-        {desc}
-      </div>
-    </Link>
-  );
-}
-
-
+/* ======================================================================
+ * CompanyOnboarding · 3-stegsflöde för att starta bolag
+ *   1. Välj bransch (10 kort med stad-tillgänglighet)
+ *   2. Välj form (enskild firma / AB) + namn
+ *   3. Bekräfta + skapa
+ * ====================================================================== */
 function CompanyOnboarding({ onCreated }: { onCreated: (c: Company) => void }) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [industries, setIndustries] = useState<import("./api").Industry[]>([]);
+  const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [form, setForm] = useState<"enskild_firma" | "ab">("enskild_firma");
-  const [vatReg, setVatReg] = useState(true);
+  // VAT auto-triggas av tick-engine när 12-mån oms närmar sig 80k
+  const vatReg = false;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showCapitalDialog, setShowCapitalDialog] = useState(false);
+  const [isBufferCase, setIsBufferCase] = useState(false);
 
-  const create = async () => {
-    if (!name.trim()) return;
+  useEffect(() => {
+    bizApi
+      .listIndustries()
+      .then(setIndustries)
+      .catch(() => undefined);
+  }, []);
+
+  async function tryCreate(funding: "cash" | "private_loan" | "business_loan_pg") {
+    if (!name.trim() || !selectedIndustry) return;
     setBusy(true);
     setErr(null);
     try {
       const c = await bizApi.createCompany({
         name: name.trim(),
         form,
+        industry_key: selectedIndustry,
         vat_registered: vatReg,
         vat_period: "kvartal",
         share_capital: form === "ab" ? 25000 : null,
+        funding_method: funding,
       });
       onCreated(c);
     } catch (e) {
-      setErr(String((e as Error).message || e));
+      const msg = String((e as Error).message || e);
+      // 402 = privatkonto saknar pengar / saknar buffert → visa dialog
+      if (msg.includes("HTTP 402")) {
+        // Skilj på "saknar pengar helt" vs "har pengar men ingen buffert"
+        // baserat på backend-meddelandet — utan att visa det rått.
+        setIsBufferCase(msg.includes("trygghets-bufferten"));
+        setShowCapitalDialog(true);
+        setBusy(false);
+        return;
+      }
+      setErr(msg);
     } finally {
       setBusy(false);
     }
-  };
+  }
+
+  const create = () => tryCreate("cash");
+
+  // Lyssna på showCapitalDialog och rendera den nedan
+  const selected = industries.find((i) => i.key === selectedIndustry);
+
+  if (showCapitalDialog) {
+    return (
+      <BizHubShell>
+        <StartupCapitalDialog
+          isBufferCase={isBufferCase}
+          onPick={(funding) => {
+            setShowCapitalDialog(false);
+            tryCreate(funding);
+          }}
+          onCancel={() => setShowCapitalDialog(false)}
+        />
+      </BizHubShell>
+    );
+  }
 
   return (
-    <div
-      style={{
-        padding: "60px 40px",
-        maxWidth: 720,
-        margin: "0 auto",
-        background:
-          "linear-gradient(135deg, rgba(99,102,241,0.05), rgba(168,85,247,0.05))",
-        border: "1px solid rgba(99,102,241,0.25)",
-        borderRadius: 16,
-      }}
-    >
-      <div
+    <BizHubShell>
+      <div className="biz-eye">Företagsläge · STARTA BOLAG</div>
+      <h1 className="biz-h1" style={{ marginTop: 14 }}>
+        Driv ditt eget <em>bolag</em>.
+      </h1>
+      <p
         style={{
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: 11,
-          color: "#818cf8",
-          letterSpacing: 1.6,
-          textTransform: "uppercase",
-          fontWeight: 700,
-        }}
-      >
-        Företagsläge · STARTA BOLAG
-      </div>
-      <h1
-        style={{
-          color: "white",
-          fontSize: "2rem",
-          margin: "16px 0",
+          color: "rgba(255,255,255,0.55)",
+          fontSize: "1rem",
+          marginBottom: 28,
+          marginTop: 12,
           fontFamily: "Source Serif 4, Georgia, serif",
         }}
       >
-        Driv ditt eget <em style={{ color: "#c7d2fe" }}>bolag</em>.
-      </h1>
-      <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "1rem", marginBottom: 28 }}>
-        Skapa en enskild firma eller aktiebolag. Du behåller din privatekonomi
-        parallellt — växla mellan med toggle-knappen i topbar.
+        Steg {step} av 3 · {step === 1 ? "Välj bransch"
+          : step === 2 ? "Bolagsform & namn"
+          : "Bekräfta"}
       </p>
 
-      <label style={lbl()}>
-        Bolagsnamn:
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="ex: Sara A. Konsult AB"
-          style={inputStyle()}
-        />
-      </label>
-
-      <label style={lbl()}>
-        Bolagsform:
-        <select
-          value={form}
-          onChange={(e) => setForm(e.target.value as typeof form)}
-          style={inputStyle()}
-        >
-          <option value="enskild_firma">Enskild firma (lättast)</option>
-          <option value="ab">Aktiebolag (kräver 25 000 kr aktiekapital)</option>
-        </select>
-      </label>
-
-      <label
-        style={{
-          ...lbl(),
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexDirection: "row",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={vatReg}
-          onChange={(e) => setVatReg(e.target.checked)}
-        />
-        <span>Momsregistrera (krävs vid omsättning &gt; 80 000 kr/år)</span>
-      </label>
-
-      {err && (
-        <div
-          style={{
-            marginTop: 14,
-            padding: 10,
-            background: "rgba(220,76,43,0.15)",
-            color: "#fda594",
-            borderRadius: 6,
-          }}
-        >
-          {err}
-        </div>
+      {step === 1 && (
+        <>
+          <p
+            style={{
+              fontFamily: "Source Serif 4, Georgia, serif",
+              color: "rgba(255,255,255,0.85)",
+              fontSize: 14.5,
+              lineHeight: 1.55,
+              marginBottom: 22,
+            }}
+          >
+            Välj en av de 10 fasta branscherna. Branschen styr pris-baseline,
+            kund-mix, säsong och pipeline-täthet i din stad. Vissa branscher
+            kräver minst medelstor stad — markeras med 🔒 om din karaktär
+            bor i för liten ort.
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: 12,
+              marginBottom: 24,
+            }}
+          >
+            {industries.map((ind) => {
+              const isSel = selectedIndustry === ind.key;
+              const blocked = !ind.available_in_my_city;
+              return (
+                <button
+                  type="button"
+                  key={ind.key}
+                  onClick={() => {
+                    if (blocked) return;
+                    setSelectedIndustry(ind.key);
+                  }}
+                  disabled={blocked}
+                  className="biz-card"
+                  style={{
+                    textAlign: "left",
+                    cursor: blocked ? "not-allowed" : "pointer",
+                    borderTopColor: isSel ? "#6366f1" : "#818cf8",
+                    background: isSel
+                      ? "rgba(99,102,241,0.18)"
+                      : "rgba(15,21,37,0.7)",
+                    opacity: blocked ? 0.4 : 1,
+                    padding: 18,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 8,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "Source Serif 4, Georgia, serif",
+                        fontSize: 17,
+                        fontWeight: 700,
+                        color: "#fff",
+                      }}
+                    >
+                      {ind.label} {blocked && "🔒"}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 9,
+                        color: "rgba(255,255,255,0.4)",
+                        letterSpacing: 1.2,
+                      }}
+                    >
+                      SNI {ind.sni_code}
+                    </span>
+                  </div>
+                  <p
+                    style={{
+                      fontFamily: "Source Serif 4, Georgia, serif",
+                      fontSize: 13,
+                      color: "rgba(255,255,255,0.7)",
+                      lineHeight: 1.45,
+                      margin: "8px 0 12px",
+                    }}
+                  >
+                    {ind.short_description}
+                  </p>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 6,
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 9.5,
+                      color: "rgba(255,255,255,0.6)",
+                    }}
+                  >
+                    <span>
+                      Pris: {ind.hourly_rate_min}–{ind.hourly_rate_max} kr/h
+                    </span>
+                    <span>Marginal ~{ind.margin_baseline_pct} %</span>
+                    <span>
+                      {ind.requires_lokal
+                        ? `Lokal ${ind.monthly_lokal_cost_baseline} kr/m`
+                        : "Hemmabas"}
+                    </span>
+                    <span>
+                      Utrustning {ind.equipment_cost_init.toLocaleString("sv-SE")} kr
+                    </span>
+                  </div>
+                  {blocked && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 9,
+                        color: "#fbbf24",
+                        letterSpacing: 0.6,
+                      }}
+                    >
+                      Kräver minst medelstor stad
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setStep(2)}
+            disabled={!selectedIndustry}
+            className="biz-btn solid"
+            style={{ padding: "12px 24px" }}
+          >
+            Nästa · bolagsform →
+          </button>
+        </>
       )}
 
-      <button
-        onClick={create}
-        disabled={busy || !name.trim()}
-        style={{
-          marginTop: 20,
-          padding: "14px 28px",
-          background: "#818cf8",
-          color: "#1a1a1a",
-          border: "none",
-          borderRadius: 8,
-          cursor: busy || !name.trim() ? "not-allowed" : "pointer",
-          fontWeight: 700,
-          fontSize: "1rem",
-        }}
-      >
-        {busy ? "Skapar…" : "Starta bolaget →"}
-      </button>
+      {step === 2 && selected && (
+        <>
+          <div className="biz-card" style={{ marginBottom: 22 }}>
+            <div className="biz-card-eye">Vald bransch</div>
+            <div className="biz-card-h">{selected.label}</div>
+            <p
+              style={{
+                fontFamily: "Source Serif 4, Georgia, serif",
+                color: "rgba(255,255,255,0.75)",
+                fontSize: 13.5,
+                marginTop: 8,
+              }}
+            >
+              {selected.learning_focus}
+            </p>
+          </div>
+
+          <label className="biz-field">
+            <span className="biz-field-label">Bolagsnamn:</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={`ex: ${selected.label} ${form === "ab" ? "AB" : ""}`}
+              className="biz-input"
+            />
+          </label>
+
+          <label className="biz-field">
+            <span className="biz-field-label">Bolagsform:</span>
+            <select
+              value={form}
+              onChange={(e) => setForm(e.target.value as typeof form)}
+              className="biz-select"
+            >
+              <option value="enskild_firma">Enskild firma (lättast)</option>
+              <option value="ab">
+                Aktiebolag (kräver 25 000 kr aktiekapital)
+              </option>
+            </select>
+          </label>
+
+          {/* Momsregistrering hanteras automatiskt — Skatteverket
+              skickar brev när bolagets 12-månaders omsättning närmar
+              sig 80 000 kr. Eleven slipper ta ställning i onboardingen
+              och får i stället en pedagogisk händelse i postlådan när
+              det blir aktuellt. */}
+          <div
+            className="biz-field"
+            style={{
+              padding: "10px 14px",
+              background: "rgba(99,102,241,0.06)",
+              border: "1px solid rgba(99,102,241,0.20)",
+              borderRadius: 6,
+              fontSize: 12.5,
+              color: "rgba(255,255,255,0.78)",
+              fontFamily: "Source Serif 4, Georgia, serif",
+              lineHeight: 1.5,
+            }}
+          >
+            <strong style={{ color: "#c7d2fe" }}>Moms.</strong> Du
+            börjar utan momsregistrering. Skatteverket hör av sig
+            automatiskt när omsättningen närmar sig 80 000 kr/år.
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+            <button
+              onClick={() => setStep(1)}
+              className="biz-btn"
+            >
+              ← Byt bransch
+            </button>
+            <button
+              onClick={() => setStep(3)}
+              disabled={!name.trim()}
+              className="biz-btn solid"
+            >
+              Nästa · bekräfta →
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 3 && selected && (
+        <>
+          <div className="biz-card" style={{ marginBottom: 16 }}>
+            <div className="biz-card-eye">Bekräfta</div>
+            <div className="biz-card-h">{name.trim()}</div>
+            <ul
+              style={{
+                marginTop: 16,
+                padding: 0,
+                listStyle: "none",
+                fontFamily: "Source Serif 4, Georgia, serif",
+                fontSize: 14,
+                color: "rgba(255,255,255,0.85)",
+                lineHeight: 1.7,
+              }}
+            >
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Bransch:</strong>{" "}
+                {selected.label} (SNI {selected.sni_code})
+              </li>
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Bolagsform:</strong>{" "}
+                {form === "ab" ? "Aktiebolag" : "Enskild firma"}
+              </li>
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Stad:</strong>{" "}
+                ärvs från karaktären (kan ej ändras)
+              </li>
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Moms:</strong>{" "}
+                {vatReg ? "registrerad" : "ej registrerad"}
+              </li>
+              {form === "ab" && (
+                <li>
+                  <strong style={{ color: "#c7d2fe" }}>Aktiekapital:</strong>{" "}
+                  25 000 kr (skjuts in vid create)
+                </li>
+              )}
+              <li>
+                <strong style={{ color: "#c7d2fe" }}>Utrustning init:</strong>{" "}
+                {selected.equipment_cost_init.toLocaleString("sv-SE")} kr
+              </li>
+            </ul>
+          </div>
+
+          {err && <div className="biz-error">{err}</div>}
+
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button onClick={() => setStep(2)} className="biz-btn">
+              ← Tillbaka
+            </button>
+            <button
+              onClick={create}
+              disabled={busy}
+              className="biz-btn solid"
+              style={{ padding: "14px 28px", fontSize: "1rem" }}
+            >
+              {busy ? "Skapar…" : "Starta bolaget ✓"}
+            </button>
+          </div>
+        </>
+      )}
+    </BizHubShell>
+  );
+}
+
+
+/** Hjälpare · ISO-vecka för ett datum (Sverige använder ISO-veckor) */
+function weekOfYear(d: Date): number {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((+t - +yearStart) / 86400000 + 1) / 7);
+}
+
+
+function StartupCapitalDialog({
+  isBufferCase = false,
+  onPick,
+  onCancel,
+}: {
+  isBufferCase?: boolean;
+  onPick: (funding: "private_loan" | "business_loan_pg") => void;
+  onCancel: () => void;
+}) {
+  const eye = isBufferCase ? "⚠ FÖR LITEN BUFFERT" : "⚠ AKTIEKAPITAL SAKNAS";
+  return (
+    <div style={{
+      maxWidth: 720,
+      margin: "40px auto",
+      padding: "32px 28px",
+      background: "linear-gradient(135deg, rgba(251,191,36,0.06), rgba(15,21,37,0.6))",
+      border: "1px solid rgba(251,191,36,0.30)",
+      borderRadius: 12,
+    }}>
+      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#fbbf24", letterSpacing: 1.6, fontWeight: 700 }}>
+        {eye}
+      </div>
+      <h1 style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 26, color: "#fff", fontWeight: 700, margin: "8px 0 16px" }}>
+        {isBufferCase ? (
+          <>Du har precis ihop pengarna · <em style={{ color: "#fbbf24" }}>men ingen buffert</em>.</>
+        ) : (
+          <>Du saknar 25 000 kr <em style={{ color: "#fbbf24" }}>i aktiekapital</em>.</>
+        )}
+      </h1>
+      <p style={{ color: "rgba(255,255,255,0.78)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 15, lineHeight: 1.6 }}>
+        {isBufferCase
+          ? "Att tömma kassan på första dagen är en klassisk nybörjar-fälla. Mat, hyra och Spotify dras dagarna efter och tar dig minus innan första kunden hunnit betala. Bättre att lämna bufferten orörd och låna istället:"
+          : "För att starta aktiebolag krävs minst 25 000 kr som du satsar i bolaget. Det är pengar som tillhör bolaget — du får inte ut dem som lön. Två vägar att lösa det:"}
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 22 }}>
+        {/* Privat startup-lån */}
+        <div style={{
+          padding: 18,
+          background: "rgba(99,102,241,0.06)",
+          border: "1px solid rgba(99,102,241,0.30)",
+          borderRadius: 10,
+        }}>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: 1.4, color: "#c7d2fe" }}>
+            ALTERNATIV A
+          </div>
+          <h3 style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 18, color: "#fff", margin: "8px 0", fontWeight: 700 }}>
+            Privat startup-lån
+          </h3>
+          <p style={{ color: "rgba(255,255,255,0.8)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.55, margin: "8px 0" }}>
+            Du tar lån i ditt eget namn. Pengarna går in på privatkontot, sedan
+            in i bolaget som aktiekapital.
+          </p>
+          <ul style={{ color: "rgba(255,255,255,0.75)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.6, paddingLeft: 18, margin: "10px 0" }}>
+            <li>25 000 kr · 6 % ränta · 5 år</li>
+            <li>≈ 483 kr/mån från privatkontot</li>
+            <li>Total kostnad: ~28 990 kr</li>
+            <li>⚠ Påverkar din privata Trygghet-axel</li>
+          </ul>
+          <button onClick={() => onPick("private_loan")} style={{
+            marginTop: 10, width: "100%",
+            background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)",
+            color: "#c7d2fe", padding: "10px 18px", borderRadius: 6,
+            fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700,
+            letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer",
+          }}>
+            Ta privat lån →
+          </button>
+        </div>
+
+        {/* Företagslån med personlig borgen */}
+        <div style={{
+          padding: 18,
+          background: "rgba(251,191,36,0.06)",
+          border: "1px solid rgba(251,191,36,0.30)",
+          borderRadius: 10,
+        }}>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: 1.4, color: "#fbbf24" }}>
+            ALTERNATIV B
+          </div>
+          <h3 style={{ fontFamily: "Source Serif 4, Georgia, serif", fontSize: 18, color: "#fff", margin: "8px 0", fontWeight: 700 }}>
+            Företagslån · personlig borgen
+          </h3>
+          <p style={{ color: "rgba(255,255,255,0.8)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.55, margin: "8px 0" }}>
+            Bolaget tar lånet · pengarna stannar i bolagets kassa.
+            Du går i personlig borgen om bolaget går i konkurs.
+          </p>
+          <ul style={{ color: "rgba(255,255,255,0.75)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.6, paddingLeft: 18, margin: "10px 0" }}>
+            <li>25 000 kr · 7 % ränta · 5 år</li>
+            <li>≈ 495 kr/mån från bolagets kassa</li>
+            <li>Lägre privat-skuldsättning</li>
+            <li>⚠ Personlig borgen = du betalar om bolaget faller</li>
+          </ul>
+          <button onClick={() => onPick("business_loan_pg")} style={{
+            marginTop: 10, width: "100%",
+            background: "#fbbf24", border: "none",
+            color: "#422006", padding: "10px 18px", borderRadius: 6,
+            fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700,
+            letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer",
+          }}>
+            Ta företagslån →
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 22, padding: "14px 16px", background: "rgba(0,0,0,0.2)", borderLeft: "2px solid #6ee7b7", borderRadius: 4 }}>
+        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9.5, color: "#6ee7b7", letterSpacing: 1.2, fontWeight: 700 }}>TIPS</div>
+        <p style={{ color: "rgba(255,255,255,0.8)", fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13, lineHeight: 1.55, margin: "6px 0 0" }}>
+          Eller välj <em>enskild firma</em> i stället. Den kräver inget aktiekapital alls
+          — men du har personligt ansvar för alla skulder och kan inte ta in nya delägare.
+        </p>
+      </div>
+
+      <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={onCancel} style={{
+          background: "transparent", border: "1px solid rgba(255,255,255,0.20)",
+          color: "rgba(255,255,255,0.7)", padding: "10px 18px", borderRadius: 6,
+          fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700,
+          letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer",
+        }}>
+          Avbryt · välj annan form
+        </button>
+      </div>
     </div>
   );
 }
 
 
-function lbl(): React.CSSProperties {
-  return {
-    display: "block",
-    color: "rgba(255,255,255,0.7)",
-    fontSize: "0.9rem",
-    marginTop: 16,
-  };
-}
+function CapacityBanner() {
+  const { data, error, refresh } = useTimeCapacity();
+  if (error || !data) return null;
 
-function inputStyle(): React.CSSProperties {
-  return {
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.18)",
-    color: "white",
-    padding: "10px 12px",
-    borderRadius: 6,
-    width: "100%",
-    fontFamily: "inherit",
-    marginTop: 6,
-  };
-}
+  async function quit() {
+    if (!confirm(
+      "Säga upp privat-jobbet? Du går från lön + 40h privat-jobb "
+      + "till heltidsentreprenör.\n\n"
+      + "Påföljd: privat Trygghet -15.\n"
+      + "Bonus: +44 h/v för bolaget."
+    )) return;
+    try {
+      await api("/v2/foretag/capacity/quit-private-job", { method: "POST" });
+      refresh();
+      alert("Du är nu heltidsentreprenör. Lycka till!");
+    } catch (e) { alert((e as Error).message); }
+  }
 
-function btnSecondary(): React.CSSProperties {
-  return {
-    background: "transparent",
-    border: "1px solid rgba(255,255,255,0.2)",
-    color: "rgba(255,255,255,0.85)",
-    padding: "8px 14px",
-    borderRadius: 6,
-    cursor: "pointer",
-    textDecoration: "none",
-    fontSize: "0.85rem",
-  };
+  return (
+    <div style={{ marginTop: 18, marginBottom: 18 }}>
+      <TimeCapacityBar data={data} onQuit={quit} />
+    </div>
+  );
 }

@@ -20,7 +20,9 @@ import string
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter, BackgroundTasks, Depends, HTTPException, Request, status,
+)
 from pydantic import BaseModel, EmailStr, Field
 
 from ..school import is_enabled as school_enabled
@@ -615,6 +617,7 @@ def list_students(
 @router.post("/teacher/students", response_model=StudentOut)
 def create_student(
     payload: StudentIn,
+    background_tasks: BackgroundTasks,
     info: TokenInfo = Depends(require_teacher),
 ) -> StudentOut:
     _require_school_mode()
@@ -660,24 +663,17 @@ def create_student(
         partner = getattr(student_obj, "v2_partner_model", None) or "solo"
 
     # === Initial-seed (samma som v2_create_student) ===
-    # Kör tick_month + insurance + pension så eleven har data direkt.
-    # Misslyckas tyst — student-skapandet får inte gå sönder om seed
-    # crash:ar.
-    try:
-        from .v2 import _seed_initial_student_data
-        _seed_initial_student_data(
-            student_obj,
-            spend_profile=spend,
-            starting_level=v2_level,
-            partner_model=partner,
-        )
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "create_student (v1 endpoint): initial seed failed för "
-            "student %s — eleven har skapats men saknar data",
-            out.id,
-        )
+    # Schemaläggs som BackgroundTask (~3-4 s i scope-DB) så response
+    # returneras direkt med login-koden. Auto-recovery i
+    # teacher_student_detail kör om något failar.
+    from .v2 import _seed_initial_student_data_safe
+    background_tasks.add_task(
+        _seed_initial_student_data_safe,
+        out.id,
+        spend,
+        v2_level,
+        partner,
+    )
 
     return out
 

@@ -1,8 +1,38 @@
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 
 function RedirectModuleToV2() {
   const { moduleId } = useParams<{ moduleId: string }>();
   return <Navigate to={`/v2/moduler/${moduleId}`} replace />;
+}
+
+// === V1 → V2 redirects ===
+// V1-frontenden är avvecklad; alla gamla paths skickas till V2-motsvarigheten.
+function RedirectV1Student() {
+  const { studentId } = useParams<{ studentId: string }>();
+  return <Navigate to={`/teacher/v2/elev/${studentId}`} replace />;
+}
+function RedirectV1Module() {
+  const { moduleId } = useParams<{ moduleId: string }>();
+  return <Navigate to={`/teacher/v2/modul/${moduleId}`} replace />;
+}
+function RedirectV1Mortgage() {
+  // V2 har ingen direkt motsvarighet för bolåneuppdrag-link (uppdraget
+  // visas via /v2/uppdrag som lista). Skicka till hub som fallback.
+  return <Navigate to="/v2/uppdrag" replace />;
+}
+
+// Roll-medveten root/catchall-redirect: lärare → /teacher/v2,
+// elev/demo → /v2/hub. Används som fallback för okända paths
+// och som ny / -route. Undviker buggen där lärare loggar in från
+// /login/teacher och hamnar på /v2/hub via catchall.
+function RoleAwareHomeRedirect() {
+  const { role } = useAuth();
+  if (role === "teacher") return <Navigate to="/teacher/v2" replace />;
+  // Elev: gå via V2RootRedirect som kollar v2_onboarding_completed_at och
+  // skickar till /v2/onboarding om den inte är gjord — annars /v2/hub.
+  // Tidigare hårdkodades /v2/hub här, vilket skickade nya elever direkt
+  // in i dashbornen utan att gå via onboardingen.
+  return <V2RootRedirect />;
 }
 import { BackendSetup } from "./components/BackendSetup";
 import { ImpersonationBanner } from "./components/ImpersonationBanner";
@@ -30,14 +60,24 @@ import { ArbetsformedlingenV2 } from "./v2/ArbetsformedlingenV2";
 import { TeacherClassesV2 } from "./v2/TeacherClassesV2";
 import { TeacherTimeOnTaskV2 } from "./v2/TeacherTimeOnTaskV2";
 import { TeacherRubricsV2 } from "./v2/TeacherRubricsV2";
+import { TeacherAiPromptsV2 } from "./v2/TeacherAiPromptsV2";
+import { AllabolagV2 } from "./v2/AllabolagV2";
 import { ModuleViewV2 } from "./v2/ModuleViewV2";
 import {
   BizBokforing, BizFakturor, BizLon, BizMoms,
   BizBolagsskatt, BizInstallningar,
 } from "./v2/biz/BizPages";
+import { BizArsredovisning } from "./v2/biz/BizArsredovisning";
+import { BizSharedOpps } from "./v2/biz/BizSharedOpps";
+import { BizJobAds } from "./v2/biz/BizJobAds";
+import { BizTillvaxt } from "./v2/biz/BizTillvaxt";
+import { ArbetsformedlingenKlassJobb } from "./v2/ArbetsformedlingenKlassJobb";
+import { LeaderboardV2 } from "./v2/LeaderboardV2";
+import { TeacherSeasonEventsV2 } from "./v2/TeacherSeasonEventsV2";
 import {
-  BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
+  BizOfferter, BizJobb, BizMarknad, BizLeverantorer,
 } from "./v2/biz/BizGameMotorPages";
+import { BizBank } from "./v2/biz/BizBank";
 import { TeacherForetagKlassPage } from "./v2/TeacherForetagKlassPage";
 import { PensionV2 } from "./v2/PensionV2";
 import { AvanzaV2 } from "./v2/AvanzaV2";
@@ -70,13 +110,16 @@ import { KompetensV2 } from "./v2/KompetensV2";
 import { TeacherKompetensOverviewPage } from "./v2/TeacherKompetensOverviewPage";
 import { GuideProvider } from "./v2/guides/GuideContext";
 import { GuideOverlay } from "./v2/guides/GuideOverlay";
+import { V2Topbar } from "./v2/V2Topbar";
 import { V2DevFooter } from "./v2/V2DevFooter";
 import { EchoDrawer } from "./v2/EchoDrawer";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
+import { HandelserV2 } from "./v2/HandelserV2";
+import { HuvudbokV2 } from "./v2/HuvudbokV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
 import { V2RootRedirect } from "./v2/V2RootRedirect";
-import { DashboardV2Guard } from "./v2/DashboardV2Guard";
+// REMOVED V1: import { DashboardV2Guard } from "./v2/DashboardV2Guard";
 import { V2DevSwitcher } from "./v2/V2DevSwitcher";
 import { V2RosterPage } from "./v2/V2RosterPage";
 import { TeacherHubV2 } from "./v2/TeacherHubV2";
@@ -89,39 +132,39 @@ import { TeacherCreateStudentV2 } from "./v2/TeacherCreateStudentV2";
 import { TeacherStudentHistoryV2 } from "./v2/TeacherStudentHistoryV2";
 import { TeacherModuleLibraryV2 } from "./v2/TeacherModuleLibraryV2";
 import { TeacherModuleEditV2 } from "./v2/TeacherModuleEditV2";
-import Dashboard from "./pages/Dashboard";
-import Transactions from "./pages/Transactions";
-import Budget from "./pages/Budget";
-import Chat from "./pages/Chat";
-import Scenarios from "./pages/Scenarios";
-import Loans from "./pages/Loans";
-import Transfers from "./pages/Transfers";
-import Upcoming from "./pages/Upcoming";
-import Tax from "./pages/Tax";
-import Reports from "./pages/Reports";
-import Settings from "./pages/Settings";
+// REMOVED V1: import Dashboard from "./pages/Dashboard";
+// REMOVED V1: import Transactions from "./pages/Transactions";
+// REMOVED V1: import Budget from "./pages/Budget";
+// REMOVED V1: import Chat from "./pages/Chat";
+// REMOVED V1: import Scenarios from "./pages/Scenarios";
+// REMOVED V1: import Loans from "./pages/Loans";
+// REMOVED V1: import Transfers from "./pages/Transfers";
+// REMOVED V1: import Upcoming from "./pages/Upcoming";
+// REMOVED V1: import Tax from "./pages/Tax";
+// REMOVED V1: import Reports from "./pages/Reports";
+// REMOVED V1: import Settings from "./pages/Settings";
 import Login from "./pages/Login";
-import Import from "./pages/Import";
-import Funds from "./pages/Funds";
-import Investments from "./pages/Investments";
-import TeacherCredit from "./pages/TeacherCredit";
-import TeacherInvestments from "./pages/TeacherInvestments";
-import TeacherWellbeing from "./pages/TeacherWellbeing";
-import Salaries from "./pages/Salaries";
-import Arbetsgivare from "./pages/Arbetsgivare";
+// REMOVED V1: import Import from "./pages/Import";
+// REMOVED V1: import Funds from "./pages/Funds";
+// REMOVED V1: import Investments from "./pages/Investments";
+// REMOVED V1: import TeacherCredit from "./pages/TeacherCredit";
+// REMOVED V1: import TeacherInvestments from "./pages/TeacherInvestments";
+// REMOVED V1: import TeacherWellbeing from "./pages/TeacherWellbeing";
+// REMOVED V1: import Salaries from "./pages/Salaries";
+// REMOVED V1: import Arbetsgivare from "./pages/Arbetsgivare";
 import Bank from "./pages/Bank";
-import TeacherNegotiations from "./pages/TeacherNegotiations";
-import Attachments from "./pages/Attachments";
-import Utility from "./pages/Utility";
+// REMOVED V1: import TeacherNegotiations from "./pages/TeacherNegotiations";
+// REMOVED V1: import Attachments from "./pages/Attachments";
+// REMOVED V1: import Utility from "./pages/Utility";
 import TibberCallback from "./pages/TibberCallback";
-import Teacher from "./pages/Teacher";
-import StudentDetail from "./pages/StudentDetail";
+// REMOVED V1: import Teacher from "./pages/Teacher";
+// REMOVED V1: import StudentDetail from "./pages/StudentDetail";
 import Onboarding from "./pages/Onboarding";
-import MyBatches from "./pages/MyBatches";
-import AllBatches from "./pages/AllBatches";
-import AssignmentMatrix from "./pages/AssignmentMatrix";
-import MortgageDecision from "./pages/MortgageDecision";
-import Messages from "./pages/Messages";
+// REMOVED V1: import MyBatches from "./pages/MyBatches";
+// REMOVED V1: import AllBatches from "./pages/AllBatches";
+// REMOVED V1: import AssignmentMatrix from "./pages/AssignmentMatrix";
+// REMOVED V1: import MortgageDecision from "./pages/MortgageDecision";
+// REMOVED V1: import Messages from "./pages/Messages";
 import LandingSwitch from "./pages/LandingSwitch";
 import LoginChoice from "./pages/LoginChoice";
 import TeacherLogin from "./pages/TeacherLogin";
@@ -140,15 +183,15 @@ import Lgr22 from "./pages/Lgr22";
 import Rubriker from "./pages/Rubriker";
 import EchoAi from "./pages/EchoAi";
 import ScrollStoryDemo from "./pages/ScrollStoryDemo";
-import MyAchievements from "./pages/MyAchievements";
-import MyModules from "./pages/MyModules";
-import TeacherModules from "./pages/TeacherModules";
-import TeacherModuleEdit from "./pages/TeacherModuleEdit";
-import TeacherReflections from "./pages/TeacherReflections";
-import TeacherRubrics from "./pages/TeacherRubrics";
-import TeacherTimeOnTask from "./pages/TeacherTimeOnTask";
-import PeerReview from "./pages/PeerReview";
-import AdminAI from "./pages/AdminAI";
+// REMOVED V1: import MyAchievements from "./pages/MyAchievements";
+// REMOVED V1: import MyModules from "./pages/MyModules";
+// REMOVED V1: import TeacherModules from "./pages/TeacherModules";
+// REMOVED V1: import TeacherModuleEdit from "./pages/TeacherModuleEdit";
+// REMOVED V1: import TeacherReflections from "./pages/TeacherReflections";
+// REMOVED V1: import TeacherRubrics from "./pages/TeacherRubrics";
+// REMOVED V1: import TeacherTimeOnTask from "./pages/TeacherTimeOnTask";
+// REMOVED V1: import PeerReview from "./pages/PeerReview";
+// REMOVED V1: import AdminAI from "./pages/AdminAI";
 import { DemoBanner } from "./components/DemoBanner";
 import { useEffect, useState } from "react";
 import { v2Api, type V2Status } from "./v2/api";
@@ -270,15 +313,17 @@ export default function App() {
   // istället för den gamla feta dev-bannern. Echo-drawern mountas
   // ALLTID (oavsett path) eftersom topbaren har Echo-knappen och
   // drawern måste vara mountad för att lyssna på 'echo-open'-eventet.
-  // Tidigare gating på window.location.pathname läste bara värdet vid
-  // initial render, så React Router-navigering mellan ej-v2 → v2 utan
-  // sida-reload lämnade drawern omountad.
-  const isV2Path = window.location.pathname.startsWith("/v2/")
-    || window.location.pathname.startsWith("/teacher/");
+  // V1 är AVVECKLAD · alla autentiserade vyer renderar nu V2-skalet,
+  // även /dashboard, /, catchall och legacy-redirects. Tidigare blixtrade
+  // V1 Sidebar/paper-bg under tiden RoleAwareHomeRedirect hann skicka
+  // eleven till /v2/hub. Vi behåller useLocation() bara för att tvinga
+  // re-render vid path-change så routes hänger med konsekvent.
+  useLocation();
+  const isV2Path = true;
 
   return (
     <GuideProvider>
-    <div className="h-full flex flex-col">
+    <div className={isV2Path ? "v2-shell" : "h-full flex flex-col"}>
       <DemoBanner />
       {!isV2Path && <V2DevSwitcher />}
       <GuideOverlay />
@@ -289,22 +334,56 @@ export default function App() {
           isSuperAdmin={!!v2Status?.is_super_admin}
         />
       )}
-      <div className="flex-1 flex flex-col md:flex-row min-h-0">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        <MobileTopBar />
+      {/* App-nivå V2Topbar · single instance · stays put under flip
+       * (matchar prototyp där .topbar är utanför .app som flips).
+       * Per-page <V2Topbar> är no-ops via singleton-mönster i komponenten. */}
+      {isV2Path && (
+        <V2Topbar
+          status={{
+            role: role || "student",
+            is_super_admin: !!v2Status?.is_super_admin,
+          }}
+        />
+      )}
+      <div className={isV2Path ? "v2-flip-perspective" : "flex-1 flex flex-col md:flex-row min-h-0"}>
+      {!isV2Path && <Sidebar />}
+      <main
+        className={isV2Path ? "v2-flip-target" : "flex-1 overflow-y-auto"}
+        id={isV2Path ? "v2-flip-target" : undefined}
+      >
+        {!isV2Path && <MobileTopBar />}
         {role === "teacher" && asStudent && <ImpersonationBanner />}
         <Routes>
           {/* "/" går genom V2RootRedirect: super-admin auto-routas till
               /v2/hub, studenter utan v2-onboarding till /v2/onboarding,
               övriga till /dashboard (v1). */}
           <Route path="/" element={<V2RootRedirect />} />
-          <Route path="/teacher" element={<Teacher />} />
-          <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
-          <Route path="/teacher/all-batches" element={<AllBatches />} />
-          <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
-          <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
-          <Route path="/messages" element={<Messages />} />
+          {/* === V1-redirects · alla gamla paths skickas till V2-motsvarigheten ===
+              V1-frontenden är avvecklad. Endast publika routes (login,
+              docs, /bank/sign etc.) ligger kvar i den ej-inloggade rendern. */}
+          <Route path="/teacher" element={<Navigate to="/teacher/v2" replace />} />
+          <Route path="/teacher/students/:studentId" element={<RedirectV1Student />} />
+          <Route path="/teacher/all-batches" element={<Navigate to="/teacher/v2" replace />} />
+          <Route path="/teacher/matrix" element={<Navigate to="/teacher/v2" replace />} />
+          <Route path="/teacher/modules" element={<Navigate to="/teacher/v2/moduler" replace />} />
+          <Route path="/teacher/modules/:moduleId" element={<RedirectV1Module />} />
+          <Route path="/teacher/reflections" element={<Navigate to="/teacher/v2/reflektioner" replace />} />
+          <Route path="/teacher/rubrics" element={<Navigate to="/teacher/v2/rubrics" replace />} />
+          <Route path="/teacher/time-on-task" element={<Navigate to="/teacher/v2/time-on-task" replace />} />
+          <Route path="/teacher/negotiations" element={<Navigate to="/teacher/v2/maria" replace />} />
+          <Route path="/teacher/admin-ai" element={<Navigate to="/teacher/v2" replace />} />
+          <Route path="/teacher/investments" element={<Navigate to="/teacher/v2" replace />} />
+          <Route path="/teacher/credit" element={<Navigate to="/teacher/v2" replace />} />
+          <Route path="/teacher/wellbeing" element={<Navigate to="/teacher/v2" replace />} />
+          <Route path="/peer-review" element={<Navigate to="/v2/hub" replace />} />
+          <Route path="/my-batches" element={<Navigate to="/v2/hub" replace />} />
+          <Route path="/messages" element={<Navigate to="/v2/meddelanden" replace />} />
+          <Route path="/modules" element={<Navigate to="/v2/moduler" replace />} />
+          <Route path="/modules/:moduleId" element={<RedirectModuleToV2 />} />
+          <Route path="/achievements" element={<Navigate to="/v2/portfolio" replace />} />
+          <Route path="/mortgage/:assignmentId" element={<RedirectV1Mortgage />} />
+
+          {/* Publika info-sidor (auth-läge har dem också) */}
           <Route path="/demo/scroll-story" element={<ScrollStoryDemo />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/terms" element={<Terms />} />
@@ -313,32 +392,7 @@ export default function App() {
           <Route path="/lgr22" element={<Lgr22 />} />
           <Route path="/rubriker" element={<Rubriker />} />
           <Route path="/echo" element={<EchoAi />} />
-          <Route path="/modules" element={<MyModules />} />
-          {/* Bug 10 · /modules/:moduleId redirectar till v2-vy så alla
-              ser den nya grafiska profilen istället för v1-design. */}
-          <Route
-            path="/modules/:moduleId"
-            element={<RedirectModuleToV2 />}
-          />
-          <Route path="/achievements" element={<MyAchievements />} />
-          <Route path="/teacher/modules" element={<TeacherModules />} />
-          <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
-          <Route path="/teacher/reflections" element={<TeacherReflections />} />
-          <Route path="/teacher/rubrics" element={<TeacherRubrics />} />
-          <Route path="/teacher/time-on-task" element={<TeacherTimeOnTask />} />
-          <Route path="/teacher/negotiations" element={<TeacherNegotiations />} />
-          <Route path="/teacher/admin-ai" element={<AdminAI />} />
-          <Route path="/teacher/investments" element={<TeacherInvestments />} />
-          <Route path="/teacher/credit" element={<TeacherCredit />} />
-          <Route path="/teacher/wellbeing" element={<TeacherWellbeing />} />
-          <Route path="/peer-review" element={<PeerReview />} />
-          <Route path="/my-batches" element={<MyBatches />} />
-          {/* Dashboard är nu gemensam för elev + lärare-impersonering.
-              De pedagogiska EkoDashboard-bitarna (greeting, budget-bars,
-              oväntade utgifter, uppdrag, streak, mastery) ligger som
-              StudentPedagogyCards-komponent högst upp i Dashboard.tsx
-              så elev + lärar-vy aldrig divergerar. */}
-          {/* === V2 (parallell migration) === */}
+          {/* === V2 (numera default) === */}
           <Route path="/v2" element={<V2Bootstrap />} />
           <Route path="/v2/onboarding" element={<OnboardingV2 />} />
           <Route path="/v2/hub" element={<HubV2 />} />
@@ -348,6 +402,8 @@ export default function App() {
           <Route path="/v2/skatten" element={<SkattenV2 />} />
           <Route path="/v2/lan" element={<LanV2 />} />
           <Route path="/v2/forsakringar" element={<ForsakringarV2 />} />
+          <Route path="/v2/handelser" element={<HandelserV2 />} />
+          <Route path="/v2/huvudbok" element={<HuvudbokV2 />} />
           <Route path="/v2/forbrukning" element={<ForbrukningV2 />} />
           {/* Boendemarknaden — wrapper med tabbar för hyra + köp/sälj.
               /v2/hyresvarden är bakåt-kompat-alias så befintliga länkar
@@ -364,6 +420,22 @@ export default function App() {
           {/* Bug #12 · Modul-detalj v2 */}
           <Route path="/v2/moduler/:moduleId" element={<ModuleViewV2 />} />
           {/* Bug #7-utbyggnad · Företagsläget · 6 vyer */}
+          {/* Allabolag · klass-skopig scoreboard */}
+          <Route path="/v2/allabolag" element={<AllabolagV2 />} />
+          {/* Årsredovisning · AI Bolagsverket */}
+          <Route path="/v2/foretag/arsredovisning" element={<BizArsredovisning />} />
+          {/* Klass-pool · shared opportunities */}
+          <Route path="/v2/foretag/klass-pool" element={<BizSharedOpps />} />
+          {/* Klass-företag jobbannonser (företagsägare) */}
+          <Route path="/v2/foretag/jobbannonser" element={<BizJobAds />} />
+          {/* Tillväxt · lokaler, utrustning, kapacitet, lån */}
+          <Route path="/v2/foretag/tillvaxt" element={<BizTillvaxt />} />
+          {/* Leaderboard · 12 kategorier + entreprenörspoäng + badges */}
+          <Route path="/v2/leaderboard" element={<LeaderboardV2 />} />
+          {/* Lärar-säsong-events */}
+          <Route path="/teacher/v2/season-events" element={<TeacherSeasonEventsV2 />} />
+          {/* Klass-företag jobb (arbetssökande elev) */}
+          <Route path="/v2/arbetsformedlingen/klass-jobb" element={<ArbetsformedlingenKlassJobb />} />
           <Route path="/v2/foretag/bokforing" element={<BizBokforing />} />
           <Route path="/v2/foretag/fakturor" element={<BizFakturor />} />
           <Route path="/v2/foretag/lon" element={<BizLon />} />
@@ -373,8 +445,10 @@ export default function App() {
           <Route path="/v2/foretag/offerter" element={<BizOfferter />} />
           <Route path="/v2/foretag/jobb" element={<BizJobb />} />
           <Route path="/v2/foretag/marknad" element={<BizMarknad />} />
-          <Route path="/v2/foretag/beslut" element={<BizBeslut />} />
+          {/* /v2/foretag/beslut är ihopslaget i /v2/foretag/tillvaxt */}
+          <Route path="/v2/foretag/beslut" element={<Navigate to="/v2/foretag/tillvaxt" replace />} />
           <Route path="/v2/foretag/leverantorer" element={<BizLeverantorer />} />
+          <Route path="/v2/foretag/bank" element={<BizBank />} />
           <Route path="/teacher/v2/foretag-klass" element={<TeacherForetagKlassPage />} />
           <Route path="/v2/simulator" element={<SimulatorV2 />} />
           <Route
@@ -529,6 +603,11 @@ export default function App() {
             path="/teacher/v2/rubrics"
             element={<TeacherRubricsV2 />}
           />
+          {/* Lärar-AI-laboratorium · /teacher/v2/ai-prompts */}
+          <Route
+            path="/teacher/v2/ai-prompts"
+            element={<TeacherAiPromptsV2 />}
+          />
           <Route
             path="/teacher/v2/historik/:studentId"
             element={<TeacherStudentHistoryV2 />}
@@ -538,33 +617,35 @@ export default function App() {
             element={<TeacherModuleLibraryV2 />}
           />
           <Route
-            path="/teacher/v2/moduler/:moduleId"
+            path="/teacher/v2/modul/:moduleId"
             element={<TeacherModuleEditV2 />}
           />
-          {/* /dashboard har en V2-guard: super-admin och elever med
-              v2_enabled redirectas till /v2/hub. Övriga får v1. */}
-          <Route path="/dashboard" element={<DashboardV2Guard><Dashboard /></DashboardV2Guard>} />
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/import" element={<Import />} />
-          <Route path="/budget" element={<Budget />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/scenarios" element={<Scenarios />} />
-          <Route path="/loans" element={<Loans />} />
-          <Route path="/funds" element={<Funds />} />
-          <Route path="/investments" element={<Investments />} />
-          <Route path="/transfers" element={<Transfers />} />
-          <Route path="/upcoming" element={<Upcoming />} />
-          <Route path="/salaries" element={<Salaries />} />
-          <Route path="/arbetsgivare" element={<Arbetsgivare />} />
-          <Route path="/bank" element={<Bank />} />
+          {/* === V1 elev-routes · alla redirectas till V2 === */}
+          <Route path="/dashboard" element={<RoleAwareHomeRedirect />} />
+          <Route path="/transactions" element={<Navigate to="/v2/banken" replace />} />
+          <Route path="/import" element={<Navigate to="/v2/banken" replace />} />
+          <Route path="/budget" element={<Navigate to="/v2/budget" replace />} />
+          <Route path="/chat" element={<Navigate to="/v2/hub" replace />} />
+          <Route path="/scenarios" element={<Navigate to="/v2/simulator" replace />} />
+          <Route path="/loans" element={<Navigate to="/v2/lan" replace />} />
+          <Route path="/funds" element={<Navigate to="/v2/avanza" replace />} />
+          <Route path="/investments" element={<Navigate to="/v2/avanza" replace />} />
+          <Route path="/transfers" element={<Navigate to="/v2/banken" replace />} />
+          <Route path="/upcoming" element={<Navigate to="/v2/banken" replace />} />
+          <Route path="/salaries" element={<Navigate to="/v2/arbetsgivaren" replace />} />
+          <Route path="/arbetsgivare" element={<Navigate to="/v2/arbetsgivaren" replace />} />
+          <Route path="/bank" element={<Navigate to="/v2/banken" replace />} />
+          {/* /bank/sign behåller V1-Bank-komponenten — det är en publik
+              sign-vy som scannas via QR från desktop. Ingen V2-motsvarighet
+              ännu eftersom flödet är specifikt för QR-mobil-confirm. */}
           <Route path="/bank/sign" element={<Bank />} />
-          <Route path="/attachments" element={<Attachments />} />
-          <Route path="/utility" element={<Utility />} />
-          <Route path="/tax" element={<Tax />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/attachments" element={<Navigate to="/v2/banken" replace />} />
+          <Route path="/utility" element={<Navigate to="/v2/forbrukning" replace />} />
+          <Route path="/tax" element={<Navigate to="/v2/skatten" replace />} />
+          <Route path="/reports" element={<Navigate to="/v2/portfolio" replace />} />
+          <Route path="/settings" element={<Navigate to="/v2/hub" replace />} />
           <Route path="/Callback" element={<TibberCallback />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<RoleAwareHomeRedirect />} />
         </Routes>
       </main>
       </div>

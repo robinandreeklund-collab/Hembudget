@@ -165,15 +165,27 @@ def compute_monthly_drift(
         result.add("economy", +1, "aktivt sparmål satt")
 
     # === HEALTH ===
+    # Vård + hygien (apotek/tandläkare/1177)
     health_keywords = ("hälsa", "hygien", "vård", "tand", "1177", "apotek")
     health_spend = _category_spend_in_month(
         scope_session, year_month, health_keywords,
     )
     if health_spend >= 2000:
-        result.add("health", +1, "investerat i hälsa")
-    elif health_spend == 0:
-        # Vi vet inte om eleven negligerade hälsan eller om månaden bara var lugn
-        pass
+        result.add("health", +1, "investerat i hälsa/vård")
+
+    # Motion · sport · träning · gym · idrott
+    # Padelbana, gym, Stadium, simhall, spinning, löparbana, etc.
+    sport_keywords = (
+        "padel", "gym", "träning", "fitness", "stadium",
+        "simhall", "spinning", "yoga", "klätter", "löpning",
+        "sats", "friskis", "actic", "nordicwell", "12till12",
+        "tennishall", "innebandy", "fotboll", "ishall", "skid",
+    )
+    sport_spend = _category_spend_in_month(
+        scope_session, year_month, sport_keywords,
+    )
+    if sport_spend >= 200:
+        result.add("health", +2, f"motion/sport ({int(sport_spend)} kr)")
 
     alcohol_kw = ("alkohol", "system", "krog", "bar")
     alcohol_spend = _category_spend_in_month(

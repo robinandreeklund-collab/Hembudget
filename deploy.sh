@@ -27,9 +27,12 @@ REGION="${REGION:-europe-west1}"
 # Default-projekt — används automatiskt om ingen PROJECT_ID är satt och
 # gcloud config saknar projekt. Överstyrs via env: PROJECT_ID=xxx ./deploy.sh
 DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID:-hembudget}"
-MEMORY="${MEMORY:-1Gi}"
+MEMORY="${MEMORY:-2Gi}"
 CPU="${CPU:-1}"
-CONCURRENCY="${CONCURRENCY:-40}"
+# Concurrency 40 var för aggressivt: 40 parallella requests delade
+# en pool på 4+4 connections + bygger upp request-state. Vi körde
+# in i både QueuePool-timeouts OCH 1 GiB-minnetaket. Sänk till 20.
+CONCURRENCY="${CONCURRENCY:-20}"
 TIMEOUT="${TIMEOUT:-300}"
 MAX_INSTANCES="${MAX_INSTANCES:-5}"
 MIN_INSTANCES="${MIN_INSTANCES:-0}"
@@ -294,9 +297,81 @@ if [[ "$MODE" == "school" ]]; then
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_NAME=$TEACHER_NAME"
     fi
 
-    # Skol-läge låser till 1 instans — SQLite-filer delas inte över instanser
-    MAX_INSTANCES=1
-    MIN_INSTANCES=1
+    # Skol-läge med PgBouncer · containern startar PgBouncer som
+    # connection-multiplexer mellan FastAPI och Cloud SQL. Det
+    # tillåter MAX_INSTANCES > 1 utan att Cloud SQL-cap sprängs:
+    # varje instans håller bara PGBOUNCER_POOL_SIZE server-conn
+    # mot DB:n.
+    #
+    # Aktuell deploy: db-g1-small (50 conn cap).
+    # Beräkning: N_INSTANCES × PGBOUNCER_POOL_SIZE + Postgres-internal
+    # (≈10) ≤ 50.
+    #
+    #   5 inst × 6 pool + 10 internal = 40 conn  ← VAL (headroom)
+    #   3 inst × 12 pool + 10 internal = 46 conn (mer per inst)
+    #   5 inst × 8 pool + 10 internal = 50 conn (max-utnyttjat)
+    #
+    # 5 instanser = bättre fördelning av elev-requests över Cloud Run-
+    # autoscaling. Concurrency 40 per inst = 5 × 40 = 200 simultaneous
+    # requests — täcker en hel klass + lärare med headroom.
+    #
+    # Vid Cloud SQL-uppgradering: bumpa PGBOUNCER_POOL_SIZE eller
+    # MAX_INSTANCES utan kod-deploy:
+    #   gcloud run services update hembudget --region=europe-west1 \
+    #     --update-env-vars=PGBOUNCER_POOL_SIZE=12
+    MAX_INSTANCES="${MAX_INSTANCES:-5}"
+    MIN_INSTANCES="${MIN_INSTANCES:-1}"
+    CONCURRENCY="${CONCURRENCY:-40}"
+    PGBOUNCER_POOL_SIZE="${PGBOUNCER_POOL_SIZE:-6}"
+    PGBOUNCER_MAX_CLIENT_CONN="${PGBOUNCER_MAX_CLIENT_CONN:-200}"
+    ENV_VARS+=",PGBOUNCER_POOL_SIZE=${PGBOUNCER_POOL_SIZE}"
+    ENV_VARS+=",PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}"
+
+    # Redis-cache · 30s-aggregat-cache av /v2/hub. Stor win på heavy
+    # endpoints. Två alternativ:
+    #
+    #   1. Upstash (rekommenderat för småstart) · gratis-tier 10 000
+    #      ops/dag = ~333 ops/min = räcker 1-2 klasser. Ingen VPC,
+    #      ingen Memorystore-kostnad. Skapa konto på upstash.com,
+    #      kopiera Redis URL (rediss://default:TOKEN@HOST:PORT) och
+    #      sätt som env-var:
+    #        UPSTASH_REDIS_URL=rediss://... ./deploy.sh
+    #
+    #   2. Memorystore basic (~$30/mån) · skapas via:
+    #        gcloud redis instances create hembudget-cache \
+    #          --size=1 --region=europe-west1 --tier=basic
+    #      Kräver VPC connector — mer setup.
+    #
+    # Utan REDIS_URL faller appen tillbaka till in-memory-cache per
+    # Cloud Run-instans (mindre effektivt med multi-instans men
+    # fungerande).
+    if [[ -n "${UPSTASH_REDIS_URL:-}" ]]; then
+        # Skicka in via Cloud Run-secret så token inte hamnar i
+        # revisionsbeskrivningen plain-text.
+        REDIS_SECRET_NAME="hembudget-redis-url"
+        if ! gcloud secrets describe "$REDIS_SECRET_NAME" \
+                --project="$PROJECT_ID" >/dev/null 2>&1; then
+            printf "%s" "$UPSTASH_REDIS_URL" | gcloud secrets create \
+                "$REDIS_SECRET_NAME" --data-file=- \
+                --project="$PROJECT_ID" --quiet
+        else
+            printf "%s" "$UPSTASH_REDIS_URL" | gcloud secrets versions add \
+                "$REDIS_SECRET_NAME" --data-file=- \
+                --project="$PROJECT_ID" --quiet
+        fi
+        if [[ -n "$SA_EMAIL" ]]; then
+            gcloud secrets add-iam-policy-binding "$REDIS_SECRET_NAME" \
+                --member="serviceAccount:${SA_EMAIL}" \
+                --role="roles/secretmanager.secretAccessor" \
+                --project="$PROJECT_ID" --quiet 2>/dev/null || true
+        fi
+        ok "Redis-cache aktiv via Upstash"
+    elif [[ -n "${HEMBUDGET_REDIS_URL:-}" ]]; then
+        ENV_VARS+=",HEMBUDGET_REDIS_URL=${HEMBUDGET_REDIS_URL}"
+        ok "Redis-cache aktiv via HEMBUDGET_REDIS_URL"
+    else
+        info "Cache: in-memory (per Cloud Run-instans · sätt UPSTASH_REDIS_URL för delad cache)"
+    fi
 
     info "MODE=school: lärare/elev-läge aktiveras"
     info "  Bootstrap-kod: $BOOTSTRAP_SECRET (spara den — behövs för första lärarinlog)"
@@ -337,9 +412,13 @@ DEPLOY_ARGS=(
 # Cloud SQL: koppla in Postgres-instansen + injicera DATABASE_URL
 # som secret så lösenordet inte hamnar i revisionsbeskrivningen
 if [[ "$MODE" == "school" && -n "$CLOUDSQL_INSTANCE_CONN" ]]; then
+    SECRET_BINDS="HEMBUDGET_DATABASE_URL=hembudget-database-url:latest"
+    if [[ -n "${UPSTASH_REDIS_URL:-}" ]]; then
+        SECRET_BINDS="${SECRET_BINDS},HEMBUDGET_REDIS_URL=hembudget-redis-url:latest"
+    fi
     DEPLOY_ARGS+=(
         --add-cloudsql-instances="$CLOUDSQL_INSTANCE_CONN"
-        --update-secrets="HEMBUDGET_DATABASE_URL=hembudget-database-url:latest"
+        --update-secrets="$SECRET_BINDS"
     )
 fi
 
