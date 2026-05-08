@@ -32,12 +32,12 @@ CPU="${CPU:-1}"
 # Concurrency 40 var för aggressivt: 40 parallella requests delade
 # en pool på 4+4 connections + bygger upp request-state. Vi körde
 # in i både QueuePool-timeouts OCH 1 GiB-minnetaket. Sänk till 20.
-CONCURRENCY="${CONCURRENCY:-20}"
+CONCURRENCY="${CONCURRENCY:-40}"
 TIMEOUT="${TIMEOUT:-300}"
-# OBS: MAX_INSTANCES=1 är default igen efter att PgBouncer-skalningen
-# rullades tillbaka (login-500 i prod). När vi får PgBouncer stabil
-# kan vi bumpa upp + sätta HEMBUDGET_ENABLE_PGBOUNCER=1.
-MAX_INSTANCES="${MAX_INSTANCES:-1}"
+# Multi-instans + PgBouncer (default på, se HEMBUDGET_ENABLE_PGBOUNCER).
+# 5 inst × 40 concurrency = 200 simultana requests. Conn-budgeten
+# bygger på Cloud SQL db-custom-1-3840 (100 conn cap).
+MAX_INSTANCES="${MAX_INSTANCES:-5}"
 MIN_INSTANCES="${MIN_INSTANCES:-0}"
 
 # ----- Färger för output -----
@@ -166,7 +166,12 @@ if [[ "$MODE" == "school" ]]; then
         DB_INSTANCE="${DB_INSTANCE:-hembudget-pg}"
         DB_NAME="${DB_NAME:-hembudget}"
         DB_USER="${DB_USER:-hembudget}"
-        DB_TIER="${DB_TIER:-db-f1-micro}"
+        # db-custom-1-3840 (1 vCPU, 3.75 GB · ~$30/mån i europe-west1)
+        # ger 100 conn-cap → headroom för 5 Cloud Run-inst × 8 PgBouncer-
+        # pool × 2 revisions-overlap = 80 conn under deploy. db-f1-micro
+        # (~25 cap) och db-g1-small (~50) räcker INTE när vi vill ha
+        # multi-instans. Bumpas explicit via DB_TIER=db-g1-small ./deploy.sh.
+        DB_TIER="${DB_TIER:-db-custom-1-3840}"
 
         info "Persistens: Cloud SQL Postgres ($DB_INSTANCE / $DB_NAME)"
 
@@ -174,9 +179,9 @@ if [[ "$MODE" == "school" ]]; then
         gcloud services enable sqladmin.googleapis.com \
             --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
-        # Skapa instansen om den inte finns. db-f1-micro är gratis-
-        # tier-kompatibel för testning. För prod bumpa till db-g1-small
-        # eller större via DB_TIER=db-g1-small ./deploy.sh.
+        # Skapa instansen om den inte finns. För prod-skala kör vi
+        # db-custom-1-3840 (100 conn cap). För prototyp/test kan du
+        # börja på db-f1-micro via DB_TIER=db-f1-micro.
         if ! gcloud sql instances describe "$DB_INSTANCE" \
                 --project="$PROJECT_ID" >/dev/null 2>&1; then
             info "Skapar Cloud SQL-instans $DB_INSTANCE ($DB_TIER) — tar 5-10 min…"
@@ -190,7 +195,22 @@ if [[ "$MODE" == "school" ]]; then
                 --storage-auto-increase \
                 --quiet
         else
-            ok "Cloud SQL-instans $DB_INSTANCE finns"
+            # Auto-uppgradera till önskad tier om befintlig är mindre.
+            # gcloud sql instances patch är online (kort restart, ~1-2 min
+            # nedtid). Hoppas över om DB_TIER redan matchar.
+            CURRENT_TIER=$(gcloud sql instances describe "$DB_INSTANCE" \
+                --project="$PROJECT_ID" \
+                --format='value(settings.tier)' 2>/dev/null || true)
+            if [[ -n "$CURRENT_TIER" && "$CURRENT_TIER" != "$DB_TIER" ]]; then
+                warn "Cloud SQL-tier är $CURRENT_TIER · uppgraderar till $DB_TIER (ger ~1-2 min nedtid)"
+                gcloud sql instances patch "$DB_INSTANCE" \
+                    --project="$PROJECT_ID" \
+                    --tier="$DB_TIER" \
+                    --quiet
+                ok "Cloud SQL uppgraderad till $DB_TIER"
+            else
+                ok "Cloud SQL-instans $DB_INSTANCE finns ($CURRENT_TIER)"
+            fi
         fi
 
         # Skapa databas om saknas
@@ -300,22 +320,32 @@ if [[ "$MODE" == "school" ]]; then
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_NAME=$TEACHER_NAME"
     fi
 
-    # Skol-läge · DIRECT-CONNECT mot Cloud SQL (PgBouncer rullades
-    # tillbaka efter prod-incident där conn-cap sprängdes). Beräkning:
+    # Skol-läge · PgBouncer-multiplexer mot Cloud SQL.
     #
-    #   1 inst × (10+10 master + 8+8 scope) = 36 max conn + Postgres-
-    #   internal (~10) = ~46 av 50 (db-g1-small). Säkert med headroom.
+    # Conn-budget på db-custom-1-3840 (100 conn cap):
+    #   - Postgres-internal (autovacuum, replication-slots): ~10
+    #   - Tillgängliga för app: ~90
+    #   - Per Cloud Run-inst: PGBOUNCER_POOL_SIZE = 8 server-conn
+    #   - 5 instanser × 8 = 40 conn vid full last
+    #   - Under deploy: gammal + ny revision överlappar kort →
+    #     2 × 40 = 80 conn (fitsar i 90)
     #
-    # Återaktivera PgBouncer-skalning per-deploy genom att sätta:
-    #   HEMBUDGET_ENABLE_PGBOUNCER=1 MAX_INSTANCES=5 ./deploy.sh
-    # (kräver att PgBouncer-flödet i entrypoint.sh + containern är
-    #  verifierat först — gör i ett testprojekt innan prod).
-    if [[ "${HEMBUDGET_ENABLE_PGBOUNCER:-0}" == "1" ]]; then
+    # PgBouncer på som default (HEMBUDGET_ENABLE_PGBOUNCER=1). Stäng av
+    # tillfälligt vid debug:
+    #   HEMBUDGET_ENABLE_PGBOUNCER=0 MAX_INSTANCES=1 ./deploy.sh
+    HEMBUDGET_ENABLE_PGBOUNCER="${HEMBUDGET_ENABLE_PGBOUNCER:-1}"
+    if [[ "${HEMBUDGET_ENABLE_PGBOUNCER}" == "1" ]]; then
         ENV_VARS+=",HEMBUDGET_ENABLE_PGBOUNCER=1"
-        PGBOUNCER_POOL_SIZE="${PGBOUNCER_POOL_SIZE:-6}"
+        PGBOUNCER_POOL_SIZE="${PGBOUNCER_POOL_SIZE:-8}"
         PGBOUNCER_MAX_CLIENT_CONN="${PGBOUNCER_MAX_CLIENT_CONN:-200}"
         ENV_VARS+=",PGBOUNCER_POOL_SIZE=${PGBOUNCER_POOL_SIZE}"
         ENV_VARS+=",PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}"
+        info "PgBouncer på · pool=${PGBOUNCER_POOL_SIZE} · max-instances=${MAX_INSTANCES}"
+    else
+        info "PgBouncer av · direct-connect mot Cloud SQL · max-instances=${MAX_INSTANCES}"
+        if [[ "$MAX_INSTANCES" -gt 1 ]]; then
+            warn "MAX_INSTANCES=$MAX_INSTANCES utan PgBouncer riskerar conn-cap. Sätt MAX_INSTANCES=1."
+        fi
     fi
 
     # Redis-cache · 30s-aggregat-cache av /v2/hub. Stor win på heavy

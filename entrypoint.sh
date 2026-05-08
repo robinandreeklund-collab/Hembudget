@@ -87,8 +87,33 @@ if [[ "${PGBOUNCER_ENABLED}" == "1" ]]; then
     PGBOUNCER_PID=$!
     echo "[entrypoint] PgBouncer startad · PID=${PGBOUNCER_PID}"
 
-    # Vänta 1 sek så PgBouncer hunnit binda port 6432
-    sleep 1
+    # Probe TCP localhost:6432 tills PgBouncer accepterar connections.
+    # Tidigare 'sleep 1' lät uvicorn starta även om pgbouncer dog
+    # direkt (config-fel, auth-fel, port redan tagen) — appen kraschade
+    # då på första query och Cloud Run-loggen blev förvirrande.
+    # Nu: max ~10s vänt + tydligt fel om pgbouncer inte kommer upp.
+    PGB_READY=0
+    for i in $(seq 1 20); do
+        # Verifiera först att processen lever — annars är det meningslöst
+        # att probe:a porten.
+        if ! kill -0 "${PGBOUNCER_PID}" 2>/dev/null; then
+            echo "[entrypoint] FATAL: PgBouncer-processen (PID=${PGBOUNCER_PID}) dog under start"
+            wait "${PGBOUNCER_PID}" 2>/dev/null || true
+            exit 1
+        fi
+        # bash /dev/tcp · 2>/dev/null sväljer "Connection refused"-skräp.
+        if (echo > /dev/tcp/127.0.0.1/6432) 2>/dev/null; then
+            PGB_READY=1
+            echo "[entrypoint] PgBouncer redo efter ${i} probe(s)"
+            break
+        fi
+        sleep 0.5
+    done
+    if [[ "${PGB_READY}" != "1" ]]; then
+        echo "[entrypoint] FATAL: PgBouncer band inte 127.0.0.1:6432 inom 10s"
+        kill "${PGBOUNCER_PID}" 2>/dev/null || true
+        exit 1
+    fi
 
     # Skriv om HEMBUDGET_DATABASE_URL så appen ansluter mot PgBouncer
     # (TCP localhost:6432) istället för direkt mot Cloud SQL.
