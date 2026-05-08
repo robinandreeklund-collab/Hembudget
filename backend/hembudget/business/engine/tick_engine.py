@@ -274,6 +274,21 @@ def _phase_b_collect_payments(
             inv.paid_on = today
             if job is not None:
                 job.status = "paid"
+            # Bokför income-transaktionen — annars syns inte fakturan i
+            # kassan eller i Allabolags omsättning. Manuell mark-paid
+            # (api/foretag.py) gör samma sak; auto-betalningen här
+            # tappade tx tidigare → bolaget visade "0 kr omsättning"
+            # trots att fakturan stod som betald.
+            s.add(CompanyTransaction(
+                company_id=inv.company_id,
+                occurred_on=inv.paid_on,
+                kind="income",
+                category="Försäljning",
+                description=f"Faktura {inv.invoice_number} betald",
+                amount_excl_vat=inv.amount_excl_vat,
+                vat_rate=inv.vat_rate,
+                vat_amount=inv.vat_amount or Decimal(0),
+            ))
             summary.invoices_paid_now += 1
 
 

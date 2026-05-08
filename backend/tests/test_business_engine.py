@@ -468,3 +468,53 @@ def test_tick_basics_has_no_random_events(session, company):
     company.level = "basics"
     summary = run_business_week(session, company=company)
     assert summary.events_triggered == 0
+
+
+def test_auto_paid_invoice_books_income_transaction(session, company):
+    """Regression: tick:s auto-pay sätter status=paid men tappade tidigare
+    bort income-tx → Allabolags omsättning visade 0 trots betald faktura."""
+    from hembudget.business.models import CompanyCustomer, CompanyTransaction
+
+    cust = CompanyCustomer(company_id=company.id, name="Storkund AB")
+    session.add(cust); session.flush()
+
+    # Skapa flera förfallna fakturor — payment_morality default är 0.92
+    # så p(ingen betalas) = 0.08^5 ≈ 3 × 10⁻⁵. Negligibelt.
+    overdue_on = date.today() - timedelta(days=10)
+    for i in range(5):
+        session.add(CompanyInvoice(
+            company_id=company.id,
+            customer_id=cust.id,
+            invoice_number=f"F-{i+1:03d}",
+            issued_on=overdue_on - timedelta(days=20),
+            due_on=overdue_on,
+            description=f"Test-faktura {i+1}",
+            amount_excl_vat=Decimal("5000"),
+            vat_rate=Decimal("0.25"),
+            vat_amount=Decimal("1250"),
+            status="sent",
+        ))
+    session.flush()
+
+    income_before = session.query(CompanyTransaction).filter(
+        CompanyTransaction.company_id == company.id,
+        CompanyTransaction.kind == "income",
+    ).count()
+
+    run_business_week(session, company=company)
+
+    paid = session.query(CompanyInvoice).filter(
+        CompanyInvoice.company_id == company.id,
+        CompanyInvoice.status == "paid",
+    ).all()
+    assert len(paid) >= 1, "minst en av 5 fakturor borde auto-betalats"
+
+    income_after = session.query(CompanyTransaction).filter(
+        CompanyTransaction.company_id == company.id,
+        CompanyTransaction.kind == "income",
+        CompanyTransaction.category == "Försäljning",
+    ).count()
+    assert income_after - income_before >= len(paid), (
+        f"Varje auto-paid faktura ska bokas som income-tx. "
+        f"paid={len(paid)} men nya income-tx={income_after - income_before}"
+    )
