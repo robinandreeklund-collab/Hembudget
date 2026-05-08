@@ -1365,9 +1365,23 @@ class SupplierInvoiceOut(BaseModel):
     status: str
     paid_on: Optional[str]
     notes: Optional[str]
+    # Spel-tid-jämförelse · True om förfallodag passerat enligt
+    # spel-tid (synkat med privat). Frontend ska INTE räkna detta
+    # själv mot real-tid (= maj 2026 medan eleven är på spel-januari).
+    is_overdue: bool = False
+    days_overdue: int = 0
+    days_until_due: int = 0
 
 
 def _to_supplier_out(si: SupplierInvoice) -> SupplierInvoiceOut:
+    today_g = current_game_date()
+    is_overdue = bool(
+        si.status == "open"
+        and si.due_on is not None
+        and si.due_on < today_g
+    )
+    days_overdue = max(0, (today_g - si.due_on).days) if si.due_on else 0
+    days_until_due = max(0, (si.due_on - today_g).days) if si.due_on else 0
     return SupplierInvoiceOut(
         id=si.id,
         sender_name=si.sender_name,
@@ -1381,6 +1395,9 @@ def _to_supplier_out(si: SupplierInvoice) -> SupplierInvoiceOut:
         status=si.status,
         paid_on=si.paid_on.isoformat() if si.paid_on else None,
         notes=si.notes,
+        is_overdue=is_overdue,
+        days_overdue=days_overdue,
+        days_until_due=days_until_due,
     )
 
 

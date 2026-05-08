@@ -60,7 +60,13 @@ export function HubV2() {
             setLatestEvent(null);
             return;
           }
-          const today = new Date().toISOString().slice(0, 10);
+          // Använd SPEL-tid för "overdue"-sortering · annars använder
+          // vi real-tid (= maj 2026 medan eleven är på spel-januari)
+          // och eventcard plockar fakturor som inte är förfallna än.
+          const today = (
+            (d as any).game_time?.iso_date
+            || new Date().toISOString().slice(0, 10)
+          );
           const invoices = items.filter(
             (i) => i.mail_type === "invoice" && i.due_date,
           );
@@ -591,7 +597,9 @@ export function HubV2() {
         )}
 
         {/* Bug 6 · HÄNDELSE under pentagon (matchar demo .event-card) */}
-        {latestEvent && <EventCard mail={latestEvent} />}
+        {latestEvent && (
+          <EventCard mail={latestEvent} todayIso={hub.game_time?.iso_date} />
+        )}
 
         {/* === KOMPASSEN · navigation till alla aktörer + verktyg === */}
         <div className="compass" data-guide="hub-compass">
@@ -780,8 +788,13 @@ export function HubV2() {
  * EventCard · senaste händelse under pentagon (Bug 6).
  * Matchar demo .event-card-stilen i /proposals/vol-7/elev.html.
  */
-function EventCard({ mail }: { mail: V2MailItem }) {
-  const today = new Date().toISOString().slice(0, 10);
+function EventCard({
+  mail, todayIso,
+}: { mail: V2MailItem; todayIso?: string }) {
+  // SPEL-tid · todayIso kommer från hub.game_time.iso_date. Om
+  // den saknas (legacy-fall) faller vi tillbaka till real-tid men
+  // det är fel · alltid bättre att skicka in spel-tiden.
+  const today = todayIso || new Date().toISOString().slice(0, 10);
   const isOverdue = mail.due_date != null && mail.due_date < today;
   const isInvoice = mail.mail_type === "invoice";
   const amount = mail.amount != null ? Math.abs(mail.amount) : null;

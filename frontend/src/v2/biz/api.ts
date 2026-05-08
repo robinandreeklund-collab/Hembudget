@@ -577,6 +577,9 @@ export type SupplierInvoice = {
   status: string;
   paid_on: string | null;
   notes: string | null;
+  is_overdue: boolean;
+  days_overdue: number;
+  days_until_due: number;
 };
 
 export type TickResult = {

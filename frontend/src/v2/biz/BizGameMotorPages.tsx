@@ -2371,10 +2371,11 @@ export function BizLeverantorer() {
     return "5610 / 2641 (förslag)";
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // is_overdue räknas backend-side mot SPEL-tid · använd INTE
+  // new Date() (= real-tid maj medan eleven är på spel-januari).
   const open = invoices.filter((i) => i.status === "open");
   const paid = invoices.filter((i) => i.status === "paid");
-  const overdue = open.filter((i) => i.due_on < today);
+  const overdue = open.filter((i) => i.is_overdue);
   const dueThisWeek = open
     .reduce((acc, i) => acc + i.amount_excl_vat, 0);
   const vatThisWeek = Math.round(dueThisWeek * 0.20); // 25 % moms av 1.25-multipel
@@ -2429,7 +2430,7 @@ export function BizLeverantorer() {
             <span></span>
           </div>
           {invoices.map((si) => {
-            const isOverdue = si.status === "open" && si.due_on < today;
+            const isOverdue = si.status === "open" && si.is_overdue;
             const isOpen = si.status === "open";
             const fromTeacher = si.source === "teacher";
             return (

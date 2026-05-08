@@ -450,8 +450,11 @@ function BizCharCard({
  * BizEventCard · matchar prototyp rad 5400-5414 (senaste händelse)
  * ====================================================================== */
 function BizEventCard({ invoice }: { invoice: CompanyInvoice }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const overdue = invoice.status === "sent" && invoice.due_on < today;
+  // is_overdue räknas backend-side mot SPEL-tid · använd INTE
+  // new Date() (= real-tid maj 2026 medan eleven är på spel-januari).
+  // En faktura med due_on 15 feb sade "förföll" för att maj > feb,
+  // trots att eleven är på 20 januari.
+  const overdue = invoice.status === "sent" && invoice.is_overdue;
   return (
     <article className="biz-event-card">
       <div className="biz-event-eye">

@@ -10766,3 +10766,88 @@ def test_signed_upcoming_auto_debits_when_due(fx):
         assert tx.account_id == checking_id
         assert "Autogiro" in (tx.raw_description or "")
     _scope_run(sid, check)
+
+
+def test_supplier_invoice_not_marked_overdue_when_future_due(fx):
+    """SupplierInvoiceOut.is_overdue ska vara False för fakturor med
+    due_on i framtiden enligt SPEL-tid, även om real-tid är efter.
+
+    Repro: kund-faktura skapas med due 2026-02-15. Eleven är på
+    spel-Jan-20. Frontend visade 'Helena Sjöberg förföll 2026-02-15'
+    eftersom new Date() (= maj 2026) > feb 15. is_overdue beräknat
+    server-side mot spel-tid säger 'inte än'.
+    """
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Aktivera biz-mode för eleven (krävs för biz-endpoints)
+    from hembudget.school.models import Student
+    with master_session() as ms:
+        st = ms.get(Student, sid)
+        st.business_mode_enabled = True
+        ms.commit()
+
+    # Skapa company + skicka leverantörsfaktura med framtida due
+    # Direkt via DB · undviker API-overhead
+    from hembudget.business.models import Company, SupplierInvoice
+    from decimal import Decimal as _D
+
+    si_id = None
+
+    def setup(s):
+        nonlocal si_id
+        co = Company(
+            name="Test AB", form="aktiebolag",
+            org_number="556677-8899",
+            started_on=_spel_date(2026, 1, 1),
+            active=True, share_capital=25000,
+            industry_key="webshop_it_konsult",
+        )
+        s.add(co)
+        s.flush()
+        si = SupplierInvoice(
+            company_id=co.id,
+            sender_name="Vinci Energies",
+            invoice_number="V-001",
+            issued_on=_spel_date(2026, 1, 15),
+            due_on=_spel_date(2026, 2, 15),  # FRAMTIDA enligt spel-tid
+            description="test",
+            amount_excl_vat=12100,
+            vat_rate=_D("0.25"),
+            source="manual",
+            status="open",
+        )
+        s.add(si)
+        s.commit()
+        si_id = si.id
+    _scope_run(sid, setup)
+    assert si_id is not None
+
+    # Sätt scope-context och hämta SupplierInvoiceOut via _to_supplier_out
+    from hembudget.api.foretag_engine import _to_supplier_out
+    from hembudget.school.engines import (
+        scope_context, scope_for_student, get_scope_session,
+        set_current_actor_student,
+    )
+    with master_session() as ms:
+        st = ms.get(Student, sid)
+        sk = scope_for_student(st)
+    set_current_actor_student(sid)
+    try:
+        with scope_context(sk):
+            with get_scope_session(sk)() as scope_s:
+                si = scope_s.get(SupplierInvoice, si_id)
+                out = _to_supplier_out(si)
+    finally:
+        set_current_actor_student(None)
+
+    assert out.is_overdue is False, (
+        f"Faktura med due 2026-02-15 ska INTE vara overdue när "
+        f"eleven är på spel-Jan ~1. Fick is_overdue={out.is_overdue}, "
+        f"days_overdue={out.days_overdue}, "
+        f"days_until_due={out.days_until_due}"
+    )
+    assert out.days_until_due > 0, (
+        f"days_until_due ska vara positivt: {out.days_until_due}"
+    )
