@@ -519,7 +519,6 @@ function RingMeter({ pct, tone, suffix }: { pct: number; tone: string; suffix: s
   const SIZE = 180;
   const STROKE = 12;
   const R = (SIZE / 2) - STROKE;
-  const cx = SIZE / 2;
   const cy = SIZE / 2;
   // Halvcirkel: pi*R = båglängd. dasharray för bakgrundsbåge.
   const arcLen = Math.PI * R;
