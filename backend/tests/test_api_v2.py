@@ -9861,3 +9861,363 @@ def test_v2_arbetsformedlingen_rejected_logs_no_pentagon_zero(fx, monkeypatch) -
     )
     app_obj = next(a for a in apps_r.json() if a["id"] == app_id)
     assert app_obj["status"] in ("rejected", "offer_pending")
+
+
+# === Spel-tid-konsistens · regressionstester =======================
+#
+# Verifierar tre kritiska buggar som användaren rapporterade:
+#   Bug 1: Postlådan visar januari-fakturor som "betald" trots spel-tid 2 jan
+#   Bug 2: Aktieköp stämplas med real-tid (8 maj) i banken
+#   Bug 3: Inga sociala events skapas för en ny elev (idempotency-bug)
+# För Bug 3 är det viktigt att tester kontrollerar att seed-flödet
+# faktiskt skapar StudentEvent-rader för anchor-månaden (jan 2026).
+
+from datetime import date as _spel_date
+
+
+def _spel_create_student(client, tch_tok):
+    r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch_tok}"},
+        json={
+            "first_name": "Oliver",
+            "archetype": "vard_underskoterska",
+            "starting_level": 1,
+        },
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["student_id"]
+
+
+def _login_student(client, sid):
+    with master_session() as s:
+        st = s.get(Student, sid)
+        login_code = st.login_code
+    r = client.post("/student/login", json={"login_code": login_code})
+    assert r.status_code == 200, r.text
+    return r.json()["token"]
+
+
+def _scope_run(sid, fn):
+    from hembudget.school.engines import (
+        scope_context, scope_for_student, get_scope_session,
+    )
+    with master_session() as ms:
+        st = ms.get(Student, sid)
+        sk = scope_for_student(st)
+    with scope_context(sk):
+        with get_scope_session(sk)() as ss:
+            return fn(ss)
+
+
+# === Bug 1: postlådan-januari-fakturor =============================
+
+
+def test_seed_does_not_mark_future_january_invoices_as_paid(fx):
+    """Ny elev · januari-fakturor med due_date EFTER spel-tid (Jan 1)
+    ska INTE markeras som 'paid' av seed-sweepen.
+
+    Repro: användaren skapade ny elev (spel-tid Jan 2) och såg
+    Telia 7 jan, Folksam 8/9 jan, Västtrafik 10 jan — alla markerade
+    som 'paid' i postlådan trots att förfallodagen ännu inte passerat.
+    Buggen var att seed-sweepen jämförde mot date.today() (= maj 2026)
+    istället för spel-tid (= jan 1).
+    """
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    from hembudget.db.models import MailItem
+
+    def check(s):
+        # Hämta alla januari-fakturor
+        jan_invoices = (
+            s.query(MailItem)
+            .filter(
+                MailItem.mail_type == "invoice",
+                MailItem.due_date >= _spel_date(2026, 1, 1),
+                MailItem.due_date <= _spel_date(2026, 1, 31),
+            )
+            .all()
+        )
+        # Det ska finnas några fakturor (fixed_expenses seedar 5-7/månad)
+        assert len(jan_invoices) > 0, (
+            "fixed_expenses ska seeda januari-fakturor"
+        )
+        # MINST en av dem ska vara unhandled (förfaller längre fram än
+        # spel-Jan-1) — annars har sweepen markerat allt som paid igen.
+        unhandled = [
+            m for m in jan_invoices if m.status == "unhandled"
+        ]
+        # Hyresavi 1 januari kan vara markerad som paid (förfaller dag 1)
+        # men fakturor som förfaller längre fram ska INTE vara paid.
+        future_jan = [
+            m for m in jan_invoices
+            if m.due_date is not None and m.due_date >= _spel_date(2026, 1, 7)
+        ]
+        future_jan_paid = [m for m in future_jan if m.status == "paid"]
+        assert not future_jan_paid, (
+            f"Januari-fakturor med due_date >= 7 jan ska INTE vara paid: "
+            f"{[(m.id, m.subject, m.due_date.isoformat(), m.status) for m in future_jan_paid]}"
+        )
+        # Vi borde se MINST en unhandled januari-faktura
+        assert len(unhandled) > 0, (
+            f"Det borde finnas minst en unhandled januari-faktura. "
+            f"Status-fördelning: "
+            f"{[(m.subject, m.due_date.isoformat(), m.status) for m in jan_invoices]}"
+        )
+
+    _scope_run(sid, check)
+
+
+def test_seed_keeps_dec_invoices_paid(fx):
+    """December 2025-fakturor SKA vara paid (de är historik från
+    eleven sett spel-tid Jan 2026)."""
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    from hembudget.db.models import MailItem
+
+    def check(s):
+        dec_invoices = (
+            s.query(MailItem)
+            .filter(
+                MailItem.mail_type == "invoice",
+                MailItem.due_date >= _spel_date(2025, 12, 1),
+                MailItem.due_date <= _spel_date(2025, 12, 31),
+            )
+            .all()
+        )
+        assert len(dec_invoices) > 0
+        non_paid = [m for m in dec_invoices if m.status != "paid"]
+        assert not non_paid, (
+            f"Dec-fakturor borde alla vara paid: "
+            f"{[(m.subject, m.status) for m in non_paid]}"
+        )
+
+    _scope_run(sid, check)
+
+
+# === Bug 2: aktieköp stämplas med spel-tid =========================
+
+
+def test_stock_buy_uses_game_time(fx):
+    """Köp av aktie ska bokföra Transaction.date i spel-tid (Jan 1)
+    inte real-tid (May 7)."""
+    client, tch, *_ = fx
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    # Hitta ISK-kontot · seed skapar typiskt ett "isk"-konto. Annars
+    # skapa ett enkelt konto (Account har inte 'balance_initial' utan
+    # 'opening_balance').
+    from hembudget.db.models import Account, Transaction as _Tx_seed
+    from decimal import Decimal as _Dec
+    isk_account_id = None
+
+    def find_or_create_isk(s):
+        nonlocal isk_account_id
+        acc = (
+            s.query(Account)
+            .filter(Account.type == "isk")
+            .first()
+        )
+        if acc is None:
+            acc = Account(
+                name="ISK", bank="Test", type="isk",
+                currency="SEK",
+                opening_balance=_Dec("50000"),
+            )
+            s.add(acc)
+            s.flush()
+        else:
+            # Säkerställ tillräckligt saldo för testet
+            acc.opening_balance = (
+                acc.opening_balance or _Dec("0")
+            ) + _Dec("50000")
+        s.commit()
+        isk_account_id = acc.id
+    _scope_run(sid, find_or_create_isk)
+    assert isk_account_id is not None
+
+    # Köp 1 aktie via /v2/stocks/{ticker}/buy (om endpoint finns)
+    # Annars · kalla direkt på buy_stock-funktionen
+    from hembudget.stocks.trading import buy_stock
+    from hembudget.db.models import Transaction
+    # Behöver master-session för att hämta StockQuote
+    from hembudget.school.engines import (
+        master_session as ms_, scope_context as sc_,
+        scope_for_student as sfs_, get_scope_session as gss_,
+    )
+    with ms_() as ms:
+        st = ms.get(Student, sid)
+        sk = sfs_(st)
+        # Säkerställ att en aktie + senaste kurs finns i master
+        from hembudget.school.stock_models import (
+            StockMaster, LatestStockQuote,
+        )
+        from decimal import Decimal as _D
+        stock = ms.query(StockMaster).filter(
+            StockMaster.ticker == "TEST.ST",
+        ).first()
+        if stock is None:
+            stock = StockMaster(
+                ticker="TEST.ST",
+                name="Test Bolag AB",
+                sector="Test",
+                currency="SEK",
+                exchange="XSTO",
+            )
+            ms.add(stock)
+            ms.flush()
+        latest = ms.query(LatestStockQuote).filter(
+            LatestStockQuote.ticker == "TEST.ST",
+        ).first()
+        if latest is None:
+            latest = LatestStockQuote(
+                ticker="TEST.ST",
+                last=_D("100.00"),
+                ts=datetime.utcnow(),
+                quote_id=1,
+            )
+            ms.add(latest)
+        else:
+            latest.last = _D("100.00")
+            latest.ts = datetime.utcnow()
+        ms.commit()
+
+        # Sätt aktör så current_game_date() kan slå upp student.created_at.
+        # I prod görs detta av StudentScopeMiddleware vid varje request.
+        from hembudget.school.engines import (
+            set_current_actor_student,
+        )
+        set_current_actor_student(sid)
+        with sc_(sk):
+            with gss_(sk)() as scope_s:
+                buy_stock(
+                    scope_session=scope_s,
+                    master_session=ms,
+                    account_id=isk_account_id,
+                    ticker="TEST.ST",
+                    quantity=1,
+                    student_rationale="test",
+                    require_market_open=False,
+                )
+                scope_s.commit()
+        set_current_actor_student(None)
+
+    # Verifiera att Transaction.date är i januari 2026 (spel-tid)
+    def check_tx(s):
+        tx = (
+            s.query(Transaction)
+            .filter(Transaction.raw_description.like("Köp%TEST.ST%"))
+            .first()
+        )
+        # Om ingen träff på TEST.ST · sök på "Köp 1 st%"
+        if tx is None:
+            tx = (
+                s.query(Transaction)
+                .filter(Transaction.raw_description.like("Köp 1 st%"))
+                .first()
+            )
+        assert tx is not None, "Förväntade en köp-transaktion"
+        # Eleven är på spel-tid Jan 2 (anchor + 0 sek delta)
+        # Transaction.date ska vara i januari 2026, INTE i maj
+        assert tx.date.year == 2026, f"år: {tx.date}"
+        assert tx.date.month == 1, (
+            f"Transaction.date.month = {tx.date.month} "
+            f"(förväntade jan/1, fick {tx.date.isoformat()})"
+        )
+
+    _scope_run(sid, check_tx)
+
+
+# === Bug 3: sociala events skapas för anchor-månaden ===============
+
+
+def test_social_events_created_for_anchor_month(fx):
+    """Ny elev ska ha StudentEvent-rader för anchor-månaden (jan 2026)
+    så /events/pending kan visa något att acceptera/neka.
+
+    Buggen: tick_for_student använde StudentEvent.created_at (real-tid)
+    för idempotency-check. Första seed-tick:en (oct 2025) skapade
+    events med created_at=NOW. Nästa tick (nov, dec, jan) såg samma
+    'created_at >= week_start' → skip. Resultat: bara oct-events fanns,
+    de expirerade direkt vid spel-tid jan 2.
+    """
+    client, tch, *_ = fx
+    # I prod seedar startup-hook event-templates · i test:en behöver vi
+    # göra det manuellt eftersom fixture:n inte kör @app.on_event-hooks.
+    from hembudget.school.event_seed import seed_event_templates
+    with master_session() as s:
+        seed_event_templates(s)
+        s.commit()
+
+    sid = _spel_create_student(client, tch)
+
+    from hembudget.db.models import StudentEvent
+    from hembudget.school.game_engine_models import WeekTickRun
+
+    # Verifiera att tick_month körts för Jan 2026 i master
+    with master_session() as db:
+        runs = db.query(WeekTickRun).filter(
+            WeekTickRun.student_id == sid,
+        ).all()
+        run_yms = sorted(r.year_month for r in runs)
+        assert "2026-01" in run_yms, (
+            f"WeekTickRun saknar 2026-01. Funna: {run_yms}"
+        )
+
+    def check(s):
+        # Hämta alla event-rader
+        all_events = s.query(StudentEvent).all()
+        # Det ska finnas events spridda över Oct/Nov/Dec 2025 + Jan 2026
+        # (1 tick per månad i seed)
+        months_with_events = {
+            (e.proposed_date.year, e.proposed_date.month)
+            for e in all_events
+            if e.proposed_date is not None
+        }
+        # Vi förväntar oss minst Oct + Jan (kan variera om tick:en
+        # slumpar 0 events i någon månad, men minst Jan ska finnas)
+        jan_events = [
+            e for e in all_events
+            if e.proposed_date is not None
+            and e.proposed_date.year == 2026
+            and e.proposed_date.month == 1
+        ]
+        assert len(jan_events) > 0, (
+            f"Inga jan-2026-events skapade. Funna månader: "
+            f"{sorted(months_with_events)}. "
+            f"Total events: {len(all_events)}"
+        )
+
+    _scope_run(sid, check)
+
+
+def test_pending_events_endpoint_returns_january_events(fx):
+    """/v2/events/pending ska returnera jan-2026-events för en ny elev."""
+    client, tch, *_ = fx
+    # Seed templates (startup-hook körs inte i fx-fixture)
+    from hembudget.school.event_seed import seed_event_templates
+    with master_session() as s:
+        seed_event_templates(s)
+        s.commit()
+
+    sid = _spel_create_student(client, tch)
+    stu_tok = _login_student(client, sid)
+
+    r = client.get(
+        "/events/pending",
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Ska ha minst 1 pending event (deadline framöver)
+    assert data["count"] > 0, (
+        f"Förväntade pending events för ny elev. Svar: {data}"
+    )
+    # Verifiera att eventen är i framtiden enligt spel-tid (deadline jan)
+    for ev in data["events"]:
+        deadline = ev["deadline"]
+        # Format: "2026-01-15"
+        assert deadline.startswith("2026-01") or deadline.startswith("2026-02"), (
+            f"Event-deadline borde vara jan/feb 2026, fick: {deadline}"
+        )

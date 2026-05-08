@@ -163,13 +163,19 @@ def tick_for_student(
     # Idempotency: om tick redan körts denna ISO-vecka för denna scope,
     # gör inget. Pickar samma vecka är meningslöst — eleven har redan
     # sina förslag.
+    #
+    # VIKTIGT: filter:a på proposed_date (= spel-tid) inte created_at
+    # (= real-tid). Annars skip:par seed-flödet alla månader EFTER den
+    # första eftersom alla events har created_at = NOW (real-tid). Det
+    # innebar att en ny elev fick events seedade BARA för Okt 2025 och
+    # alla expirerade direkt vid spel-tid Jan 2 → inga sociala events.
     week_start = date.fromisocalendar(today.year, week_n, 1)
+    week_end = week_start + timedelta(days=6)
     already_ticked = (
         scope_session.query(StudentEvent)
         .filter(
-            StudentEvent.created_at >= datetime.combine(
-                week_start, datetime.min.time(),
-            ),
+            StudentEvent.proposed_date >= week_start,
+            StudentEvent.proposed_date <= week_end,
             StudentEvent.source == "system",
         )
         .first()

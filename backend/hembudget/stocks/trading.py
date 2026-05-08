@@ -150,9 +150,16 @@ def buy_stock(
     )
     key = f"stockbuy-{account_id}-{ticker}-{quantity}-{price}-{datetime.utcnow().isoformat()}"
     h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    # Bokför transaktionen på SPEL-tid (synkat med privat-tid via
+    # business.game_clock) inte på real-tid. Annars dyker aktieköp
+    # upp på "8 maj" i banken trots att eleven är på "2 januari" i
+    # spel-världen. Aktiekursen kommer fortfarande från real-tid (yfinance)
+    # men datumet stämplas i spel-tid så banken är konsistent.
+    from ..business.game_clock import current_game_date as _cgd_buy
+    trade_date_game = _cgd_buy()
     cash_tx = Transaction(
         account_id=account_id,
-        date=date.today(),
+        date=trade_date_game,
         amount=-total,
         currency=acc.currency or "SEK",
         raw_description=(
@@ -169,7 +176,9 @@ def buy_stock(
     scope_session.add(cash_tx)
     scope_session.flush()
 
-    # 2. Skapa StockTransaction
+    # 2. Skapa StockTransaction · executed_at i SPEL-tid så lärar-
+    # ledger visar samma datum som banken (Transaction.date).
+    from datetime import datetime as _dt_buy, time as _t_buy
     st = StockTransaction(
         account_id=account_id,
         ticker=ticker,
@@ -182,6 +191,7 @@ def buy_stock(
         quote_id=latest.quote_id,
         transaction_id=cash_tx.id,
         student_rationale=student_rationale,
+        executed_at=_dt_buy.combine(trade_date_game, _t_buy(10, 0)),
     )
     scope_session.add(st)
     scope_session.flush()
@@ -300,9 +310,12 @@ def sell_stock(
     # 1. Skapa Transaction (positivt — pengar in)
     key = f"stocksell-{account_id}-{ticker}-{quantity}-{price}-{datetime.utcnow().isoformat()}"
     h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    # Spel-tid · samma som köp-flödet ovan
+    from ..business.game_clock import current_game_date as _cgd_sell
+    trade_date_game = _cgd_sell()
     cash_tx = Transaction(
         account_id=account_id,
-        date=date.today(),
+        date=trade_date_game,
         amount=net_proceeds,
         currency=acc.currency or "SEK",
         raw_description=f"Sälj {quantity} st {stock.name} @ {price}",
@@ -314,7 +327,8 @@ def sell_stock(
     scope_session.add(cash_tx)
     scope_session.flush()
 
-    # 2. StockTransaction
+    # 2. StockTransaction · executed_at i SPEL-tid
+    from datetime import datetime as _dt_sell, time as _t_sell
     st = StockTransaction(
         account_id=account_id,
         ticker=ticker,
@@ -327,6 +341,7 @@ def sell_stock(
         quote_id=latest.quote_id,
         transaction_id=cash_tx.id,
         student_rationale=student_rationale,
+        executed_at=_dt_sell.combine(trade_date_game, _t_sell(10, 0)),
     )
     scope_session.add(st)
     scope_session.flush()

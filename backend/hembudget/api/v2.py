@@ -18207,7 +18207,20 @@ def _seed_initial_student_data(
         from hashlib import sha256 as _sha_sweep
         with scope_context(scope_key):
             with session_scope() as s:
-                today_sweep = _d.today()
+                # SPEL-TID, inte real-tid · annars markeras alla
+                # januari-fakturor som paid eftersom Jan 5 < May 7
+                # (real-tid när seed kör). Det resulterade i att
+                # postlådan visade "betald" på fakturor från senare
+                # i januari trots att eleven är på Jan 2 i spel-tid.
+                #
+                # Vi använder current_game_date_for_student() (inte
+                # current_game_date()) eftersom seed körs i bakgrunds-
+                # jobb utan actor-ContextVar satt. Variant-funktionen
+                # tar student-id direkt och slår upp created_at.
+                from ..business.game_clock import (
+                    current_game_date_for_student,
+                )
+                today_sweep = current_game_date_for_student(student.id)
                 lonekonto = (
                     s.query(_Acc_sweep)
                     .filter(_Acc_sweep.type == "checking")
