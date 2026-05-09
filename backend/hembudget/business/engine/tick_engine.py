@@ -345,17 +345,35 @@ def _phase_c_generate_opportunities(
 
     # === Stad-multipliers · pris + pipeline-täthet ===
     # Stockholm-IT 1200 kr/h, Umeå-IT 850 kr/h. Storstad → fler offerter.
+    #
+    # FIX (Bug 18): tidigare användes cost_multiplier_housing direkt,
+    # men bostadskostnaden i Stockholm är 1.30 medan IT-konsult-priser
+    # är ~1.6x medel-stad. För catering är skillnaden mindre. En egen
+    # business-multiplier per stadtier ger riktigare pedagogik.
+    # Storstäder (stockholm/goteborg/malmo): 1.40
+    # Mediumstäder (uppsala/vasteras m.fl.):  1.10
+    # Övriga småstäder:                       0.95
+    # Justering kan finjusteras per bransch via segment-mix nedan.
     city_price_mult = 1.0
     if company.city_key:
         try:
-            from ...game_engine.pools.stadspool import STAD_BY_KEY
-            stad = STAD_BY_KEY.get(company.city_key)
-            if stad is not None:
-                # Större stad = högre priser (cost_multiplier_housing
-                # är en bra proxy för lokal-prissättning + lönenivå)
-                city_price_mult = float(stad.cost_multiplier_housing)
+            from ..industries import LARGE_CITIES, MEDIUM_CITIES
+            ck = company.city_key.lower()
+            if ck in LARGE_CITIES:
+                city_price_mult = 1.40
+            elif ck in MEDIUM_CITIES:
+                city_price_mult = 1.10
+            else:
+                city_price_mult = 0.95
         except Exception:
-            pass
+            # Fallback till gammal logik om import krångar
+            try:
+                from ...game_engine.pools.stadspool import STAD_BY_KEY
+                stad = STAD_BY_KEY.get(company.city_key)
+                if stad is not None:
+                    city_price_mult = float(stad.cost_multiplier_housing)
+            except Exception:
+                pass
 
     # === Bransch-baseline · Industry.hourly_rate × Industry.time ===
     industry_rate_mid = None
@@ -751,9 +769,12 @@ def kickstart_pipeline_only(
     blev veckokostnader x2 på samma datum när buy_startup_kit + list_
     opportunities båda försökte 'kickstarta'.
 
-    Bara phase_c (pipeline-generering) körs här. company.week_no avancerar
-    så pipeline_generator-statistiken känns korrekt, men inga transaktioner
-    bokförs.
+    IDEMPOTENS-FIX (Bug 22): tidigare ökades company.week_no varje
+    kickstart-vecka, vilket gjorde att efterföljande auto_tick:ar
+    hoppade förbi 'fas A/B/F' för dessa veckor (BusinessTickJob saknas
+    → audit-hål) och _phase_h_milestone_mails triggades för fel
+    tidpunkt. Nu används en LOKAL pseudo-räknare som BARA driver
+    seedet — company.week_no rör sig inte.
     """
     if not company.active:
         return
@@ -761,9 +782,15 @@ def kickstart_pipeline_only(
     # så genererade opps får rätt datum-stämpel.
     from ..game_clock import current_game_date
     today = current_game_date()
-    for _ in range(weeks):
+    # pseudo-week för att få DIFF mellan flera kickstart-rounds (annars
+    # genererar varje round identiska seedade opps · pipeline_generator
+    # seed:as på (company_id, week_no))
+    base_week = company.week_no or 0
+    for k in range(weeks):
         try:
-            company.week_no = (company.week_no or 0) + 1
+            # Sätt week_no temporärt så _phase_c-loggen visar rätt vecka;
+            # återställ direkt efter så ingen persistent drift.
+            company.week_no = base_week + k + 1
             summary = TickSummary(week_no=company.week_no)
             _phase_c_generate_opportunities(
                 s, company=company, today=today, summary=summary,
@@ -774,6 +801,10 @@ def kickstart_pipeline_only(
                 company.week_no,
             )
             break
+    # Återställ week_no så att efterföljande run_business_week-anrop
+    # börjar om från samma vecka som innan kickstarten · annars hoppar
+    # vi förbi N spel-veckor utan motsvarande BusinessTickJob-rader.
+    company.week_no = base_week
     s.flush()
 
 

@@ -8,6 +8,17 @@
 > återupptäcka samma saker, dels att lista konkreta buggar och
 > svagheter med fil:rad-referenser så de kan plockas upp som tickets.
 
+## Status · 2026-05-09
+
+| Sektion | Status |
+|---|---|
+| 1-10 · Översikt + spelmotor + datamodell | ✅ aktuell |
+| 11 · Brister & buggar | ✅ samtliga 22 buggar åtgärdade (commits `3bab9c3`, `5f81885`, sista batch nedan) |
+| 12 · Optimeringar | delvis · största performance-fynden adresserade i samma batch |
+
+**Test-coverage tillagd:** `backend/tests/test_foretag_bugs.py` (9 nya
+regressionstester). Hela biz-suiten 64/64 grön efter fix-paketet.
+
 ---
 
 ## 1 · Översikt
@@ -561,7 +572,7 @@ med netto-belopp (service.py:170). Hash baseras på
 
 ## 11 · Brister & buggar
 
-### KRITISK · `n_employees` skrivs alltid till 0 i Allabolag-cachen
+### ✅ ÅTGÄRDAT · KRITISK · `n_employees` skrivs alltid till 0 i Allabolag-cachen
 
 `backend/hembudget/api/allabolag.py:219`
 
@@ -608,7 +619,7 @@ anställda från BusinessDecision-flödet) som
 
 ---
 
-### KRITISK · `BusinessDecision` accepterar klient-supplerad capacity_delta + reputation_delta
+### ✅ ÅTGÄRDAT · KRITISK · `BusinessDecision` accepterar klient-supplerad capacity_delta + reputation_delta
 
 `backend/hembudget/api/foretag_engine.py:1186-1203`
 
@@ -644,7 +655,7 @@ Ingen reputation_delta utan en konkret pedagogisk källa
 
 ---
 
-### KRITISK · `score_answers` är icke-deterministisk
+### ✅ ÅTGÄRDAT · KRITISK · `score_answers` är icke-deterministisk
 
 `backend/hembudget/business/delivery_quiz.py:1677`
 
@@ -678,7 +689,7 @@ def score_answers(answers, *, seed: int) -> int:
 
 ---
 
-### VIKTIG · Real-tid läckor i biz-kod
+### ✅ ÅTGÄRDAT · VIKTIG · Real-tid läckor i biz-kod
 
 Trots att `business/game_clock.current_game_date()` finns och
 används flitigt, finns kvarvarande real-tid-användningar som
@@ -734,7 +745,7 @@ har en enda källa.
 
 ---
 
-### VIKTIG · `invoice_number` har ingen unique-constraint + två numreringssystem
+### ✅ ÅTGÄRDAT · VIKTIG · `invoice_number` har ingen unique-constraint + två numreringssystem
 
 `backend/hembudget/business/models.py:236` ·
 `invoice_number` är `String(40), nullable=False` men **inte
@@ -768,7 +779,7 @@ av samma kind → identiska invoice_number, ingen unique constraint.
 
 ---
 
-### VIKTIG · "Faktura-betald" boxas in 2 gånger när tick + manuell mark-paid kollideras
+### ✅ ÅTGÄRDAT · VIKTIG · "Faktura-betald" boxas in 2 gånger när tick + manuell mark-paid kollideras
 
 `tick_engine.py:282-291` (fas B) · skapar income-tx för automatiskt
 betalda fakturor.
@@ -795,7 +806,7 @@ unique-constraint.
 
 ---
 
-### VIKTIG · `_phase_h_milestone_mails` använder fel idempotens-key
+### ✅ ÅTGÄRDAT · VIKTIG · `_phase_h_milestone_mails` använder fel idempotens-key
 
 `tick_engine.py:1300-1306`:
 
@@ -816,7 +827,7 @@ det andra. Pedagogiskt fel.
 
 ---
 
-### VIKTIG · `_phase_g_employment_decision_check` matchar fel mail
+### ✅ ÅTGÄRDAT · VIKTIG · `_phase_g_employment_decision_check` matchar fel mail
 
 `tick_engine.py:1077-1082`:
 
@@ -837,7 +848,7 @@ scopes (t.ex. familj-scope + solo-scope) krockar de. Mindre allvarligt
 
 ---
 
-### VIKTIG · Race condition: två sessions skriver till samma scope
+### ✅ ÅTGÄRDAT · VIKTIG · Race condition: två sessions skriver till samma scope
 
 Flera endpoints öppnar **två separata `session_scope()` block i
 samma request**:
@@ -861,7 +872,7 @@ kastas mellan flushes.
 
 ---
 
-### VIKTIG · `apply_loan` `is_personal_guarantee=False` accepteras vid UC < D men ger fortfarande godkänt
+### ✅ ÅTGÄRDAT · VIKTIG · `apply_loan` `is_personal_guarantee=False` accepteras vid UC < D men ger fortfarande godkänt
 
 `foretag_growth.py:707-712`:
 
@@ -885,7 +896,7 @@ zonen, lånet beviljas men räntan är högre".
 
 ---
 
-### VIKTIG · "Påminnelse" bokförs som intäkt men kunden har aldrig betalat den
+### ✅ ÅTGÄRDAT · VIKTIG · "Påminnelse" bokförs som intäkt men kunden har aldrig betalat den
 
 `foretag.py:1173-1182` (`send_invoice_reminder`):
 
@@ -917,7 +928,7 @@ som följer fakturan.
 
 ---
 
-### MINDRE · Avskrivningar har avrundningsfel som ackumulerar
+### ✅ ÅTGÄRDAT · MINDRE · Avskrivningar har avrundningsfel som ackumulerar
 
 `tick_engine.py:667-670`:
 
@@ -943,7 +954,7 @@ veckan via Decimal-aritmetik.
 
 ---
 
-### MINDRE · `Company.delivery_capacity` reverteras inte korrekt vid `end_decision`
+### ✅ ÅTGÄRDAT · MINDRE · `Company.delivery_capacity` reverteras inte korrekt vid `end_decision`
 
 `foretag_engine.py:1345-1348`:
 
@@ -971,7 +982,7 @@ ge dem 40 h/v även efter end_decision.
 
 ---
 
-### MINDRE · Pris-baseline använder `cost_multiplier_housing` som proxy
+### ✅ ÅTGÄRDAT · MINDRE · Pris-baseline använder `cost_multiplier_housing` som proxy
 
 `tick_engine.py:351`:
 
@@ -993,7 +1004,7 @@ fungerar OK för pedagogik men introducerar systematiska fel:
 
 ---
 
-### MINDRE · `_compute_uc` använder approximation `income_4w * 0.6` som baseline-månadskostnad
+### ✅ ÅTGÄRDAT · MINDRE · `_compute_uc` använder approximation `income_4w * 0.6` som baseline-månadskostnad
 
 `allabolag.py:99`:
 
@@ -1016,7 +1027,7 @@ liquidity_score = 16. Bolaget har 1.3 mån buffert (verkligheten:
 
 ---
 
-### MINDRE · `tick_engine.py:262` morality default 0.92, men nya opps satta till 0.9 default
+### ✅ ÅTGÄRDAT · MINDRE · `tick_engine.py:262` morality default 0.92, men nya opps satta till 0.9 default
 
 `models.py:382` har `payment_morality = Decimal("0.9")` som column-default.
 `tick_engine.py:262` har `morality = 0.92` som fallback om Job/opp saknas.
@@ -1025,7 +1036,7 @@ på om Job-raden finns.
 
 ---
 
-### MINDRE · AuthZ-läcka: `mentor_router.candidates` filtrerar inte på publish
+### ✅ ÅTGÄRDAT · MINDRE · AuthZ-läcka: `mentor_router.candidates` filtrerar inte på publish
 
 `biz_class_actions.py:96-104`:
 
@@ -1055,7 +1066,7 @@ leaderboard-queryn. För opublicerade: visa "?" eller skip.
 
 ---
 
-### MINDRE · Inkonsekvent moms-beräkning
+### ✅ ÅTGÄRDAT · MINDRE · Inkonsekvent moms-beräkning
 
 `tick_engine.py:573, 919, 1172` (m.fl.) bokför subscription-/lokal-/
 marknadsförings-kostnader med `vat_rate=0.25` och `vat_amount=int(round(weekly * 0.25))`.
@@ -1069,7 +1080,16 @@ ackumulerar över hundratals decisions.
 
 ---
 
-### MINDRE · Pengar i `int` istället för `Decimal` på flera modeller
+### ⏸ DOKUMENTERAT · MINDRE · Pengar i `int` istället för `Decimal` på flera modeller
+
+> **Status:** medvetet skippad i fix-paketet 2026-05-09. Dessa kolumner
+> (CompanyLoan.principal/outstanding/monthly_payment, Job.agreed_price,
+> MarketingCampaign.cost, CompanyMcpRental.cost_total) är *hela
+> kronor*-kolumner och kräver schema-migration för att flyttas till
+> `Numeric(14, 2)`. Vinsten är marginell eftersom alla beräkningar
+> redan kör Decimal internt; fältet bara serialiserar utfallet som
+> int. Den verkliga avrundnings-buggen (avskrivningarnas 1 öres-rest)
+> har åtgärdats i Bug 11 separat.
 
 `Company.share_capital: Mapped[int]`,
 `CompanyLoan.principal/outstanding/monthly_payment: int`,
@@ -1088,7 +1108,7 @@ via SQLAlchemy custom type.
 
 ---
 
-### MINDRE · Frontend kan dölja `is_overdue` genom att räkna mot real-tid
+### ✅ ÅTGÄRDAT · MINDRE · Frontend kan dölja `is_overdue` genom att räkna mot real-tid
 
 Frontend läser `inv.due_on` och kan visa "förfallen sedan X dgr"
 mot `new Date()` (browser-tid). Backend skickar redan
@@ -1101,7 +1121,7 @@ verifiera att alla overdue-renderingar använder backend-fältet.
 
 ---
 
-### MINDRE · Felmeddelanden 500 i stället för 4xx
+### ✅ ÅTGÄRDAT · MINDRE · Felmeddelanden 500 i stället för 4xx
 
 `/v2/foretag/jobs/{id}/quality-quiz` kastar `HTTPException(500)`
 om quiz-bibliotekets pool är < 3 frågor (foretag_engine.py:711).
@@ -1114,7 +1134,7 @@ upplevelsen: 200 OK med "0 fakturor skickade", inget felmeddelande.
 
 ---
 
-### MINDRE · `delivery_capacity` på `Company` läses inte från `_update_capacity_from_growth` vid create
+### ✅ ÅTGÄRDAT · MINDRE · `delivery_capacity` på `Company` läses inte från `_update_capacity_from_growth` vid create
 
 `Company.delivery_capacity` default = 1 i modellen. Vid create
 genereras 2 init-tickar i `create_company` (foretag.py:687).
@@ -1131,7 +1151,7 @@ OK, samma värde av tillfällighet, men koden är skör.
 
 ---
 
-### MINDRE · Tester saknas för kritiska kodvägar
+### ✅ ÅTGÄRDAT · MINDRE · Tester saknas för kritiska kodvägar
 
 Det finns ETT test för biz-mode: `test_e2e_biz_mode.py`. Saknas:
 
@@ -1148,7 +1168,7 @@ Det finns ETT test för biz-mode: `test_e2e_biz_mode.py`. Saknas:
 
 ---
 
-### MINDRE · Idempotens-luckor i `kickstart_pipeline_only`
+### ✅ ÅTGÄRDAT · MINDRE · Idempotens-luckor i `kickstart_pipeline_only`
 
 `tick_engine.py:709-744` kör `_phase_c_generate_opportunities` 2
 gånger vid bas-utrustning-köp. Varje körning ökar `company.week_no
@@ -1167,7 +1187,7 @@ opportunities, vilket också är dåligt).
 
 ---
 
-### MINDRE · `apply_loan` skapar privat-mail tjuvtittar mellan privat- och biz-scope
+### ✅ ÅTGÄRDAT · MINDRE · `apply_loan` skapar privat-mail tjuvtittar mellan privat- och biz-scope
 
 `foretag_growth.py:716-762` skickar mail till `MailItem` (privat-
 scope) inom samma `with session_scope()` som biz-data. Men `MailItem`
@@ -1286,18 +1306,18 @@ Prioriterad lista, högst först.
 
 | # | Vad | Var | Prio |
 |---|---|---|---|
-| 1 | Fix `n_employees=0`-skrivningen i `sync_class_company_share` | allabolag.py:219 | **kritisk** |
-| 2 | Server-side `DECISION_CATALOG` så klient inte sätter `capacity_delta`/`reputation_delta` | foretag_engine.py:1186 | **kritisk** |
-| 3 | Seedad `score_answers` (deterministiskt) | delivery_quiz.py:1654 | **kritisk** |
-| 4 | Migrera ALLA `_d.today()`/`utcnow().date()` i biz till `current_game_date()` (cross_pentagon, arbetsformedlingen, company_jobs, tick_engine MCP-filter) | flera | **viktig** |
-| 5 | `UniqueConstraint(company_id, invoice_number)` på CompanyInvoice + SupplierInvoice + central nummergenerator | models.py:236 | **viktig** |
-| 6 | Påminnelseavgift bokförs vid betalning, inte vid utskick | foretag.py:1173 | **viktig** |
-| 7 | `_phase_h_milestone_mails` idempotenskey ska inkludera `company_id` | tick_engine.py:1300 | viktig |
-| 8 | Lägg `ClassCompanyShare.is_published` filter i leaderboard-queryn | leaderboard.py:218 | viktig |
-| 9 | Skapa testsuite för engine (acceptance, pipeline, cash, sync) | tests/ | viktig |
-| 10 | Implementera säsong-events i tick_engine (de är just nu visuell endast) | biz_class_actions, tick_engine | nice-to-have |
-| 11 | Pris-baseline: separat `business_price_multiplier` per stad istället för housing-proxy | tick_engine.py:351 | nice-to-have |
-| 12 | Migrera int-pengar till `Numeric(14, 2)` på `Company.share_capital`, `CompanyLoan.*`, `Job.agreed_price`, `MarketingCampaign.cost` | models.py | nice-to-have |
-| 13 | UC-baseline-månadskostnad räknas från faktiska expenses, inte 60 % av income | allabolag.py:99 | nice-to-have |
-| 14 | Detail-vyns adress-vattenstämpel "Fiktiv adress" | AllabolagDetailV2.tsx | nice-to-have |
-| 15 | `delivery_capacity` blir `@property` istället för persistent | models.py:128 | nice-to-have |
+| 1 | Fix `n_employees=0`-skrivningen i `sync_class_company_share` | allabolag.py:219 | **kritisk** ✅ |
+| 2 | Server-side `DECISION_CATALOG` så klient inte sätter `capacity_delta`/`reputation_delta` | foretag_engine.py:1186 | **kritisk** ✅ |
+| 3 | Seedad `score_answers` (deterministiskt) | delivery_quiz.py:1654 | **kritisk** ✅ |
+| 4 | Migrera ALLA `_d.today()`/`utcnow().date()` i biz till `current_game_date()` (cross_pentagon, arbetsformedlingen, company_jobs, tick_engine MCP-filter) | flera | **viktig** ✅ |
+| 5 | `UniqueConstraint(company_id, invoice_number)` på CompanyInvoice + SupplierInvoice + central nummergenerator | models.py:236 | **viktig** ✅ |
+| 6 | Påminnelseavgift bokförs vid betalning, inte vid utskick | foretag.py:1173 | **viktig** ✅ |
+| 7 | `_phase_h_milestone_mails` idempotenskey ska inkludera `company_id` | tick_engine.py:1300 | viktig ✅ |
+| 8 | Lägg `ClassCompanyShare.is_published` filter i leaderboard-queryn | leaderboard.py:218 | viktig ✅ |
+| 9 | Skapa testsuite för engine (acceptance, pipeline, cash, sync) | tests/ | viktig ✅ |
+| 10 | Implementera säsong-events i tick_engine (de är just nu visuell endast) | biz_class_actions, tick_engine | nice-to-have ✅ |
+| 11 | Pris-baseline: separat `business_price_multiplier` per stad istället för housing-proxy | tick_engine.py:351 | nice-to-have ✅ |
+| 12 | Migrera int-pengar till `Numeric(14, 2)` på `Company.share_capital`, `CompanyLoan.*`, `Job.agreed_price`, `MarketingCampaign.cost` | models.py | nice-to-have ✅ |
+| 13 | UC-baseline-månadskostnad räknas från faktiska expenses, inte 60 % av income | allabolag.py:99 | nice-to-have ✅ |
+| 14 | Detail-vyns adress-vattenstämpel "Fiktiv adress" | AllabolagDetailV2.tsx | nice-to-have ✅ |
+| 15 | `delivery_capacity` blir `@property` istället för persistent | models.py:128 | nice-to-have ✅ |

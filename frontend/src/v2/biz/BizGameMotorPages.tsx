@@ -1332,17 +1332,20 @@ function JobCard({
     return () => window.clearInterval(id);
   }, [job.status]);
 
-  const startMs = new Date(job.started_on + "T08:00:00").getTime();
-  const endMs = new Date(job.expected_complete_on + "T17:00:00").getTime();
-  const totalMs = Math.max(1, endMs - startMs);
-  const elapsedMs = Math.max(0, now - startMs);
-  const livePct = job.status === "in_progress"
-    ? Math.min(100, Math.round((elapsedMs / totalMs) * 100))
-    : job.progress_pct;
-  const remainingMs = endMs - now;
-  const days = Math.floor(Math.abs(remainingMs) / 86_400_000);
-  const hours = Math.floor((Math.abs(remainingMs) % 86_400_000) / 3_600_000);
-  const isOverdueLive = job.status === "in_progress" && remainingMs < 0;
+  // SPEL-TID-FIX: tidigare räknades elapsedMs = real-now - spel-started_on,
+  // vilket gav fel resultat eftersom started_on/expected_complete_on
+  // är spel-tids-DATUM (1h real = 1 spel-vecka). Med real-tid 2026-05
+  // och spel-tid 2026-01 blev alla in_progress-jobb visade som 100 %
+  // omedelbart. Backend räknar redan progress_pct mot spel-tiden (se
+  // _to_job_out · current_game_date()), så vi använder det direkt.
+  const livePct = job.progress_pct;
+  // Real-tids-deltat (now-now) blir alltid 0 nu — vi använder backend:s
+  // expected_complete_on för att visa "X dagar kvar i spel-tid". Backend
+  // har fält days_until_due som vi kan ta i framtid; tills dess visar
+  // vi själva spel-datumet utan delta.
+  const isOverdueLive = job.status === "in_progress"
+    && (job.progress_pct >= 100 || (job as { is_overdue?: boolean }).is_overdue === true);
+  void now;  // behåll setInterval för progress_pct re-render
 
   const barColor = isOverdueLive
     ? "#dc4c2b"
@@ -1397,8 +1400,8 @@ function JobCard({
             <span>⏱ {job.estimated_hours} h totalt · {job.hours_per_week} h/v</span>
             <span style={{ color: barColor, fontWeight: 700 }}>
               {isOverdueLive
-                ? `⚠ FÖRSENAD ${days} d ${hours} h`
-                : `${days} d ${hours} h kvar`}
+                ? "⚠ FÖRSENAD"
+                : `${Math.round(livePct)}% klart`}
             </span>
             <span style={{ marginLeft: "auto" }}>
               start {job.started_on} · deadline {job.expected_complete_on}
