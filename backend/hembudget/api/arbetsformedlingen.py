@@ -261,8 +261,15 @@ def list_jobs(
     # Difficulty-progression · 3+ avslag på 30 dagar → -10p match-score
     # på alla jobb (verkligheten · arbetsgivare ser aktivitet men
     # något skickar varningssignaler).
-    from datetime import date as _d_diff, timedelta as _td_diff
-    cutoff = _d_diff.today() - _td_diff(days=30)
+    #
+    # SPEL-TID-FIX: tidigare användes _d_diff.today() (real-tid) för
+    # cutoff. JobApplication.completed_on lagras i spel-tid (typ
+    # 2026-01-15). Real-cutoff = 2026-04-09. completed_on < cutoff
+    # → ingen träff → modifier alltid 0. Pedagogiska budskapet
+    # "var aktiv men inte spammig" försvann.
+    from datetime import timedelta as _td_diff
+    from ..business.game_clock import current_game_date as _cgd_diff
+    cutoff = _cgd_diff() - _td_diff(days=30)
     with session_scope() as scope_s:
         recent_rejections = (
             scope_s.query(JobApplication)
@@ -318,8 +325,11 @@ def apply(
                 status.HTTP_400_BAD_REQUEST,
                 "Du har redan 2 pågående ansökningar. Avsluta en innan du söker fler.",
             )
+        # SPEL-TID-FIX: started_on ska vara spel-tid · annars driftar
+        # ansökningens started_on bort från resten av spelets datum.
+        from ..business.game_clock import current_game_date as _cgd_apply
         app = apply_to_job(
-            s, student_id=sid, opening=opening, today=_date.today(),
+            s, student_id=sid, opening=opening, today=_cgd_apply(),
         )
         # Lärar-spårning
         try:

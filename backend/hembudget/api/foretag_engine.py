@@ -707,8 +707,13 @@ def submit_delivery_quiz(
             rng=rng,
         )
         if len(questions) != 3:
+            # Konfigurations-/seed-fel · branschen har för få frågor.
+            # 503 = "service unavailable, sysadmin har glömt seed:a"
+            # är mer korrekt än 500 (server-error).
             raise HTTPException(
-                500, "Quiz-databasen är för liten",
+                503,
+                "Quiz-databasen är för liten · "
+                "kontakta admin (för få frågor i din bransch).",
             )
 
         # Validera svar
@@ -719,7 +724,11 @@ def submit_delivery_quiz(
                     f"Ogiltigt svar '{ans}' · måste vara good/mid/bad",
                 )
 
-        quality_score = score_answers(body.answers)
+        # Seedad score · samma input → samma score, alltid.
+        # Bryter tidigare bug där global random.randint gjorde
+        # quality_score icke-deterministisk vid retry/double-click.
+        quiz_seed = (job.id * 1_000_003) ^ (co.id * 9_973)
+        quality_score = score_answers(body.answers, seed=quiz_seed)
 
         # Leverera jobbet med beräknad score
         delivered_job, invoice = deliver_job(
@@ -1183,6 +1192,93 @@ def buy_marketing_package(
 # === Schemas: Decision ===
 
 
+# Server-side decision-katalog · enda källan av sanning för
+# capacity_delta + reputation_delta + monthly_cost + one_time_cost.
+# Tidigare läste create_decision dessa fält direkt från klienten →
+# eleven kunde POST:a {capacity_delta: 999, reputation_delta: 50}
+# och få ohämmad kapacitet + max-rep utan motsvarande kostnad.
+# Spelet helt trasigt.
+#
+# Nu: klienten skickar bara `kind` + ev. justerings-context (notes,
+# insurance_kind). Servern slår upp resten i katalogen så pris,
+# kapacitet och rykte alltid matchar pedagogiken. Aliases stöds
+# (UI-naturliga namn vs tekniska).
+DECISION_CATALOG: dict[str, dict] = {
+    # Anställning · 1 fiktiv anställd = +40 h/v kapacitet.
+    # capacity_delta=1 motsvarar EMPLOYEE_HOURS_PER_WEEK i
+    # foretag_capacity.compute_time_capacity. AGI ingår i monthly_cost.
+    "hire_full_time": {
+        "title": "Anställd · heltid",
+        "monthly_cost": 35000,
+        "one_time_cost": 0,
+        "capacity_delta": 1,
+        "reputation_delta": 0,
+    },
+    "employee": {  # alias från BizTillvaxt
+        "title": "Anställd · heltid",
+        "monthly_cost": 35000,
+        "one_time_cost": 0,
+        "capacity_delta": 1,
+        "reputation_delta": 0,
+    },
+    "hire_part_time": {
+        "title": "Anställd · deltid",
+        "monthly_cost": 18000,
+        "one_time_cost": 0,
+        "capacity_delta": 1,  # mindre kapacitet · representeras
+                              # via halverad lön
+        "reputation_delta": 0,
+    },
+    # Friskvård · höjer rykte (medarbetar-trivsel) men ger
+    # ingen kapacitetsförändring. 5 000 kr/anställd/år men
+    # eleven aktiverar bara en gång → fast pedagogisk siffra.
+    "wellness": {
+        "title": "Friskvårdsbidrag",
+        "monthly_cost": 500,
+        "one_time_cost": 0,
+        "capacity_delta": 0,
+        "reputation_delta": 3,
+    },
+    # Leasing av servicebil · matchar has_car-flaggan men
+    # är ren OPEX (ingen kapital-spärr). Pedagogisk skillnad
+    # mot köp via foretag_growth.assets-flödet.
+    "car_lease": {
+        "title": "Leasing · servicebil",
+        "monthly_cost": 4500,
+        "one_time_cost": 5000,
+        "capacity_delta": 0,
+        "reputation_delta": 0,
+    },
+    "leasing": {  # alias från BizTillvaxt
+        "title": "Leasing · servicebil",
+        "monthly_cost": 4500,
+        "one_time_cost": 5000,
+        "capacity_delta": 0,
+        "reputation_delta": 0,
+    },
+    # Försäkring · skyddar mot slumpevent-förluster (-90 %
+    # skada). Pedagogisk parallell till privat-försäkringar.
+    "insurance": {
+        "title": "Företagsförsäkring",
+        "monthly_cost": 1200,
+        "one_time_cost": 0,
+        "capacity_delta": 0,
+        "reputation_delta": 0,
+    },
+    # Större lokal · gammal preset (innan CompanyLocation-
+    # flödet). +1 kapacitet + 5 rykte. Pedagogiskt inkonsekvent
+    # med Tillväxt-fliken som har CompanyLocation, men kvar
+    # för bakåtkompat.
+    "new_office": {
+        "title": "Större lokal",
+        "monthly_cost": 8000,
+        "one_time_cost": 12000,
+        "capacity_delta": 1,
+        "reputation_delta": 5,
+    },
+}
+
+
 class DecisionIn(BaseModel):
     # Alias-vänligt mönster · både UI-naturliga ('employee', 'leasing')
     # och tekniska ('hire_part_time', 'car_lease') accepteras. Frontend-
@@ -1194,11 +1290,17 @@ class DecisionIn(BaseModel):
             "leasing|car_lease|insurance|new_office)$"
         )
     )
-    title: str = Field(min_length=2, max_length=200)
-    monthly_cost: int = Field(ge=0, default=0)
-    one_time_cost: int = Field(ge=0, default=0)
-    capacity_delta: int = Field(default=0)
-    reputation_delta: int = Field(default=0)
+    # Title kan optionellt skickas av klienten för UI-flexibilitet
+    # men servern överskriver med katalogvärdet.
+    title: Optional[str] = Field(default=None, max_length=200)
+    # OBS: monthly_cost / one_time_cost / capacity_delta / reputation_delta
+    # IGNORERAS från klienten · servern läser från DECISION_CATALOG.
+    # Fälten finns kvar för bakåtkompat med befintliga klienter som
+    # skickar dem; vi accepterar och kastar dem.
+    monthly_cost: Optional[int] = Field(default=None, ge=0)
+    one_time_cost: Optional[int] = Field(default=None, ge=0)
+    capacity_delta: Optional[int] = Field(default=None)
+    reputation_delta: Optional[int] = Field(default=None)
     insurance_kind: Optional[str] = None
     notes: Optional[str] = None
 
@@ -1253,9 +1355,29 @@ def create_decision(
     info: TokenInfo = Depends(require_token),
 ):
     """Skapa beslut. Tillämpar capacity/reputation-delta direkt + bokför
-    eventuell engångskostnad."""
+    eventuell engångskostnad.
+
+    SÄKERHET: capacity_delta + reputation_delta + monthly_cost +
+    one_time_cost läses ALLTID från DECISION_CATALOG. Klient-supplerade
+    värden ignoreras. Annars kunde eleven POST:a godtyckliga deltas
+    och bryta spelet.
+    """
     _require_student(info)
     today = current_game_date()
+
+    # Slå upp katalog-värden · klient-fält ignoreras.
+    catalog_entry = DECISION_CATALOG.get(body.kind)
+    if catalog_entry is None:
+        # Skulle inte hända pga regex-pattern, men defensiv.
+        raise HTTPException(
+            400, f"Okänt beslut: {body.kind}. Se DECISION_CATALOG.",
+        )
+    title = body.title or catalog_entry["title"]
+    monthly_cost = int(catalog_entry["monthly_cost"])
+    one_time_cost = int(catalog_entry["one_time_cost"])
+    capacity_delta = int(catalog_entry["capacity_delta"])
+    reputation_delta = int(catalog_entry["reputation_delta"])
+
     with session_scope() as s:
         co = _get_active_company(s)
         # Kassa-spärr · engångskostnad + första veckans löpande kost
@@ -1263,24 +1385,24 @@ def create_decision(
         # beslut om kassan är 5 000 kr.
         from .foretag_growth import _kassa
         bal = _kassa(s, co)
-        weekly = int(round((body.monthly_cost or 0) / 4))
-        first_hit = (body.one_time_cost or 0) + weekly
+        weekly = int(round(monthly_cost / 4))
+        first_hit = one_time_cost + weekly
         if bal < first_hit:
             raise HTTPException(
                 402,
                 f"Otillräcklig kassa · {first_hit - bal} kr saknas. "
                 f"Kassan är {bal} kr men beslutet kostar "
-                f"{body.one_time_cost} kr nu + {weekly} kr första veckan. "
+                f"{one_time_cost} kr nu + {weekly} kr första veckan. "
                 "Ta ett tillväxtlån (Tillväxt → Lån) först.",
             )
         d = BusinessDecision(
             company_id=co.id,
             kind=body.kind,
-            title=body.title,
-            monthly_cost=body.monthly_cost,
-            one_time_cost=body.one_time_cost,
-            capacity_delta=body.capacity_delta,
-            reputation_delta=body.reputation_delta,
+            title=title,
+            monthly_cost=monthly_cost,
+            one_time_cost=one_time_cost,
+            capacity_delta=capacity_delta,
+            reputation_delta=reputation_delta,
             insurance_kind=body.insurance_kind,
             started_on=today,
             active=True,
@@ -1289,29 +1411,31 @@ def create_decision(
         s.add(d)
 
         # Tillämpa effekter på Company direkt
-        if body.capacity_delta:
+        if capacity_delta:
             co.delivery_capacity = max(
-                1, co.delivery_capacity + body.capacity_delta,
+                1, co.delivery_capacity + capacity_delta,
             )
-        if body.reputation_delta:
+        if reputation_delta:
             co.reputation = max(
-                0, min(100, co.reputation + body.reputation_delta),
+                0, min(100, co.reputation + reputation_delta),
             )
 
-        # Bokför engångskostnad
-        if body.one_time_cost > 0:
+        # Bokför engångskostnad · Decimal*Decimal istället för
+        # int(round(*0.25))-mönster för att undvika ackumulerande
+        # avrundningsfel (Bug 16 i foretag.md).
+        if one_time_cost > 0:
             from ..business.models import CompanyTransaction as _Tx
+            net = Decimal(str(one_time_cost))
+            vat = (net * Decimal("0.25")).quantize(Decimal("0.01"))
             s.add(_Tx(
                 company_id=co.id,
                 occurred_on=today,
                 kind="expense",
                 category=f"decision:{body.kind}",
-                description=f"Engångs · {body.title}",
-                amount_excl_vat=Decimal(str(body.one_time_cost)),
+                description=f"Engångs · {title}",
+                amount_excl_vat=net,
                 vat_rate=Decimal("0.25"),
-                vat_amount=Decimal(
-                    str(int(round(body.one_time_cost * 0.25))),
-                ),
+                vat_amount=vat,
             ))
 
         s.flush()

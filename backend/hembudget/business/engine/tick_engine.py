@@ -772,13 +772,19 @@ def _update_capacity_from_growth(
             )
             .first()
         )
-        from datetime import date as _d
+        # SPEL-TID-FIX: tidigare _d.today() (real-tid) jämfördes mot
+        # ends_on (spel-tid). En MCP som "startar idag och slutar
+        # om 2 spel-veckor" hade ends_on = spel-2026-01-15. Real-today
+        # = 2026-05-08 → filtret ends_on >= real-today blev False →
+        # MCP räknades som inaktiv direkt vid skapande → eleven
+        # förlorade kapaciteten utan att märka.
+        from ..game_clock import current_game_date as _cgd_mcp
         active_mcp = (
             s.query(CompanyMcpRental)
             .filter(
                 CompanyMcpRental.company_id == company.id,
                 CompanyMcpRental.status == "active",
-                CompanyMcpRental.ends_on >= _d.today(),
+                CompanyMcpRental.ends_on >= _cgd_mcp(),
             )
             .count()
         )

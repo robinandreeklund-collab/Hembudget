@@ -290,8 +290,13 @@ def compute_weekly_business_hours(
             pass
 
     total_remaining_hours = 0
-    from datetime import date as _d
-    today = _d.today()
+    # SPEL-TID-FIX: tidigare _d.today() (real-tid) jämfördes mot
+    # job.expected_complete_on (spel-tid) → days_left blev kraftigt
+    # negativt → max(1, days_left) gav 1 vecka kvar för alla jobb →
+    # weekly_hours överskattades drastiskt → Maria-säg-upp-prompten
+    # triggades alldeles för aggressivt.
+    from .game_clock import current_game_date
+    today = current_game_date()
     for job in in_progress_jobs:
         # Approximera resten av jobbet som hours_per_job_mid
         # delat på dagar till deadline

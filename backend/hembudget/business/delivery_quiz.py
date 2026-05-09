@@ -1651,17 +1651,27 @@ def pick_questions(
     return chosen[:3]
 
 
-def score_answers(answers: list[str]) -> int:
+def score_answers(answers: list[str], *, seed: Optional[int] = None) -> int:
     """Räkna ut quality_score (0-100) från en lista svar.
 
     `answers`: list med exakt 3 strängar, var och en "good"/"mid"/"bad".
+    `seed`:    deterministisk seed för jitter. Anropare ska skicka
+               (job_id ^ company_id) eller liknande så samma input
+               alltid ger samma output.
+
     Mappning per-svar:
         good → 100, mid → 60, bad → 20
-    Slutscore = mean ± slump(±7) · clampad till 0-100.
+    Slutscore = mean ± seedad slump(±7) · clampad till 0-100.
 
     Mean av (good, good, good) = 100 → ~93-100
     Mean av (good, mid, bad)   = 60  → ~53-67
     Mean av (bad, bad, bad)    = 20  → ~13-27
+
+    DETERMINISM: tidigare användes global `random.randint` utan seed →
+    två anrop med samma input gav olika svar. Bröt principen att
+    läraren ska kunna re-spela en spel-vecka. Nu seedat per anrop.
+    Om seed=None faller vi tillbaka till osedad random (för bakåtkompat
+    i ev. anropare som inte hunnit migrera) men loggar varning.
     """
     if len(answers) != 3:
         raise ValueError("score_answers kräver exakt 3 svar")
@@ -1674,7 +1684,16 @@ def score_answers(answers: list[str]) -> int:
             )
         points.append(points_map[a])
     base = sum(points) / 3
-    jitter = random.randint(-7, 7)
+    if seed is not None:
+        rng = random.Random(seed)
+    else:
+        import logging as _lg
+        _lg.getLogger(__name__).warning(
+            "score_answers anropad utan seed · "
+            "icke-deterministiskt utfall",
+        )
+        rng = random
+    jitter = rng.randint(-7, 7)
     return max(0, min(100, int(round(base + jitter))))
 
 

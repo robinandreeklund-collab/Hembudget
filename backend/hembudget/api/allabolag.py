@@ -215,8 +215,51 @@ def sync_class_company_share(
         from ..business.cash import compute_company_cash as _ccc
         kassa = float(_ccc(s, company))
 
-        # Anställda — Fas D · CompanyEmployment-räknare. Fas A: 0.
-        n_employees = 0
+        # Anställda · TVÅ källor måste summeras (matchar
+        # foretag_capacity.compute_time_capacity för konsistens):
+        #   1. CompanyEmployment (master DB) · skapas när annan elev söker
+        #      klass-jobbannons och godkänns
+        #   2. Company.delivery_capacity-1 (scope DB) · fiktiva anställda
+        #      från Tillväxt-fliken (BusinessDecision hire_full/part)
+        # Tidigare hårdkodades n_employees=0 i denna sync, vilket gjorde
+        # att master-cachen NOLLSTÄLLDES varje auto-tick även om
+        # decide_application redan satt den korrekt → nivå-progression
+        # 'startup→vaxande' triggades aldrig, badges som first_employee/
+        # five_employees aldrig delades ut, leaderboard.best_employer
+        # alltid 0. Räkna här istället så cachen alltid stämmer.
+        from ..school.models import (
+            ClassCompanyShare as _CCS_pre,
+            CompanyEmployment as _CE_pre,
+        )
+        from ..school.engines import master_session as _ms_pre
+        n_employees_real = 0
+        try:
+            with _ms_pre() as ms_pre:
+                share_pre = (
+                    ms_pre.query(_CCS_pre.id)
+                    .filter(
+                        _CCS_pre.owner_student_id == student_id,
+                        _CCS_pre.company_id_in_scope == company.id,
+                    )
+                    .first()
+                )
+                if share_pre is not None:
+                    n_employees_real = (
+                        ms_pre.query(_CE_pre)
+                        .filter(
+                            _CE_pre.company_share_id == share_pre.id,
+                            _CE_pre.status == "active",
+                        )
+                        .count()
+                    )
+        except Exception:
+            log.exception(
+                "sync_class_company_share: kunde inte räkna "
+                "CompanyEmployment-rader för company=%s",
+                company.id,
+            )
+        n_fictional = max(0, int(company.delivery_capacity or 1) - 1)
+        n_employees = n_employees_real + n_fictional
 
         # Skriv master-cache
         from ..school.engines import master_session

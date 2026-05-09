@@ -326,7 +326,11 @@ def list_my_employments(info: TokenInfo = Depends(require_token)):
     from ..school.models import (
         ClassCompanyShare, CompanyEmployment, Student,
     )
-    today = datetime.utcnow().date()
+    # SPEL-TID: jämför ended_at (sätts av terminate_employment till
+    # spel-tid) mot spel-today, annars sweepas notice_period→terminated
+    # antingen för tidigt eller för sent.
+    from ..business.game_clock import current_game_date as _cgd_emp
+    today = _cgd_emp()
     with master_session() as s:
         # Hämta ägarens shares
         share_ids = [
@@ -412,7 +416,15 @@ def terminate_employment(
         ClassCompanyShare, CompanyEmployment, Student,
     )
 
-    today = datetime.utcnow().date()
+    # SPEL-TID: today + slutdatum-räkning ska vara i spel-tid så
+    # tickens auto-sweep (notice_period→terminated) flippar vid
+    # rätt spel-datum.
+    from ..business.game_clock import current_game_date as _cgd_term
+    today = _cgd_term()
+    # started_at lagras fortfarande som real-tid (default datetime.utcnow
+    # i modellen). Konvertera till motsvarande spel-tid för LAS-räkningen
+    # så att en elev som spelat länge faktiskt kan nå LAS-tier 2-6.
+    from ..game_engine.release_schedule import game_date_for as _gdf_term
     with master_session() as s:
         empl = s.get(CompanyEmployment, empl_id)
         if empl is None:
@@ -425,8 +437,18 @@ def terminate_employment(
                 409, f"Anställningen är redan i status '{empl.status}'",
             )
 
-        # Räkna anställningstid → uppsägningstid (LAS § 11)
-        years_employed = (today - empl.started_at).days / 365.25
+        # Räkna anställningstid → uppsägningstid (LAS § 11) i spel-tid.
+        try:
+            from datetime import date as _date_term
+            gy, gm, gd = _gdf_term(empl.started_at)
+            game_started = _date_term(gy, gm, max(1, min(28, gd)))
+        except Exception:
+            # Fallback · använd raw started_at-datum om release_schedule
+            # av någon anledning inte kan översätta.
+            game_started = empl.started_at.date() if hasattr(
+                empl.started_at, "date",
+            ) else empl.started_at
+        years_employed = max(0.0, (today - game_started).days / 365.25)
         if years_employed >= 10:
             notice_months = 6
         elif years_employed >= 8:
