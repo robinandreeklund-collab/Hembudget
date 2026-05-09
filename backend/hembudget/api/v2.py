@@ -17571,40 +17571,44 @@ def _auto_tick_private_months_if_due(student_id: int) -> int:
         # spel-startpunkt. Andra argumentet är legacy och ignoreras.
         current_game_ym = game_year_month(created_at)
 
-        # Hitta senast tickade ym = max year_month från MailItem.due_date
-        scope_key = _sfs_at(stu)
-        with _sctx_at(scope_key):
-            with session_scope() as s:
-                latest_due = (
-                    s.query(_MI_at.due_date)
-                    .filter(_MI_at.due_date.isnot(None))
-                    .order_by(_MI_at.due_date.desc())
-                    .first()
+        # Hitta senast tickade ym = senaste COMPLETED WeekTickRun för
+        # eleven. Tidigare läste vi MAX(MailItem.due_date) som proxy,
+        # men due_date är FRAMTIDA (en faktura med förfallodag 2026-12)
+        # gjorde att auto-tick stannade redan vid första seedade
+        # månaden — alla efterföljande månader skippades och eleven
+        # fick aldrig nya fakturor/lönespecs efter ungefär den
+        # första spel-månaden.
+        from ..school.game_engine_models import WeekTickRun
+        latest_ym: Optional[str] = None
+        with master_session() as ms_run:
+            latest_run = (
+                ms_run.query(WeekTickRun.year_month)
+                .filter(
+                    WeekTickRun.student_id == student_id,
+                    WeekTickRun.status == "completed",
                 )
-                if latest_due is None or latest_due[0] is None:
-                    # BOOTSTRAP-FIX: postlådan helt tom (seed misslyckades
-                    # eller städades). Ticka från månaden FÖRE anchor så
-                    # historiska månader fylls + anchor-månaden seedas.
-                    # Annars är vi stuck i evig 0-mail-loop eftersom
-                    # det här endpoint:et kräver existerande mail för att
-                    # veta var det ska börja.
-                    from ..game_engine.release_schedule import (
-                        GAME_ANCHOR_DATE,
-                    )
-                    if GAME_ANCHOR_DATE.month == 1:
-                        latest_ym = (
-                            f"{GAME_ANCHOR_DATE.year - 1:04d}-12"
-                        )
-                    else:
-                        latest_ym = (
-                            f"{GAME_ANCHOR_DATE.year:04d}-"
-                            f"{GAME_ANCHOR_DATE.month - 1:02d}"
-                        )
-                else:
-                    latest_ym = (
-                        f"{latest_due[0].year:04d}-"
-                        f"{latest_due[0].month:02d}"
-                    )
+                .order_by(WeekTickRun.year_month.desc())
+                .first()
+            )
+            if latest_run is not None and latest_run[0]:
+                latest_ym = latest_run[0]
+
+        if latest_ym is None:
+            # BOOTSTRAP-FIX: ingen completed run än (seed misslyckades
+            # eller städades). Ticka från månaden FÖRE anchor så
+            # historiska månader fylls + anchor-månaden seedas.
+            from ..game_engine.release_schedule import (
+                GAME_ANCHOR_DATE,
+            )
+            if GAME_ANCHOR_DATE.month == 1:
+                latest_ym = (
+                    f"{GAME_ANCHOR_DATE.year - 1:04d}-12"
+                )
+            else:
+                latest_ym = (
+                    f"{GAME_ANCHOR_DATE.year:04d}-"
+                    f"{GAME_ANCHOR_DATE.month - 1:02d}"
+                )
 
         # Tick alla månader mellan latest_ym+1 och current_game_ym
         if latest_ym >= current_game_ym:
