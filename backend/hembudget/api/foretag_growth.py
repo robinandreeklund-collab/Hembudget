@@ -152,6 +152,46 @@ LOAN_TERMS: dict[str, dict] = {
 
 # === Helpers ===
 
+def _uc_explanation(uc_class: Optional[str], is_personal_guarantee: bool) -> str:
+    """Pedagogiskt klartext-budskap som lägger sig sist i kreditupplysnings-
+    brevet. Tidigare visade brevet bara 'Beslut: GODKÄNT.' utan förklaring,
+    vilket gjorde det svårt för eleven att förstå varför hens kompis
+    fick avslag på samma summa.
+    """
+    if uc_class == "D" and not is_personal_guarantee:
+        return (
+            "Beslut: AVSLAG. Bolagets UC-rating ligger i 'D'-zonen "
+            "(svag betalningsförmåga). Vi kan godkänna lånet om du "
+            "går i personlig borgen — då har banken säkerhet i din "
+            "privata ekonomi om bolaget faller. Annars: bygg upp "
+            "omsättning, sänk försenade fakturor och försök igen "
+            "om några spel-veckor."
+        )
+    if uc_class == "E":
+        return (
+            "Beslut: AVSLAG. Bolagets UC-rating är 'E' (mycket svag). "
+            "Vi avslår oavsett borgen — ta hand om föreningstecknade "
+            "skulder och betalningsanmärkningar först."
+        )
+    if uc_class == "C":
+        return (
+            "Beslut: GODKÄNT. Bolagets UC ligger i 'C'-zonen (svag), "
+            "lånet beviljas men räntan är 2 procentenheter högre än "
+            "vår baslinje för att kompensera för risken."
+        )
+    if uc_class == "AAA":
+        return (
+            "Beslut: GODKÄNT. Bolagets UC ligger i 'AAA'-zonen "
+            "(utmärkt) · 2 procentenheter rabatt på räntan."
+        )
+    if uc_class == "A":
+        return (
+            "Beslut: GODKÄNT. Bolagets UC ligger i 'A'-zonen (god) · "
+            "1 procentenhet rabatt på räntan."
+        )
+    return "Beslut: GODKÄNT. Lånet är beviljat på angivna villkor."
+
+
 def _annuity_payment(principal: int, annual_rate: float, months: int) -> int:
     """Annuitets-månadsbetalning · pmt formula."""
     r = annual_rate / 12.0
@@ -683,6 +723,11 @@ def apply_loan(
     sid = info.student_id
     company_uc_class: str | None = None
     company_uc_score: int = 50
+    # OBS: vi läser UC-snapshotet HÄR och commitar lånet i en separat
+    # session_scope längre ner. Mellan blocken kan auto_tick ha synkat
+    # om master-cachen, men det är OK — räntan ska räknas på UC:n vid
+    # ansöknings-tillfället, inte vid commit-tillfället. Pedagogiskt:
+    # eleven ser samma UC-värde i UI:et som banken använder.
     try:
         from ..school.engines import master_session
         from ..school.models import ClassCompanyShare
@@ -739,16 +784,7 @@ def apply_loan(
                     f"Personlig borgen: "
                     f"{'JA' if body.is_personal_guarantee else 'NEJ'}\n"
                     f"Erbjuden ränta: {rate * 100:.1f} %\n\n"
-                    + (
-                        "Beslut: AVSLAG. Bolagets UC är för svag. "
-                        "Bygg upp omsättning, sänk försenade fakturor "
-                        "och försök igen om några veckor."
-                        if (
-                            company_uc_class == "D"
-                            and not body.is_personal_guarantee
-                        )
-                        else "Beslut: GODKÄNT. Lånet är beviljat."
-                    )
+                    + _uc_explanation(company_uc_class, body.is_personal_guarantee)
                 ),
                 amount=None,
                 due_date=None,

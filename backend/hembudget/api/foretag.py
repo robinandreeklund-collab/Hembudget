@@ -677,6 +677,23 @@ def create_company(
             ))
             s.flush()
 
+        # Säkerställ default-lokal och bas-utrustning innan första
+        # tick:en. Tidigare bug: _update_capacity_from_growth föll till
+        # base=2 om CompanyLocation saknades, vilket är inkonsekvent
+        # med hemmakontorets max_concurrent_jobs=1. Med explicit
+        # _ensure_default_location_and_equipment skapas raderna direkt
+        # vid create_company så tick får rätt cap-värde från start.
+        try:
+            from .foretag_growth import _ensure_default_location_and_equipment
+            _ensure_default_location_and_equipment(s, c)
+            s.flush()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "create_company: default location/equipment-init "
+                "misslyckades för company %s · fortsätter ändå", c.id,
+            )
+
         # Seed initiala vecko-tickar så bolaget inte är tomt direkt efter
         # skapande. Eleven ska se några första offerter/kunder att jobba
         # med · annars känns företagsdelen "död" tills nästa månadsskifte.
@@ -963,13 +980,13 @@ def add_invoice(
         if cust is None or cust.company_id != c.id:
             raise HTTPException(404, "Kund saknas")
 
-        # Stabilt fakturanummer · YYYY-NNNN
-        n_existing = (
-            s.query(CompanyInvoice)
-            .filter(CompanyInvoice.company_id == c.id)
-            .count()
-        )
-        invoice_number = f"{current_game_date().year}-{n_existing + 1:04d}"
+        # Central nummergenerator · F-{company:04d}-{seq:04d}.
+        # Tidigare två konkurrerande system (YYYY-NNNN här och
+        # F-XXXX-XXXX i tick_engine.deliver_job) → krock vid race +
+        # potentiella dubblettnummer. Unique-constraint i modellen
+        # fångar krockar; helpern atomicly stigande seq.
+        from ..business.invoice_numbering import next_invoice_number
+        invoice_number = next_invoice_number(s, company=c)
 
         amount = Decimal(str(body.amount_excl_vat))
         vat_amount = (amount * Decimal(str(body.vat_rate))).quantize(
@@ -1168,18 +1185,19 @@ def send_invoice_reminder(
         new_due = today_g + timedelta(days=14)
         # Förläng förfallodag · kundens nya betalningsdeadline
         inv.due_on = new_due
-        # Bokför avgiften som intäkt (kunden ska betala den)
-        amount = Decimal(str(fee))
-        s.add(CompanyTransaction(
-            company_id=c.id,
-            occurred_on=today_g,
-            kind="income",
-            category="Påminnelseavgift",
-            description=f"{label} · faktura {inv.invoice_number}",
-            amount_excl_vat=amount,
-            vat_rate=Decimal("0.0"),
-            vat_amount=Decimal(0),
-        ))
+
+        # Lägg avgiften till FAKTURABELOPPET (utöka fordran) istället
+        # för att direkt bokföra som intäkt. Påminnelseavgiften är inte
+        # intäkt förrän kunden betalat. Tidigare bokförde vi 60 kr som
+        # income vid utskick → omsättningen ökade och moms-output höjdes
+        # även när kund aldrig betalade. Riktigare: höj inv.amount_excl_vat
+        # och låt fas B / mark_invoice_paid bokföra hela summan när
+        # kunden betalar.
+        fee_amount = Decimal(str(fee))
+        inv.amount_excl_vat = (inv.amount_excl_vat or Decimal(0)) + fee_amount
+        # Påminnelseavgift är momsfri (Räntelagen § 2-6), så vat_amount
+        # på fakturan ändras inte.
+
         # Uppdatera notes-räknaren idempotent
         prefix = f"REMINDERS:{next_no}"
         keep = [
@@ -1187,11 +1205,16 @@ def send_invoice_reminder(
             if t.strip() and not t.strip().startswith("REMINDERS:")
         ]
         keep.insert(0, prefix)
+        keep.append(
+            f"+{int(fee)} kr {label.lower()}-avgift "
+            "(bokförs vid betalning)"
+        )
         inv.notes = " · ".join(keep)
         s.flush()
         summary = (
-            f"{label} skickad till kunden. Avgift {fee} kr "
-            f"bokförd som intäkt. Ny förfallodag: {new_due.isoformat()}."
+            f"{label} skickad till kunden. Fakturan har höjts med "
+            f"{fee} kr (avgiften bokförs som intäkt först när kunden "
+            f"betalat). Ny förfallodag: {new_due.isoformat()}."
         )
         return InvoiceReminderOut(
             invoice_id=inv.id,

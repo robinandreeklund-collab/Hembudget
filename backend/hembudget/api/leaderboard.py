@@ -215,11 +215,22 @@ def get_all_categories(info: TokenInfo = Depends(require_token)):
         raise HTTPException(403, "Endast lärare/elev")
 
     with master_session() as s:
-        rows = (
-            s.query(ClassCompanyShare)
-            .filter(ClassCompanyShare.teacher_id == teacher_id)
-            .all()
+        # Privacy-fix: opublicerade bolag dyker INTE upp i leaderboard.
+        # Allabolag-flikens scoreboard filtrerade is_published=True för
+        # elever men leaderboard saknade samma filter → en elev kunde
+        # togglat "Dölj" i Allabolag och ändå hamna i topplistorna med
+        # namn + ägare exponerade. Lärare ser ALLA (även dolda) eftersom
+        # is_mine inte gäller här.
+        q = s.query(ClassCompanyShare).filter(
+            ClassCompanyShare.teacher_id == teacher_id,
         )
+        if info.role == "student":
+            # Eleven ser sig själv + andras publicerade
+            q = q.filter(
+                (ClassCompanyShare.owner_student_id == my_sid)
+                | (ClassCompanyShare.is_published.is_(True))
+            )
+        rows = q.all()
         if not rows:
             return []
         sids = list({r.owner_student_id for r in rows})

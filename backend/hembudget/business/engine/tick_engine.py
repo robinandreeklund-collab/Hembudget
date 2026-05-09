@@ -259,7 +259,10 @@ def _phase_b_collect_payments(
             .filter(Job.invoice_id == inv.id)
             .first()
         )
-        morality = 0.92  # default
+        # Default 0.9 matchar JobOpportunity.payment_morality column-default
+        # (models.py). Tidigare 0.92 här gjorde att deterministiska
+        # re-plays divergerade beroende på om Job-raden fanns.
+        morality = 0.9  # default · sync med models.py default
         if job is not None:
             opp = (
                 s.query(JobOpportunity)
@@ -506,12 +509,18 @@ def _phase_e_random_events(
         insured_kinds=insured,
     )
     out: list[dict] = []
+    from ..invoice_numbering import next_supplier_invoice_number as _nsin
     for ev in events:
-        # Skapa en SupplierInvoice som källan av kostnaden
+        # Skapa en SupplierInvoice som källan av kostnaden.
+        # Central nummergenerator garanterar unique seq per kind+week.
         s.add(SupplierInvoice(
             company_id=company.id,
             sender_name="Slumpevent",
-            invoice_number=f"EV-{company.week_no}-{ev.template.kind[:5]}",
+            invoice_number=_nsin(
+                s, company=company,
+                kind_short=ev.template.kind,
+                week_no=company.week_no,
+            ),
             issued_on=today,
             due_on=today + timedelta(days=14),
             description=ev.template.label,
@@ -559,18 +568,24 @@ def _phase_f_charge_subscriptions(
     )
     total_cost = 0
     for d in active_decisions:
-        weekly = int(round(d.monthly_cost / 4))
-        if weekly <= 0:
+        # Decimal-aritmetik · undvik int(round(*0.25))-mönstret som
+        # tappar 0.5 kr per liten transaktion. Quantize till 0.01.
+        weekly_d = (Decimal(str(d.monthly_cost)) / Decimal(4)).quantize(
+            Decimal("0.01"),
+        )
+        if weekly_d <= 0:
             continue
+        weekly = int(weekly_d)
+        vat_d = (weekly_d * Decimal("0.25")).quantize(Decimal("0.01"))
         s.add(CompanyTransaction(
             company_id=company.id,
             occurred_on=today,
             kind="expense",
             category=f"decision:{d.kind}",
             description=f"Veckokostnad · {d.title}",
-            amount_excl_vat=Decimal(str(weekly)),
+            amount_excl_vat=weekly_d,
             vat_rate=Decimal("0.25"),
-            vat_amount=Decimal(str(int(round(weekly * 0.25)))),
+            vat_amount=vat_d,
         ))
         total_cost += weekly
 
@@ -586,18 +601,24 @@ def _phase_f_charge_subscriptions(
             .first()
         )
         if loc and loc.monthly_cost > 0:
-            weekly_rent = int(round(loc.monthly_cost / 4))
+            # Decimal-aritmetik · samma mönster som decisions ovan.
+            weekly_rent_d = (
+                Decimal(str(loc.monthly_cost)) / Decimal(4)
+            ).quantize(Decimal("0.01"))
+            vat_d = (weekly_rent_d * Decimal("0.25")).quantize(
+                Decimal("0.01"),
+            )
             s.add(CompanyTransaction(
                 company_id=company.id,
                 occurred_on=today,
                 kind="expense",
                 category="Lokal · hyra",
                 description=f"Veckohyra · {loc.location_kind}",
-                amount_excl_vat=Decimal(str(weekly_rent)),
+                amount_excl_vat=weekly_rent_d,
                 vat_rate=Decimal("0.25"),
-                vat_amount=Decimal(str(int(round(weekly_rent * 0.25)))),
+                vat_amount=vat_d,
             ))
-            total_cost += weekly_rent
+            total_cost += int(weekly_rent_d)
     except Exception:
         log.exception("phase_f: lokal-hyra-debitering misslyckades")
 
@@ -651,8 +672,16 @@ def _phase_f_charge_subscriptions(
     except Exception:
         log.exception("phase_f: lån-debitering misslyckades")
 
-    # Avskrivningar · 1/4 av månadsavskrivning per biz-vecka
-    # Linjär plan: cost_excl_vat / useful_life_months · 4 för veckokostnad
+    # Avskrivningar · 1/4 av månadsavskrivning per biz-vecka.
+    # Linjär plan: cost_excl_vat / useful_life_months · /4 per vecka.
+    #
+    # AVRUNDNINGSFIX (Bug 11): tidigare gjordes
+    # `weekly_dep = int(round(monthly_dep / 4))` med int-/float-blandning,
+    # vilket både ackumulerade rundningsfel (15 000 / 60 / 4 = 62.5 →
+    # 63 kr/v · 240 veckor = 15 120 kr över 5 år, dvs. 120 kr för
+    # mycket avskrivet) och gjorde sista veckans bokning oexakt.
+    # Nu Decimal-aritmetik genomgående och en final 'rest-bokning'
+    # som tippar in det sista vid avslut.
     try:
         from ..models import CompanyAsset
         active_assets = (
@@ -665,17 +694,25 @@ def _phase_f_charge_subscriptions(
         )
         for asset in active_assets:
             life = max(1, int(asset.useful_life_months or 60))
-            monthly_dep = float(asset.cost_excl_vat or 0) / life
-            weekly_dep = int(round(monthly_dep / 4))
-            if weekly_dep <= 0:
-                continue
-            remaining = float(asset.cost_excl_vat or 0) - float(
-                asset.accumulated_depreciation or 0
-            )
+            cost = Decimal(str(asset.cost_excl_vat or 0))
+            already = Decimal(str(asset.accumulated_depreciation or 0))
+            remaining = cost - already
             if remaining <= 0:
                 asset.status = "fully_depreciated"
                 continue
-            booked = min(weekly_dep, int(remaining))
+            # Exakt vecko-belopp: cost / life / 4 = vecko-andel.
+            # Quantize till hela kr för transaktions-belopp.
+            weekly_dep_exact = (
+                cost / Decimal(life) / Decimal(4)
+            ).quantize(Decimal("0.01"))
+            if weekly_dep_exact <= 0:
+                continue
+            # Cap mot rest så vi aldrig avskriver mer än kvarvarande.
+            booked = min(weekly_dep_exact, remaining)
+            # Sista veckan · ackumulera EXAKT till cost (annars kan
+            # 1 öres-rest släpa kvar och hindra fully_depreciated-flagga).
+            if booked + already + Decimal("0.005") >= cost:
+                booked = remaining
             cat = (
                 "Avskrivning Inventarier"
                 if asset.asset_kind == "equipment"
@@ -687,19 +724,15 @@ def _phase_f_charge_subscriptions(
                 kind="expense",
                 category=cat,
                 description=f"Veckoavskrivning · {asset.label}",
-                amount_excl_vat=Decimal(str(booked)),
+                amount_excl_vat=booked,
                 vat_rate=Decimal("0.0"),
                 vat_amount=Decimal(0),
             ))
-            asset.accumulated_depreciation = Decimal(
-                str(float(asset.accumulated_depreciation or 0) + booked)
-            )
+            asset.accumulated_depreciation = already + booked
             asset.last_depreciation_on = today
-            if float(asset.accumulated_depreciation) >= float(
-                asset.cost_excl_vat or 0
-            ):
+            if asset.accumulated_depreciation >= cost:
                 asset.status = "fully_depreciated"
-            total_cost += booked
+            total_cost += int(booked)
     except Exception:
         log.exception("phase_f: avskrivnings-bokning misslyckades")
 
@@ -788,9 +821,31 @@ def _update_capacity_from_growth(
             )
             .count()
         )
+        # Fiktiva anställda från BusinessDecision-flödet · varje aktivt
+        # 'employee'/'hire_full_time'/'hire_part_time'/'new_office'-beslut
+        # bidrar med sin capacity_delta. Tidigare bug: end_decision
+        # försökte minska delivery_capacity men nästa _update_capacity_
+        # from_growth skrev över utan att räkna in besluten igen → att
+        # säga upp en anställd hade NOLL effekt på pipeline-genereringen.
+        from ..models import BusinessDecision
+        active_decisions = (
+            s.query(BusinessDecision)
+            .filter(
+                BusinessDecision.company_id == company.id,
+                BusinessDecision.active.is_(True),
+                BusinessDecision.capacity_delta != 0,
+            )
+            .all()
+        )
+        decision_capacity = sum(
+            int(d.capacity_delta or 0) for d in active_decisions
+        )
         base = loc.max_concurrent_jobs if loc else 2
         speed = float(eq.speed_multiplier) if eq else 1.0
-        new_cap = max(1, int(base * speed) + active_mcp)
+        new_cap = max(
+            1,
+            int(base * speed) + active_mcp + decision_capacity,
+        )
         company.delivery_capacity = new_cap
     except Exception:
         log.exception("update_capacity_from_growth misslyckades")
@@ -1076,12 +1131,17 @@ def _phase_g_employment_decision_check(
         return
 
     # Kolla om vi redan skickat ett Maria-mail med samma trigger
-    # (för att inte spamma varje vecka). Använd subject-prefix som idmark.
+    # (för att inte spamma varje vecka). Inkludera elevens specifika
+    # förnamn i pattern så vi inte krockar med en parallell elev som
+    # delar scope (familje-läge).
     from ...db.models import MailItem
     existing = (
         s.query(MailItem)
         .filter(
-            MailItem.subject.like("Hej %· vi behöver prata om din arbetstid"),
+            MailItem.subject == (
+                f"Hej {student_first_name} · vi behöver prata "
+                "om din arbetstid"
+            ),
             MailItem.status.in_({"unhandled", "viewed"}),
         )
         .first()
@@ -1301,9 +1361,14 @@ def _phase_h_milestone_mails(
         return
 
     subject_short, meta, body = milestones[company.week_no]
-    full_subject = f"v{company.week_no} · {subject_short}"
+    # Inkludera company.id i subject så att en elev som öppnat ett
+    # andra bolag (t.ex. avslutat ett, startat nytt) faktiskt får
+    # nytt milestone-mail. Tidigare matchade vi BARA på subject →
+    # andra bolaget fick aldrig sina v4/v8/etc-mail eftersom första
+    # bolaget redan triggat dem.
+    full_subject = f"v{company.week_no} · {subject_short} · #{company.id}"
 
-    # Idempotens · kolla om mail redan finns
+    # Idempotens · kolla om mail redan finns för DETTA bolag
     existing = (
         s.query(MailItem)
         .filter(MailItem.subject == full_subject)
@@ -1390,7 +1455,12 @@ def deliver_job(
         amt = Decimal(str(job.agreed_price))
         vat_rate = Decimal("0.25")
         vat_amt = (amt * vat_rate).quantize(Decimal("0.01"))
-        invoice_no = f"F-{company.id:04d}-{company.jobs_delivered:04d}"
+        # Central nummergenerator (invoice_numbering.py) ersätter både
+        # 'F-{co}-{jobs_delivered}' och 'YYYY-NNNN' så att alla
+        # fakturor delar EN sekvens per company. UniqueConstraint på
+        # (tenant, company, invoice_number) fångar ev. race conditions.
+        from ..invoice_numbering import next_invoice_number as _nin
+        invoice_no = _nin(s, company=company)
         invoice = CompanyInvoice(
             company_id=company.id,
             customer_id=cust.id,

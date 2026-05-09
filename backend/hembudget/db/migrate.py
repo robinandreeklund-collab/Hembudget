@@ -782,6 +782,53 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "mail_items", col_sql)
                 applied.append(f"mail_items.{col_name}")
 
+    # === UniqueConstraint på fakturanummer (Bug 5 i foretag.md) ===
+    # CompanyInvoice + SupplierInvoice fick tidigare dubblettnummer vid
+    # race conditions. Lägg constraint idempotent · försök CREATE
+    # UNIQUE INDEX, ignorera vid 'already exists'.
+    is_postgres = engine.dialect.name == "postgresql"
+    for table_name, idx_name, cols in [
+        (
+            "company_invoices",
+            "uq_company_invoice_number",
+            ("tenant_id", "company_id", "invoice_number"),
+        ),
+        (
+            "biz_supplier_invoices",
+            "uq_supplier_invoice_number",
+            ("tenant_id", "company_id", "invoice_number"),
+        ),
+    ]:
+        if not _table_exists(engine, table_name):
+            continue
+        try:
+            cols_sql = ", ".join(cols)
+            if is_postgres:
+                stmt = (
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} "
+                    f"ON {table_name} ({cols_sql})"
+                )
+            else:
+                stmt = (
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} "
+                    f"ON {table_name} ({cols_sql})"
+                )
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+            applied.append(f"unique-idx:{table_name}.{idx_name}")
+            log.info("scope-migration: skapade %s", idx_name)
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "already exists" in msg or "duplicate" in msg:
+                continue
+            # Krock på existerande dubbletter? Logga men fortsätt —
+            # den dagliga driften ska inte ta ner sig pga historisk
+            # data; admin får städa manuellt.
+            log.warning(
+                "scope-migration: kunde inte skapa %s · %s",
+                idx_name, exc,
+            )
+
     # === Generisk auto-migration · saknade NULLABLE-kolumner ===
     # Säkerhetsnät för framtiden: jämför varje scope-tabell mot
     # SQLAlchemy-modellens kolumner. För kolumner som finns i modellen

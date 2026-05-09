@@ -81,6 +81,7 @@ def _compute_uc(
     kassa: int,
     margin_pct: float,
     income_4w: int,
+    expense_4w: int,
     n_invoices_overdue: int,
     reputation: int,
     weeks_active: int,
@@ -94,9 +95,22 @@ def _compute_uc(
       Rykte                                15 %
       Företagets ålder                     10 %
     """
-    # Likviditet · approx-månadskostnad = expense + lön. Eftersom vi inte
-    # har den direkt här tar vi income_4w som proxy: kassa relativt 4v-oms.
-    base_monthly = max(1, income_4w * 0.6)  # förenklad bedömning
+    # Likviditet · faktisk 4-veckorskostnad istället för 60 % av income.
+    # Tidigare bug: bolag med 0 oms men kassa fick base_monthly=1 →
+    # liquidity_score = 100/1 * 50 = 5000 → clamp till 100 → bolag
+    # utan inkomst men med kassa fick UC=AAA. Nu räknas faktisk
+    # expense_4w (= månadskostnad), med fallback om expense saknas.
+    if expense_4w > 0:
+        base_monthly = float(expense_4w)
+    elif income_4w > 0:
+        # Fallback: ingen expense ännu (kanske första veckan), använd
+        # 60 % av income som tidigare-approx.
+        base_monthly = max(1.0, income_4w * 0.6)
+    else:
+        # Inga rörelser alls · likviditet är fortfarande viktig men vi
+        # kan inte räkna mot 0. Använd kassan i sig som signal: minst
+        # 25 000 (motsvarar AB-aktiekapital) ger full likviditet.
+        base_monthly = 25_000.0
     liquidity_score = max(0, min(100, int(kassa / base_monthly * 50)))
 
     # Marginal: 0-50 → 0-100 score
@@ -309,6 +323,7 @@ def sync_class_company_share(
                 kassa=int(kassa),
                 margin_pct=margin,
                 income_4w=int(income),
+                expense_4w=int(expense),
                 n_invoices_overdue=n_overdue,
                 reputation=int(company.reputation or 50),
                 weeks_active=int(company.week_no or 0),

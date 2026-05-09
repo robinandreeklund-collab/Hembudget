@@ -26,6 +26,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -224,6 +225,16 @@ class CompanyCustomer(TenantMixin, Base):
 class CompanyInvoice(TenantMixin, Base):
     """Faktura som bolaget skickat till en kund."""
     __tablename__ = "company_invoices"
+    # Unique-constraint per (tenant, company, invoice_number) hindrar
+    # dubblett-nummer. Två numreringssystem (deliver_job:s F-XX-XX vs
+    # add_invoice:s YYYY-XXXX) kunde tidigare ge konflikter; central
+    # nummergenerator i invoice_numbering.py garanterar unikt nummer.
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "company_id", "invoice_number",
+            name="uq_company_invoice_number",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     company_id: Mapped[int] = mapped_column(
@@ -610,6 +621,15 @@ class SupplierInvoice(TenantMixin, Base):
     'manual' (eleven matar in själv från ett papper).
     """
     __tablename__ = "biz_supplier_invoices"
+    # Unique per (tenant, company, invoice_number) · tidigare kunde
+    # två events i samma vecka av samma kind ge identiska
+    # invoice_number ("EV-3-rabat") utan DB-spärr.
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "company_id", "invoice_number",
+            name="uq_supplier_invoice_number",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     company_id: Mapped[int] = mapped_column(
