@@ -168,16 +168,19 @@ export function PostladanV2() {
   // Övrigt      → ALLA reminder/info-brev
   // Hanterade   → status=paid/exported/handled (alla månader, alla typer)
   //
-  // Tidigare gömde jag paid-items från kategori-flikarna → de blev tomma
-  // när seed-sweep markerat allt som paid. Nu visar varje kategori-flik
-  // hela sin historik så eleven kan jämföra månader inom samma kategori.
+  // ALLT-fliken ska visa LITERALT ALLT — ohanterade + hanterade
+  // tillsammans i en kronologisk lista. Tidigare filtrerade vi bort
+  // paid/exported/handled från ALLT → eleven såg "0 brev" på ALLT
+  // trots att FAKTUROR-fliken visade 35. Det var förvirrande och
+  // gjorde fliken meningslös eftersom OHANTERADE redan visar
+  // bara-ohanterade. ALLT = inget filter, HANTERADE = bara handled.
   const HANDLED_STATUSES = new Set(["paid", "exported", "handled"]);
   let items = rawItems;
   if (tab === "handled") {
     items = rawItems.filter((m) => HANDLED_STATUSES.has(m.status));
-  } else if (tab === "all") {
-    items = rawItems.filter((m) => !HANDLED_STATUSES.has(m.status));
   }
+  // tab === "all" → ingen extra filtrering · visa allt backend
+  // returnerade (= alla released mails).
   // För Fakturor/Lönespecar/Myndighet/Övrigt/Ohanterade: visa allt
   // backend returnerade — ingen extra filtrering. Backend filtrerar
   // redan på mail_type så listan är korrekt scopad.
