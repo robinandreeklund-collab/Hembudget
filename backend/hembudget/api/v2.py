@@ -7292,7 +7292,9 @@ class V2InsurancePolicyIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     kind: Literal[
         "hem", "olycksfall", "liv", "barnforsakring",
-        "bostadsrattsforsakring", "bilforsakring", "djur", "ovrig",
+        "bostadsrattsforsakring", "bilforsakring", "djur",
+        "frisktandvard",
+        "ovrig",
     ]
     premium_monthly: float = Field(..., ge=0)
     coverage_amount: Optional[float] = None
@@ -7368,6 +7370,122 @@ def post_insurance_policy(
             status=p.status, started_on=p.started_on,
             ended_on=p.ended_on, notes=p.notes,
         )
+
+
+# === Frisktandvård-offert (SKV-4) ===
+
+class V2FrisktandvardOffer(BaseModel):
+    """Personlig offert för frisktandvård baserad på elevens tier.
+
+    Vid karaktärsskapande sätts elevens tier 1-10 i StudentProfile
+    baserat på simulerad tandhälsa. Den här endpointen returnerar
+    den faktiska premien (justerad för ålder · ATB/normal) så
+    eleven kan se det riktiga priset INNAN hen tecknar avtalet.
+
+    Saknas tier i profilen (gammal data) → returnera default grupp 4.
+    """
+    tier: int                  # 1-10
+    age_category: str          # 'atb' (20-23 eller 67+) | 'normal'
+    premium_monthly: int       # kr/mån
+    explanation: str           # pedagogisk klartext
+    # Hela pristabellen så UI kan visa "din grupp vs övriga"
+    tier_prices_atb: dict[int, int]
+    tier_prices_normal: dict[int, int]
+    already_active: bool       # om policy redan finns
+
+
+@router.get(
+    "/forsakringar/frisktandvard-offert",
+    response_model=V2FrisktandvardOffer,
+)
+def get_frisktandvard_offer(
+    info: TokenInfo = Depends(require_token),
+) -> V2FrisktandvardOffer:
+    """Hämta elevens personliga frisktandvård-offert.
+
+    Pris baseras på elevens tier (slumpat vid karaktärsskapande från
+    simulerad tandhälsa) och ålders-kategori (ATB-rabatt för
+    20-23 år och 67+).
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elev",
+        )
+
+    from ..game_engine.profile_generator.dental_picker import (
+        PREMIUM_WITH_ATB, PREMIUM_NORMAL, _is_atb_age,
+    )
+    from ..school.models import StudentProfile
+
+    # Default · grupp 4 normalpris om saknas
+    tier = 4
+    age = 30
+    age_cat = "normal"
+    with master_session() as ms:
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if prof is not None:
+            age = int(getattr(prof, "age", 30) or 30)
+            saved_tier = getattr(prof, "frisktandvard_tier", None)
+            if saved_tier is not None:
+                tier = int(saved_tier)
+            saved_cat = getattr(prof, "frisktandvard_age_category", None)
+            if saved_cat:
+                age_cat = saved_cat
+            else:
+                age_cat = "atb" if _is_atb_age(age) else "normal"
+
+    premium = (
+        PREMIUM_WITH_ATB[tier] if age_cat == "atb"
+        else PREMIUM_NORMAL[tier]
+    )
+
+    # Kollar om eleven redan har aktiv policy
+    already_active = False
+    with session_scope() as s:
+        existing = (
+            s.query(InsurancePolicy)
+            .filter(
+                InsurancePolicy.kind == "frisktandvard",
+                InsurancePolicy.status == "active",
+            )
+            .first()
+        )
+        if existing is not None:
+            already_active = True
+
+    if age_cat == "atb":
+        cat_explain = (
+            "Du får ATB-rabatt (Allmänt tandvårdsbidrag) eftersom du "
+            "är 20-23 år eller 67+. Lägre premie än vanligt."
+        )
+    else:
+        cat_explain = (
+            "Du betalar normalpris (24-66 år). ATB-rabatt gäller bara "
+            "för 20-23 år och 67+."
+        )
+
+    explanation = (
+        f"Din senaste tandkontroll placerade dig i prisgrupp {tier}. "
+        f"{cat_explain}\n\n"
+        f"Det här ger en månadspremie på {premium} kr (autogiro). "
+        "Avtalet täcker all tandvård (kontroll, lagning, rotfyllning, "
+        "tandstensborttagning) hos Folktandvården i 3 år. "
+        "Vid avtalsslut görs ny kontroll och du kan hamna i annan grupp."
+    )
+
+    return V2FrisktandvardOffer(
+        tier=tier,
+        age_category=age_cat,
+        premium_monthly=premium,
+        explanation=explanation,
+        tier_prices_atb=dict(PREMIUM_WITH_ATB),
+        tier_prices_normal=dict(PREMIUM_NORMAL),
+        already_active=already_active,
+    )
 
 
 @router.patch(

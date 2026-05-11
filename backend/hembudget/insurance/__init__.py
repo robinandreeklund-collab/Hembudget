@@ -109,6 +109,29 @@ DEFAULT_INSURANCE_POLICIES = [
             "1 Mkr · diagnoskapital vid allvarlig sjukdom"
         ),
     },
+    {
+        # Frisktandvård · baseline grupp 4 normalpris (24-66 år).
+        # Faktiskt pris justeras via GET /v2/forsakringar/frisktandvard
+        # -offert som slår upp elevens individuella tier från
+        # StudentProfile. Visas här som "considered" så eleven medvetet
+        # väljer att teckna (matchar verkligheten · Folktandvården
+        # erbjuder, du som patient bestämmer om du tackar ja).
+        "provider": "Folktandvården",
+        "name": "Frisktandvård · 3-årsavtal",
+        "kind": "frisktandvard",
+        "premium_monthly": Decimal("185"),  # grupp 4 normal · default
+        "coverage_amount": None,  # täcker tjänster, inte belopp
+        "deductible": None,
+        "autogiro": True,
+        "status": "considered",
+        "notes": (
+            "Fast månadspris för all tandvård (kontroll, lagning, "
+            "rotfyllning, tandstensborttagning). Premien beror på "
+            "din tandhälsa (grupp 1-10) och ålder. ATB-rabatt för "
+            "20-23 år och 67+. Begär offert via banken för exakt "
+            "pris baserat på din senaste kontroll."
+        ),
+    },
 ]
 
 
