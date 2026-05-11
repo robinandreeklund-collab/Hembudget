@@ -52,10 +52,13 @@ def test_unknown_category_default_floor():
 
 
 def test_elasticity_table_covers_required_categories():
-    """Sanity check — alla kategorier från användarens spec finns."""
+    """Sanity check — alla rörlig-utgift-kategorier från canonical-listan
+    har en floor. "Transport (övrigt)" och "Barn & familj" konsoliderades
+    bort i SKV-6 (kanonisk kategorilista) och ingår nu i "Transport"
+    respektive "Övrigt"."""
     required = [
-        "Mat & livsmedel", "Hälsa & hygien", "Transport (övrigt)",
-        "Barn & familj", "Förbrukningsvaror", "Kläder & skor",
+        "Mat & livsmedel", "Hälsa & hygien", "Transport",
+        "Övrigt", "Förbrukningsvaror", "Kläder & skor",
         "Nöje & fritid", "Restaurang & café",
     ]
     for cat in required:
