@@ -18,35 +18,43 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from ..db.models import Budget, Category
+from ..categorize.canonical import (
+    CAT_MAT_LIVSMEDEL, CAT_FORBRUKNINGSVAROR, CAT_HEMUTRUSTNING,
+    CAT_HUSHALLSEL, CAT_INTERNET_MOBIL, CAT_STROMNINGSTJANSTER,
+    CAT_FORSAKRING, CAT_TRANSPORT, CAT_KLADER_SKOR, CAT_HALSA_HYGIEN,
+    CAT_NOJE_FRITID, CAT_RESTAURANG, CAT_SPARMAL,
+)
 from ..game_engine.profile_generator.schema import GeneratedProfile
 from ..school.konsumentverket import BudgetSuggestion, suggest_budget
 
 
-# Mappning från BudgetSuggestion-fält → elev-kategorinamn.
-# Samma kategorier som variable_expenses.py + fixed_expenses.py
-# använder, så onboarding-budgeten ligger i nivå med actuals direkt
-# första månaden.
+# Mappning från BudgetSuggestion-fält → kanonisk kategori.
+# OBS: kategori-namnen MÅSTE finnas i canonical.CANONICAL_CATEGORIES
+# (annars matchar inte budget-jämförelsen mot tx-kategorier).
 _FIELD_TO_CATEGORY: list[tuple[str, str]] = [
-    ("mat",                "Mat & livsmedel"),
-    ("forbrukningsvaror",  "Förbrukningsvaror"),
-    ("hemutrustning",      "Hemutrustning"),
-    ("el",                 "Hushållsel"),
-    ("bredband_mobil",     "Internet & mobil"),
-    ("medietjanster",      "Strömningstjänster"),
-    ("vatten_avlopp",      "Vatten"),
-    ("hemforsakring",      "Hemförsäkring"),
-    ("transport",          "Transport (övrigt)"),
+    ("mat",                CAT_MAT_LIVSMEDEL),
+    ("forbrukningsvaror",  CAT_FORBRUKNINGSVAROR),
+    ("hemutrustning",      CAT_HEMUTRUSTNING),
+    ("el",                 CAT_HUSHALLSEL),
+    ("bredband_mobil",     CAT_INTERNET_MOBIL),
+    ("medietjanster",      CAT_STROMNINGSTJANSTER),
+    # vatten_avlopp ingår i Boende-kategorin (KV behandlar det som
+    # bofast kostnad). Vi mappar det till Boende istället för en
+    # separat Vatten-kategori som inte finns i kanoniska listan.
+    ("vatten_avlopp",      "Boende"),
+    ("hemforsakring",      CAT_FORSAKRING),
+    ("transport",          CAT_TRANSPORT),
 ]
 
 
 # `individuellt_ovrigt` är aggregerad — bryt ned i de tre viktigaste
 # delposterna (kläder, hygien, fritid) enligt KV-PDF:s andelar.
 _INDIV_SPLIT: list[tuple[float, str]] = [
-    (0.27, "Kläder & skor"),
-    (0.18, "Hälsa & hygien"),
-    (0.32, "Nöje & fritid"),
+    (0.27, CAT_KLADER_SKOR),
+    (0.18, CAT_HALSA_HYGIEN),
+    (0.32, CAT_NOJE_FRITID),
     # Resterande ~23 % är försäkringar/sjukvård/övrigt, hamnar i
-    # "Restaurang & café"-bufferten via nojen_marginal.
+    # Restaurang-bufferten via nojen_marginal.
 ]
 
 
@@ -160,7 +168,7 @@ def seed_initial_budget(
     # nöje är det första som kapas vid bristande budget.
     rest_amount = max(0, int(sug.nojen_marginal or 0) // 3)
     if rest_amount > 0:
-        cat = _get_or_create_category(s, "Restaurang & café")
+        cat = _get_or_create_category(s, CAT_RESTAURANG)
         if _set_budget_if_missing(
             s, year_month, cat.id, -Decimal(rest_amount),
         ):
@@ -173,7 +181,7 @@ def seed_initial_budget(
     # endpoint. Här bara registrera som budget-rad så elev ser i
     # /v2/budget vad KV rekommenderar att hen sätter undan.
     if sug.sparande and sug.sparande > 0:
-        cat = _get_or_create_category(s, "Sparmål")
+        cat = _get_or_create_category(s, CAT_SPARMAL)
         if _set_budget_if_missing(
             s, year_month, cat.id, -Decimal(int(sug.sparande)),
         ):

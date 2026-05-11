@@ -860,6 +860,101 @@ def run_migrations(engine: Engine) -> list[str]:
     auto_applied = _auto_add_nullable_columns(engine)
     applied.extend(auto_applied)
 
+    # === KANONISKA KATEGORIER · backfill (SKV-6) ===
+    # Alla tidigare kategori-strängar (Mat/Livsmedel/Restaurang/Kläder &
+    # Skor/Streaming/Apotek/Hälsa/Nöje/Hemförsäkring/Bilförsäkring osv.)
+    # → kanonisk lista i categorize/canonical.py.
+    #
+    # Strategi:
+    # 1. För varje alias som finns som Category.name → uppdatera till
+    #    kanonisk om (a) kanoniska redan finns: merga (uppdatera tx
+    #    category_id → kanoniska + ta bort alias-raden) (b) annars:
+    #    bara renamea.
+    # 2. parent_id = NULL för alla (vi har platt struktur nu).
+    #
+    # Idempotent · säker att köra varje uppstart.
+    if _table_exists(engine, "categories"):
+        try:
+            from hembudget.categorize.canonical import (
+                _ALIAS_MAP_RAW, canonicalize,
+                CANONICAL_CATEGORIES,
+            )
+            with engine.begin() as conn:
+                # Hämta alla nuvarande categories
+                cur = conn.execute(text(
+                    "SELECT id, name, parent_id, tenant_id "
+                    "FROM categories"
+                ))
+                rows = list(cur.fetchall())
+                # Bygg lookup: (tenant_id, canonical_name) → id
+                # Om kanonisk rad redan finns för en tenant använder
+                # vi den som mål för merge.
+                canon_id_by_tenant: dict[tuple, int] = {}
+                for cat_id, name, _pid, tenant_id in rows:
+                    if name in CANONICAL_CATEGORIES:
+                        canon_id_by_tenant.setdefault(
+                            (tenant_id, name), cat_id,
+                        )
+
+                for cat_id, name, _pid, tenant_id in rows:
+                    canonical = canonicalize(name)
+                    if canonical == name:
+                        # Redan kanonisk · säkerställ parent_id=NULL
+                        conn.execute(text(
+                            "UPDATE categories SET parent_id = NULL "
+                            "WHERE id = :i"
+                        ), {"i": cat_id})
+                        continue
+
+                    target_id = canon_id_by_tenant.get(
+                        (tenant_id, canonical),
+                    )
+                    if target_id is not None and target_id != cat_id:
+                        # Merge · flytta tx + budget + rules över,
+                        # ta bort alias-raden
+                        for tbl, col in (
+                            ("transactions", "category_id"),
+                            ("transactions", "subcategory_id"),
+                            ("budgets", "category_id"),
+                            ("rules", "category_id"),
+                            ("upcoming_transactions", "category_id"),
+                        ):
+                            if not _table_exists(engine, tbl):
+                                continue
+                            t_cols = _columns(engine, tbl)
+                            if col not in t_cols:
+                                continue
+                            try:
+                                conn.execute(text(
+                                    f"UPDATE {tbl} SET {col} = :t "
+                                    f"WHERE {col} = :s"
+                                ), {"t": target_id, "s": cat_id})
+                            except Exception:
+                                pass
+                        # Ta bort alias-raden
+                        try:
+                            conn.execute(text(
+                                "DELETE FROM categories WHERE id = :i"
+                            ), {"i": cat_id})
+                        except Exception:
+                            pass
+                    else:
+                        # Bara renamea
+                        try:
+                            conn.execute(text(
+                                "UPDATE categories SET name = :n, "
+                                "parent_id = NULL WHERE id = :i"
+                            ), {"n": canonical, "i": cat_id})
+                            canon_id_by_tenant[
+                                (tenant_id, canonical)
+                            ] = cat_id
+                        except Exception:
+                            pass
+            applied.append("categories:canonicalized")
+            log.info("scope-migration: kategorier kanoniserade")
+        except Exception:
+            log.exception("scope-migration: kategori-kanonisering misslyckades")
+
     return applied
 
 

@@ -62,8 +62,8 @@ VARIATION_PER_LEVEL = {1: 0.05, 2: 0.12, 3: 0.20}
 ELASTICITY: dict[str, float] = {
     "Mat & livsmedel":        0.70,
     "Hälsa & hygien":         0.70,
-    "Transport (övrigt)":     0.60,
-    "Barn & familj":          0.80,
+    "Transport":     0.60,
+    "Övrigt":          0.80,
     "Förbrukningsvaror":      0.40,
     "Kläder & skor":          0.20,
     "Nöje & fritid":          0.00,
@@ -271,9 +271,9 @@ def _plans_for(
             ],
         ),
         CategoryPlan(
-            name="Transport (övrigt)",
+            name="Transport",
             monthly_amount=_vary(_eff(
-                "Transport (övrigt)", int(350 * transport_mult),
+                "Transport", int(350 * transport_mult),
             )),
             n_transactions=(1, 4),
             merchants=["Uber", "Bolt", "Voi", "SJ", "Taxi Stockholm"],
@@ -283,9 +283,9 @@ def _plans_for(
 
     if profile.family.children_count > 0:
         plans.append(CategoryPlan(
-            name="Barn & familj",
+            name="Övrigt",
             monthly_amount=_vary(_eff(
-                "Barn & familj",
+                "Övrigt",
                 700 + 300 * profile.family.children_count,
             )),
             n_transactions=(2, 5),
