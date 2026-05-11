@@ -117,21 +117,50 @@ EVENT_TEMPLATES: list[EventTemplate] = [
         key="tandlakar_kontroll",
         display="Folktandvården · karieskontroll",
         description=(
-            "Folktandvården ringde och kallade dig till en akut "
-            "karieskontroll. Två lagningar behövs."
+            "Folktandvården kallade till halvårskontroll. Snabb "
+            "undersökning med röntgen vid behov."
         ),
         kind="unexpected",
         frequency_per_year=0.5,
-        cost_range=(3000, 6500),
-        pentagon_unmitigated=PentagonImpact(economy=-8, health=-4),
-        pentagon_mitigated=PentagonImpact(economy=-2, health=+1),
+        # Realistisk prislista 2026 · enbart kontroll (inte lagning).
+        # Tidigare 3000-6500 var orealistiskt högt — det var närmare
+        # 'kontroll + 2 lagningar' men eventet säger bara 'kontroll'.
+        # Hänvisar nu till lagning som SEPARAT event (tandlakar_karies
+        # nedan).
+        cost_range=(700, 1100),
+        pentagon_unmitigated=PentagonImpact(economy=-2, health=-1),
+        pentagon_mitigated=PentagonImpact(economy=0, health=+1),
         mitigations=(
-            Mitigation("tandvard", 0.10, "Tandvårdsförsäkring · egenavgift 500 kr"),
+            # Frisktandvård täcker 100 % (egenavgift 0 kr)
+            Mitigation("frisktandvard", 0.0, "Frisktandvård · ingen kostnad"),
+            # Äldre 'tandvard'-kind kvar för bakåtkompat
+            Mitigation("tandvard", 0.10, "Tandvårdsförsäkring · egenavgift"),
         ),
         sender="Folktandvården",
         sender_short="FTV",
         sender_kind="other",
-        echo_trigger="Hade en tandvårdsförsäkring kostat mindre i längden?",
+        echo_trigger="Hade frisktandvård gjort detta gratis?",
+    ),
+    EventTemplate(
+        key="tandlakar_karies",
+        display="Folktandvården · karies-lagning",
+        description=(
+            "Vid kontrollen hittades ett hål som behöver lagas. "
+            "Lagning med komposit · 1 besök."
+        ),
+        kind="unexpected",
+        frequency_per_year=0.20,
+        cost_range=(1800, 3200),
+        pentagon_unmitigated=PentagonImpact(economy=-4, health=-1),
+        pentagon_mitigated=PentagonImpact(economy=0, health=+1),
+        mitigations=(
+            Mitigation("frisktandvard", 0.0, "Frisktandvård · ingen kostnad"),
+            Mitigation("tandvard", 0.20, "Tandvårdsförsäkring · egenavgift"),
+        ),
+        sender="Folktandvården",
+        sender_short="FTV",
+        sender_kind="other",
+        echo_trigger="Hade frisktandvård gjort detta gratis?",
     ),
     EventTemplate(
         key="vardcentral_besok",
