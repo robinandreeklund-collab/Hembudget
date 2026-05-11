@@ -188,16 +188,52 @@ def _prev_period_dates(year_month: str) -> tuple[date, date]:
     return _period_dates(_prev_year_month(year_month))
 
 
+def _get_car_facts(student_id: Optional[int]) -> dict:
+    """Slå upp bil-data från StudentProfile (master DB) för SKV-3-flödet.
+    Returnerar tom dict om student_id är None eller profil saknas.
+    """
+    if student_id is None:
+        return {}
+    try:
+        from ...school.engines import master_session
+        from ...school.models import StudentProfile
+        with master_session() as ms:
+            prof = (
+                ms.query(StudentProfile)
+                .filter(StudentProfile.student_id == student_id)
+                .first()
+            )
+            if prof is None:
+                return {}
+            return {
+                "has_car": bool(getattr(prof, "has_car", False)),
+                "commute_transport": getattr(prof, "commute_transport", None),
+                "fuel_type": getattr(prof, "car_fuel_type", None),
+                "fuel_cost": int(getattr(prof, "car_monthly_fuel_cost", 0) or 0),
+                "electric_extra": int(getattr(
+                    prof, "car_monthly_electric_extra", 0,
+                ) or 0),
+                "leasing_monthly": getattr(prof, "car_leasing_monthly", None),
+                "car_brand": getattr(prof, "car_brand", None),
+                "car_model": getattr(prof, "car_model", None),
+                "license_plate": getattr(prof, "car_license_plate", None),
+            }
+    except Exception:
+        return {}
+
+
 def _build_bills(
     rng: random.Random,
     profile: GeneratedProfile,
     year_month: str,
+    student_id: Optional[int] = None,
 ) -> list[FixedBill]:
     """Bygg lista över fakturor för månaden — sorterade på dag.
 
     Varje faktura kan ha invoice_data med strukturerade rader, moms,
     OCR och period — som sedan renderas i MailDetailV2.InvoiceLayout.
     """
+    car_facts = _get_car_facts(student_id)
     city = STAD_BY_KEY.get(profile.city_key)
     bills: list[FixedBill] = []
     period_start, period_end = _period_dates(year_month)
@@ -572,7 +608,14 @@ def _build_bills(
     # nedan (efter att session öppnats).
 
     # === DAG 10 · LOKALTRAFIK · månadskort om städer med koll-trafik ===
-    if city and city.job_density >= 1.0:
+    # Gate på car_facts: bilägare får INTE SL-faktura, bara kollektiv-
+    # transport-pendlare. Verkligheten: man äger inte både bil OCH har
+    # månadskort för dagspendling (väldigt få gör det).
+    skip_public_transport = bool(
+        car_facts.get("has_car")
+        and car_facts.get("commute_transport") == "car"
+    )
+    if city and city.job_density >= 1.0 and not skip_public_transport:
         sl_amount = 970 if city.key == "stockholm" else 850
         sl_provider = "SL"
         sl_bg = "5012-0145"
@@ -622,6 +665,125 @@ def _build_bills(
             },
         ))
 
+    # === DAG 12 · DRIVMEDEL (SKV-3) · bilägare ===
+    # Bensin/diesel som månadsfaktura från drivmedelsbolag. El-bilar
+    # får INGEN separat drivmedelsfaktura — el-laddningen läggs som
+    # tillägg på el-räkningen istället (lägg till på första utility-
+    # raden om den finns, annars separat rad).
+    if car_facts.get("has_car") and car_facts.get("fuel_type") in (
+        "bensin", "diesel", "hybrid",
+    ):
+        fuel_cost = car_facts.get("fuel_cost", 0)
+        if fuel_cost > 0:
+            fuel_type = car_facts["fuel_type"]
+            station = (
+                "OKQ8" if fuel_type == "diesel" else
+                "Circle K" if fuel_type == "bensin" else "Preem"
+            )
+            plate = car_facts.get("license_plate", "—")
+            # Bensin/diesel-faktura · moms 25 %
+            fuel_net = int(fuel_cost / 1.25)
+            fuel_moms = fuel_cost - fuel_net
+            ocr_fuel = _ocr(f"fuel-{year_month}")
+            bills.append(FixedBill(
+                day=12,
+                sender=station,
+                sender_short=station[:3].upper(),
+                sender_kind="util",
+                subject=(
+                    f"{fuel_type.title()}-faktura · "
+                    f"företagsavtal {year_month}"
+                ),
+                body_meta=(
+                    f"~{fuel_cost} kr · pendling med "
+                    f"{car_facts.get('car_brand')} "
+                    f"{car_facts.get('car_model')}"
+                ),
+                amount=fuel_cost,
+                bankgiro="5800-2233",
+                invoice_data={
+                    "kind": "drivmedel",
+                    "invoice_number": f"FUEL-{year_month}-{plate}",
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                    "rows": [
+                        {
+                            "label": (
+                                f"{fuel_type.title()} · regnr {plate}"
+                            ),
+                            "amount": fuel_net,
+                        },
+                    ],
+                    "subtotal": fuel_net,
+                    "moms": fuel_moms,
+                    "moms_rate": 25,
+                    "total": fuel_cost,
+                    "ocr": ocr_fuel,
+                    "bankgiro": "5800-2233",
+                    "extra": {
+                        "moms_note": (
+                            "Drivmedel har full moms 25 % · "
+                            "som privatperson är denna momsen "
+                            "INTE avdragsgill."
+                        ),
+                    },
+                },
+            ))
+
+    # El-bil får tilläggsladdning som ren expense-rad om hemladdning
+    # > 0 kr (matchar privat-elräkningen). Ingen egen faktura — pengarna
+    # går via elbolagets vanliga räkning. Detta hanteras i variable_
+    # expenses / utility-flödet · vi flaggar inte här utan låter
+    # utility_phase plocka upp electric_extra-fältet.
+
+    # === DAG 28 · BILLEASING (SKV-3) ===
+    # Om financing=leasing · separat månadsfaktura från leasingbolaget.
+    if car_facts.get("has_car") and car_facts.get("leasing_monthly"):
+        leasing_amt = int(car_facts["leasing_monthly"])
+        if leasing_amt > 0:
+            leas_net = int(leasing_amt / 1.25)
+            leas_moms = leasing_amt - leas_net
+            ocr_leas = _ocr(f"leas-{year_month}")
+            bills.append(FixedBill(
+                day=28,
+                sender="Spelbanken Bil-leasing",
+                sender_short="SBL",
+                sender_kind="fin",
+                subject=f"Leasingavgift {year_month}",
+                body_meta=(
+                    f"{car_facts.get('car_brand')} "
+                    f"{car_facts.get('car_model')} · "
+                    f"{leasing_amt} kr/mån"
+                ),
+                amount=leasing_amt,
+                bankgiro="5900-3344",
+                invoice_data={
+                    "kind": "leasing",
+                    "invoice_number": (
+                        f"LEAS-{year_month}-"
+                        f"{car_facts.get('license_plate', '')}"
+                    ),
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                    "rows": [
+                        {
+                            "label": (
+                                f"Leasingavgift · "
+                                f"{car_facts.get('car_brand')} "
+                                f"{car_facts.get('car_model')}"
+                            ),
+                            "amount": leas_net,
+                        },
+                    ],
+                    "subtotal": leas_net,
+                    "moms": leas_moms,
+                    "moms_rate": 25,
+                    "total": leasing_amt,
+                    "ocr": ocr_leas,
+                    "bankgiro": "5900-3344",
+                },
+            ))
+
     return sorted(bills, key=lambda b: b.day)
 
 
@@ -631,6 +793,7 @@ def generate_fixed_expenses(
     profile: GeneratedProfile,
     year_month: str,
     student_scope: str,
+    student_id: Optional[int] = None,
     rng: Optional[random.Random] = None,
     release_base: Optional[datetime] = None,
 ) -> dict:
@@ -643,7 +806,7 @@ def generate_fixed_expenses(
     """
     rng = rng or random.Random(f"{student_scope}|{year_month}|fixed")
 
-    bills = _build_bills(rng, profile, year_month)
+    bills = _build_bills(rng, profile, year_month, student_id=student_id)
     period_start, period_end = _period_dates(year_month)
 
     def _ocr(seed_extra: str) -> str:

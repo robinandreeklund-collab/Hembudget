@@ -9,6 +9,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from .car_picker import CarChoice
+
 
 HousingType = Literal["hyresratt", "bostadsratt", "villa", "radhus"]
 FamilyStatus = Literal["ensam", "sambo", "familj_med_barn"]
@@ -83,6 +85,10 @@ class GeneratedProfile(BaseModel):
 
     # Boende
     housing: HousingChoice
+
+    # Bil + pendling (CarChoice från car_picker · valfri för bakåtkompat
+    # · gamla profiler utan bil-data returnerar None)
+    car: Optional[CarChoice] = None
 
     # Familj
     family: FamilyChoice

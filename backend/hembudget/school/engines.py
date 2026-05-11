@@ -555,6 +555,35 @@ def _run_master_migrations(engine: Engine) -> None:
         if "character_last_name" not in sp_cols:
             _add("student_profiles", "character_last_name VARCHAR(60)")
 
+        # === Bil + pendling (SKV-3) · 17 nya kolumner ===
+        car_cols = [
+            ("has_car", "has_car BOOLEAN NOT NULL DEFAULT 0"),
+            ("commute_transport", "commute_transport VARCHAR(20)"),
+            ("commute_km", "commute_km INTEGER NOT NULL DEFAULT 0"),
+            ("car_brand", "car_brand VARCHAR(40)"),
+            ("car_model", "car_model VARCHAR(60)"),
+            ("car_year", "car_year INTEGER"),
+            ("car_fuel_type", "car_fuel_type VARCHAR(20)"),
+            ("car_market_value_sek", "car_market_value_sek INTEGER"),
+            ("car_license_plate", "car_license_plate VARCHAR(10)"),
+            ("car_insurance_provider", "car_insurance_provider VARCHAR(40)"),
+            ("car_insurance_premium_monthly",
+             "car_insurance_premium_monthly INTEGER"),
+            ("car_financing", "car_financing VARCHAR(20)"),
+            ("car_loan_principal", "car_loan_principal INTEGER"),
+            ("car_loan_monthly_payment", "car_loan_monthly_payment INTEGER"),
+            ("car_leasing_monthly", "car_leasing_monthly INTEGER"),
+            ("car_monthly_fuel_cost",
+             "car_monthly_fuel_cost INTEGER NOT NULL DEFAULT 0"),
+            ("car_monthly_electric_extra",
+             "car_monthly_electric_extra INTEGER NOT NULL DEFAULT 0"),
+            ("car_monthly_public_transport",
+             "car_monthly_public_transport INTEGER NOT NULL DEFAULT 0"),
+        ]
+        for col_name, col_sql in car_cols:
+            if col_name not in sp_cols:
+                _add("student_profiles", col_sql)
+
     # ALTER COLUMN TYPE: konvertera INTEGER → BIGINT på seed-kolumner
     # som lagrar uint32-värden (kan vara > 2^31-1). create_all ändrar
     # inte typen på existerande kolumner, så prod-Postgres kan ha

@@ -453,6 +453,68 @@ class StudentProfile(MasterBase):
     # Backstory som visas i onboardingen
     backstory: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # === Bil + pendling (Feature SKV-3 · realistisk vardag) ===
+    # Sätts av car_picker.pick_car() vid profilgenerering. Driver
+    # bilförsäkring + drivmedelskostnader + bil-events + Skatteverket-
+    # reseavdrag. Alla fält deferred() så lazy-load inte kraschar
+    # innan migrationen kört på prod-Postgres.
+    has_car: Mapped[bool] = deferred(mapped_column(
+        Boolean, nullable=False, default=False,
+    ))
+    # "car" | "public" | "bike" | "remote"
+    commute_transport: Mapped[Optional[str]] = deferred(mapped_column(
+        String(20), nullable=True,
+    ))
+    commute_km: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0,
+    ))
+    car_brand: Mapped[Optional[str]] = deferred(mapped_column(
+        String(40), nullable=True,
+    ))
+    car_model: Mapped[Optional[str]] = deferred(mapped_column(
+        String(60), nullable=True,
+    ))
+    car_year: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    car_fuel_type: Mapped[Optional[str]] = deferred(mapped_column(
+        String(20), nullable=True,
+    ))
+    car_market_value_sek: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    car_license_plate: Mapped[Optional[str]] = deferred(mapped_column(
+        String(10), nullable=True,
+    ))
+    car_insurance_provider: Mapped[Optional[str]] = deferred(mapped_column(
+        String(40), nullable=True,
+    ))
+    car_insurance_premium_monthly: Mapped[Optional[int]] = deferred(
+        mapped_column(Integer, nullable=True),
+    )
+    # "cash" | "loan" | "leasing"
+    car_financing: Mapped[Optional[str]] = deferred(mapped_column(
+        String(20), nullable=True,
+    ))
+    car_loan_principal: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    car_loan_monthly_payment: Mapped[Optional[int]] = deferred(
+        mapped_column(Integer, nullable=True),
+    )
+    car_leasing_monthly: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    car_monthly_fuel_cost: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0,
+    ))
+    car_monthly_electric_extra: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0,
+    ))
+    car_monthly_public_transport: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0,
+    ))
+
     # === Sprint 8 · företag-vs-jobb-balans ===
     # Veckotid på det vanliga jobbet · default 40h heltid. Eleven kan
     # gå ner till 50% (20h) eller säga upp helt (0h) som beslut när

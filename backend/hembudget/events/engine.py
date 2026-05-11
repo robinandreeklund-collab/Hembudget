@@ -90,10 +90,24 @@ def _passes_triggers(
     rng: random.Random,
     checking: Decimal,
     savings: Decimal,
+    has_car: bool = False,
+    weeks_active: int = 0,
 ) -> tuple[bool, str]:
     """Kollar om ett template passerar sina trigger-villkor.
-    Returnerar (passes, skip_reason)."""
+    Returnerar (passes, skip_reason).
+
+    Nya triggers (SKV-3):
+      requires_has_car · skipa om eleven saknar bil
+      min_week · minst N spel-veckor sedan karaktärsskapande
+    """
     triggers = template.triggers or {}
+
+    # SKV-3 · bil-event-villkor
+    if triggers.get("requires_has_car") and not has_car:
+        return False, "no_car"
+    min_week = triggers.get("min_week")
+    if min_week is not None and weeks_active < int(min_week):
+        return False, "too_early"
 
     weekday_filter = triggers.get("weekday")
     if weekday_filter and today.weekday() not in weekday_filter:
@@ -199,6 +213,28 @@ def tick_for_student(
     checking = _checking_balance(scope_session)
     savings = _savings_balance(scope_session)
 
+    # SKV-3 · bil-data + spel-veckor sedan karaktärsskapande
+    has_car_flag = False
+    weeks_active_for_events = 0
+    try:
+        from ..school.engines import master_session as _ms_car
+        from ..school.models import Student, StudentProfile as _SP
+        from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+        with _ms_car() as ms_car:
+            stu = ms_car.get(Student, student_seed)
+            if stu is not None and stu.created_at is not None:
+                sp = (
+                    ms_car.query(_SP)
+                    .filter(_SP.student_id == student_seed)
+                    .first()
+                )
+                if sp is not None:
+                    has_car_flag = bool(getattr(sp, "has_car", False))
+                delta_days = (today - GAME_ANCHOR_DATE).days
+                weeks_active_for_events = max(0, delta_days // 7)
+    except Exception:
+        pass
+
     # Hämta alla aktiva templates
     templates = (
         master_session.query(EventTemplate)
@@ -233,6 +269,8 @@ def tick_for_student(
         passes, reason = _passes_triggers(
             tpl, today=today, rng=rng,
             checking=checking, savings=savings,
+            has_car=has_car_flag,
+            weeks_active=weeks_active_for_events,
         )
         if not passes:
             skip_counts[reason] = skip_counts.get(reason, 0) + 1

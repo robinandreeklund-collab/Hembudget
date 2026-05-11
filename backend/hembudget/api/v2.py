@@ -3659,6 +3659,24 @@ class V2TaxYearReturnOut(BaseModel):
     diff: float
 
 
+class V2TaxCommuteHint(BaseModel):
+    """Pedagogisk reseavdrag-hint baserat på StudentProfile.commute_km.
+
+    Vi fyller INTE i avdraget åt eleven. Hen ska själv beräkna och
+    mata in det · läromoment. Vi visar bara underlaget + grundnivån.
+    """
+    has_car: bool
+    fuel_type: Optional[str] = None
+    commute_km_one_way: int
+    workdays_per_year: int = 220
+    # Beräknat: km × 2 × workdays × 18,5 öre/km
+    estimated_annual_cost: int
+    # Grundnivå · 11 000 kr · bara över räknas som avdrag
+    threshold_kr: int = 11_000
+    # Eleven kan deklarera (estimated - threshold) om positivt
+    suggested_deduction_kr: int
+
+
 class V2TaxResponse(BaseModel):
     student_id: int
     year: int
@@ -3673,6 +3691,8 @@ class V2TaxResponse(BaseModel):
     proposals: list[V2TaxProposalRow] = []
     submitted: Optional[V2TaxYearReturnOut] = None
     can_submit: bool = True
+    # SKV-3 · pedagogisk hint för reseavdrag · eleven fyller in själv
+    commute_hint: Optional[V2TaxCommuteHint] = None
 
 
 def _empty_tax(student_id: int, year: int) -> V2TaxResponse:
@@ -3921,6 +3941,37 @@ def get_skatten(
         amount=diff,
     ))
 
+    # SKV-3 · pedagogisk reseavdrags-hint. Vi BERÄKNAR underlaget
+    # baserat på StudentProfile.commute_km men fyller INTE i avdraget
+    # automatiskt — eleven måste själv mata in det. Pedagogisk poäng:
+    # eleven får syn på 18,50 öre/km × 2 × 220 arbetsdagar och kan
+    # själv räkna ut om hen kvalar över 11 000 kr grundnivå.
+    commute_hint: Optional[V2TaxCommuteHint] = None
+    try:
+        with master_session() as ms_hint:
+            sp_hint = (
+                ms_hint.query(StudentProfile)
+                .filter(StudentProfile.student_id == info.student_id)
+                .first()
+            )
+            if sp_hint is not None:
+                ck = int(getattr(sp_hint, "commute_km", 0) or 0)
+                has_car_h = bool(getattr(sp_hint, "has_car", False))
+                fuel_h = getattr(sp_hint, "car_fuel_type", None)
+                if ck > 0:
+                    annual_km = ck * 2 * 220
+                    annual_cost = int(annual_km * 0.185)  # 18,5 öre/km
+                    above_threshold = max(0, annual_cost - 11_000)
+                    commute_hint = V2TaxCommuteHint(
+                        has_car=has_car_h,
+                        fuel_type=fuel_h,
+                        commute_km_one_way=ck,
+                        estimated_annual_cost=annual_cost,
+                        suggested_deduction_kr=above_threshold,
+                    )
+    except Exception:
+        pass
+
     return V2TaxResponse(
         student_id=info.student_id,
         year=target_year,
@@ -3935,6 +3986,7 @@ def get_skatten(
         proposals=proposals_out,
         submitted=submitted_out,
         can_submit=(submitted_out is None or not submitted_out.locked),
+        commute_hint=commute_hint,
     )
 
 

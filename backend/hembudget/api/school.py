@@ -305,6 +305,130 @@ def _create_profile_for_student(session, student: Student) -> StudentProfile:
     if master_has_column("student_profiles", "character_last_name"):
         profile_kwargs["character_last_name"] = gen.character_last_name
 
+    # === Bil + pendling (SKV-3) ===
+    # Slumpa fram bil-data deterministiskt med samma seed-bas som
+    # resten av profilen. car_picker tar emot stadsnyckel + ålder +
+    # spend-profile och returnerar full CarChoice.
+    #
+    # Familj-scope: bilen är DELAD inom familjen (1 bil per hushåll).
+    # Vi kollar om någon annan familjemedlem redan har bil-data och
+    # ärver i så fall den · annars seedat normalt och nästa
+    # familjemedlem ärver från oss.
+    try:
+        from ..game_engine.profile_generator.car_picker import (
+            pick_car, CarChoice,
+        )
+        from ..school.profile_fixtures import _seed_for_student
+
+        inherited_car: Optional[CarChoice] = None
+        if student.family_id is not None:
+            # Hitta första syskon-/föräldra-StudentProfile med bil-data
+            sibling_with_car = (
+                session.query(StudentProfile)
+                .join(Student, Student.id == StudentProfile.student_id)
+                .filter(
+                    Student.family_id == student.family_id,
+                    Student.id != student.id,
+                    StudentProfile.has_car.is_(True),
+                )
+                .first()
+            )
+            if sibling_with_car is not None:
+                # Bygg CarChoice från syskonets fält (utan att slumpa)
+                inherited_car = CarChoice(
+                    has_car=True,
+                    commute_transport=getattr(
+                        sibling_with_car, "commute_transport", "car",
+                    ) or "car",
+                    commute_km=getattr(sibling_with_car, "commute_km", 0) or 0,
+                    brand=getattr(sibling_with_car, "car_brand", None),
+                    model=getattr(sibling_with_car, "car_model", None),
+                    year=getattr(sibling_with_car, "car_year", None),
+                    fuel_type=getattr(sibling_with_car, "car_fuel_type", None),
+                    market_value_sek=getattr(
+                        sibling_with_car, "car_market_value_sek", None,
+                    ),
+                    license_plate=getattr(
+                        sibling_with_car, "car_license_plate", None,
+                    ),
+                    insurance_provider=getattr(
+                        sibling_with_car, "car_insurance_provider", None,
+                    ),
+                    insurance_premium_monthly=getattr(
+                        sibling_with_car,
+                        "car_insurance_premium_monthly", None,
+                    ),
+                    financing=getattr(
+                        sibling_with_car, "car_financing", None,
+                    ),
+                    loan_principal=getattr(
+                        sibling_with_car, "car_loan_principal", None,
+                    ),
+                    loan_monthly_payment=getattr(
+                        sibling_with_car, "car_loan_monthly_payment",
+                        None,
+                    ),
+                    leasing_monthly=getattr(
+                        sibling_with_car, "car_leasing_monthly", None,
+                    ),
+                    monthly_fuel_cost=getattr(
+                        sibling_with_car, "car_monthly_fuel_cost", 0,
+                    ) or 0,
+                    monthly_electric_extra=getattr(
+                        sibling_with_car, "car_monthly_electric_extra",
+                        0,
+                    ) or 0,
+                    monthly_public_transport=0,
+                )
+
+        if inherited_car is not None:
+            car = inherited_car
+        else:
+            car_rng = random.Random(_seed_for_student(student.id) + 7)
+            # city_key från profile_fixtures är stadsnamn ("Stockholm")
+            # car_picker._city_tier accepterar lower-case nyckel
+            city_key = (
+                gen.city.lower().replace(" ", "")
+                .replace("ä", "a").replace("ö", "o").replace("å", "a")
+            )
+            car = pick_car(
+                car_rng,
+                city_key=city_key,
+                age=gen.age,
+                spend_profile=gen.personality,
+                student_id=student.id,
+            )
+        # Lägg på kolumner endast om migrationen har kört (defensiv)
+        car_field_map = {
+            "has_car": car.has_car,
+            "commute_transport": car.commute_transport,
+            "commute_km": car.commute_km,
+            "car_brand": car.brand,
+            "car_model": car.model,
+            "car_year": car.year,
+            "car_fuel_type": car.fuel_type,
+            "car_market_value_sek": car.market_value_sek,
+            "car_license_plate": car.license_plate,
+            "car_insurance_provider": car.insurance_provider,
+            "car_insurance_premium_monthly": car.insurance_premium_monthly,
+            "car_financing": car.financing,
+            "car_loan_principal": car.loan_principal,
+            "car_loan_monthly_payment": car.loan_monthly_payment,
+            "car_leasing_monthly": car.leasing_monthly,
+            "car_monthly_fuel_cost": car.monthly_fuel_cost,
+            "car_monthly_electric_extra": car.monthly_electric_extra,
+            "car_monthly_public_transport": car.monthly_public_transport,
+        }
+        for col, val in car_field_map.items():
+            if master_has_column("student_profiles", col):
+                profile_kwargs[col] = val
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "_create_profile_for_student: car-seeding misslyckades för "
+            "student %s · profil sparas utan bil-data",
+            student.id,
+        )
+
     try:
         profile = StudentProfile(**profile_kwargs)
         session.add(profile)

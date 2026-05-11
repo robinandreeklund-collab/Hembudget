@@ -468,6 +468,24 @@ def tick_month(
                 accounts = ensure_scope_accounts(s, profile)
                 lonekonto = accounts["lonekonto"]
 
+                # Bil-seed (SKV-3) · skapar InsurancePolicy, ev. Loan
+                # och välkomstmail för bilägare. Idempotent. Tysta fel.
+                try:
+                    from .car_seed import seed_car_for_scope
+                    from datetime import date as _d_car
+                    # Sätt seed-datum till första av year_month
+                    ym_y, ym_m = year_month.split("-")
+                    today_for_car = _d_car(int(ym_y), int(ym_m), 1)
+                    seed_car_for_scope(
+                        s, student_id=student.id, today_game=today_for_car,
+                    )
+                except Exception:
+                    log.exception(
+                        "tick_month: car-seed misslyckades för "
+                        "student=%s ym=%s",
+                        student.id, year_month,
+                    )
+
                 summary["salary"] = generate_salary_phase(
                     s,
                     profile=profile,
@@ -483,6 +501,7 @@ def tick_month(
                     profile=profile,
                     year_month=year_month,
                     student_scope=scope_key,
+                    student_id=student.id,
                     rng=random.Random(rng_master.random()),
                     release_base=release_base,
                 )
