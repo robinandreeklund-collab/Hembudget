@@ -8,22 +8,56 @@
  * /v2/postladan INNAN seeden var klar och såg helt tomma vyer ("0 brev",
  * "0 kr saldo") som var omöjliga att skilja från en bugg.
  *
- * Den här komponenten pollar /v2/status och täcker hela skärmen så
- * länge `seed_status === "pending"`. När statusen flippar till
- * "complete" lyfts overlayn och eleven landar på den färdiga vyn.
- * Vid "failed" visar vi ett tydligt felmeddelande istället för att
- * snurra evigt — läraren kan reseeda via lärar-detaljvyn.
+ * Tre robusthetstrick mot timing-race:
  *
- * Komponenten poll:ar bara aktivt när användaren är elev. Lärare/demo
+ *  1. Overlay visas DIREKT vid mount (`shouldRender=true` default).
+ *     Hide:as bara efter att /v2/status BEVISLIGEN sagt "complete".
+ *     Då undgår vi att första poll kommer in efter att seeden redan
+ *     hunnit göra status='complete' → overlay hade aldrig synts → eleven
+ *     såg en sekund tom postlåda.
+ *
+ *  2. Komplettering cachas i sessionStorage per student-id. Andra/tredje
+ *     navigationen visar därför ingen overlay-flash trots aggressiv
+ *     default. Cachen lever per browsersession så reseed (lärar-detalj)
+ *     fungerar via reload + nytt session-tab.
+ *
+ *  3. Pollar var 1000 ms (var 1500 ms innan) och börjar med 1 omedelbar
+ *     poll. När statusen lämnar "pending" lagras complete-cache och
+ *     ev. fortsatt polling stoppas.
+ *
+ * Komponenten pollar bara aktivt när användaren är elev. Lärare/demo
  * får ingen overlay (de har ingen egen seed-livscykel).
  */
 import { useEffect, useState } from "react";
 import { v2Api, type V2Status } from "./api";
 
-const POLL_INTERVAL_MS = 1500;
+const POLL_INTERVAL_MS = 1000;
+const CACHE_PREFIX = "v2-seed-complete-";
+
+function readCachedComplete(studentId: number | string): boolean {
+  try {
+    return sessionStorage.getItem(`${CACHE_PREFIX}${studentId}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeCachedComplete(studentId: number | string): void {
+  try {
+    sessionStorage.setItem(`${CACHE_PREFIX}${studentId}`, "1");
+  } catch {
+    // sessionStorage kan vara avstängt (incognito-läge på vissa browsers).
+    // Då får eleven en kortare overlay-flash vid varje navigation — inget
+    // hindrar funktionalitet.
+  }
+}
 
 export function SeedingOverlay() {
   const [status, setStatus] = useState<V2Status | null>(null);
+  // Overlay visas tills vi har bekräftat "complete" eller sett att
+  // användaren inte är elev. Default true så vi täcker tomma vyer
+  // medan första pollen är in-flight.
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,13 +68,29 @@ export function SeedingOverlay() {
         const s = await v2Api.status();
         if (cancelled) return;
         setStatus(s);
-        // Sluta polla så fort statusen lämnat "pending". Vi pollar
-        // inte heller om användaren inte är elev — overlayn visas inte
-        // ändå och vi vill inte spamma /v2/status från lärar-vyer.
-        if (s.role !== "student") return;
-        if (s.seed_status === "pending") {
-          timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+        // Icke-elev → ingen overlay alls (lärare/demo har ingen seed).
+        if (s.role !== "student") {
+          setHidden(true);
+          return;
         }
+        const cacheKey = s.student_id ?? "current";
+
+        // Om vi redan sett complete för denna elev i denna session,
+        // göm overlayn omedelbart utan vidare polling.
+        if (readCachedComplete(cacheKey)) {
+          setHidden(true);
+          return;
+        }
+        if (s.seed_status === "complete" || s.seed_status === undefined) {
+          // undefined betyder att backend inte har fältet (legacy före
+          // SKV-seed-fix). Vi behandlar det som complete så overlayn
+          // inte fastnar för existerande elever utan migrerad kolumn.
+          writeCachedComplete(cacheKey);
+          setHidden(true);
+          return;
+        }
+        // pending eller failed → fortsätt polla
+        timer = window.setTimeout(poll, POLL_INTERVAL_MS);
       } catch {
         // Tysta nätverksfel · försök igen vid nästa intervall så
         // overlayn inte fastnar om backend hickar i 1 s.
@@ -56,12 +106,12 @@ export function SeedingOverlay() {
     };
   }, []);
 
-  if (!status || status.role !== "student") return null;
-  if (status.seed_status === "complete" || status.seed_status === undefined) {
-    return null;
-  }
-
-  const failed = status.seed_status === "failed";
+  if (hidden) return null;
+  // Visa overlay tills vi vet att seeden är complete. Inkluderar:
+  //   - First-load (status === null) · annars hade vi flashat tom postlåda
+  //   - Pending · seed pågår
+  //   - Failed · seed havererade, visa felmeddelande
+  const failed = status?.seed_status === "failed";
 
   return (
     <div
@@ -106,8 +156,10 @@ export function SeedingOverlay() {
           ) : (
             <>
               Vi förbereder din karaktär —{" "}
-              <em style={{ color: "var(--accent, #dc4c2b)" }}>postlåda,
-              bankkonton, försäkringar</em>.
+              <em style={{ color: "var(--accent, #dc4c2b)" }}>
+                postlåda, bankkonton, försäkringar
+              </em>
+              .
             </>
           )}
         </h2>

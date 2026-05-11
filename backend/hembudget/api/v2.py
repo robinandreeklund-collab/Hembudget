@@ -147,6 +147,10 @@ class V2StatusResponse(BaseModel):
     # tills "complete" så eleven aldrig ser tomma vyer pga race mot
     # async seed. "failed" → lärar-detaljvyn auto-reseedar.
     seed_status: Literal["pending", "complete", "failed"] = "complete"
+    # Identifierar eleven så frontend kan cacha seed-complete per id
+    # och undvika overlay-flash vid efterföljande navigation. NULL för
+    # lärare/demo (de har inget elev-scope).
+    student_id: Optional[int] = None
 
 
 class OnboardingCompleteRequest(BaseModel):
@@ -13429,6 +13433,7 @@ def get_v2_status(
             v2_partner_model=getattr(student, "v2_partner_model", None) or "solo",
             is_super_admin=False,
             seed_status=seed_status,  # type: ignore[arg-type]
+            student_id=student.id,
         )
 
 

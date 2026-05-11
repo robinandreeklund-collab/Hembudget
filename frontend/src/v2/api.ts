@@ -25,6 +25,10 @@ export type V2Status = {
    * (lön, postlådan, försäkringar, pension, rental, events). Frontend
    * visar overlay tills "complete" så eleven inte ser tomma vyer. */
   seed_status?: SeedStatus;
+  /** Eleven-id · används för att cacha seed-complete per id i
+   * sessionStorage så overlayn inte flashar vid efterföljande
+   * navigation. NULL för lärare/demo. */
+  student_id?: number | null;
 };
 
 export type OnboardingComplete = {
