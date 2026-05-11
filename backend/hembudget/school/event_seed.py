@@ -1148,6 +1148,95 @@ EVENT_TEMPLATES: list[dict] = [
         "social_invite_allowed": False,
         "declinable": True,
     },
+
+    # === SKV-4 · Tandhälsa-events ===
+    # Folktandvården-besök. Om eleven har aktiv frisktandvård
+    # (insurance_kind='frisktandvard') reduceras cost till 0 i
+    # tick_for_student-flödet. Annars full kostnad enligt fast
+    # prislista. Pedagogisk poäng: eleven inser värdet av frisktandvård
+    # över tid när stora ingrepp (rotfyllning ~5 000 kr) plötsligt
+    # täcks gratis.
+    {
+        "code": "dental_check",
+        "title": "Tid till karieskontroll · Folktandvården",
+        "description": (
+            "Tid för halvårskontroll hos tandläkaren. Snabb undersökning "
+            "med röntgen vid behov. Frisktandvårdspatienter betalar 0 kr."
+        ),
+        "category": "unexpected",
+        "brand": "Folktandvården",
+        "cost_min": 700, "cost_max": 900,
+        "impact_health": 1,
+        "duration_days": 14,
+        "triggers": {
+            "min_week": 4,  # tidigt OK · alla har tänder från start
+            "random_weight": 0.45,
+            "insurance_covers": "frisktandvard",  # gratis om aktiv policy
+        },
+        "social_invite_allowed": False,
+        "declinable": False,  # hälsa · obligatoriskt
+    },
+    {
+        "code": "dental_filling",
+        "title": "Lagning av karies",
+        "description": (
+            "Vid senaste kontrollen upptäcktes ett hål som behöver lagas. "
+            "Lagning med komposit · 1 besök ca 45 min."
+        ),
+        "category": "unexpected",
+        "brand": "Folktandvården",
+        "cost_min": 1800, "cost_max": 2800,
+        "impact_health": 1, "impact_economy": -1,
+        "duration_days": 21,
+        "triggers": {
+            "min_week": 8,
+            "random_weight": 0.18,
+            "insurance_covers": "frisktandvard",
+        },
+        "social_invite_allowed": False,
+        "declinable": False,
+    },
+    {
+        "code": "dental_scaling",
+        "title": "Tandstensborttagning",
+        "description": (
+            "Tandhygienisten rekommenderar tandstensborttagning. "
+            "Förebygger karies + tandköttsproblem."
+        ),
+        "category": "unexpected",
+        "brand": "Folktandvården",
+        "cost_min": 900, "cost_max": 1400,
+        "impact_health": 1,
+        "duration_days": 21,
+        "triggers": {
+            "min_week": 14,
+            "random_weight": 0.20,
+            "insurance_covers": "frisktandvard",
+        },
+        "social_invite_allowed": False,
+        "declinable": True,
+    },
+    {
+        "code": "dental_root_canal",
+        "title": "Rotfyllning · stor tandbehandling",
+        "description": (
+            "En tand har djup karies som kräver rotbehandling. "
+            "Flera besök · ca 4-7 tim totalt. Utan frisktandvård "
+            "blir det 4 000-7 000 kr ur egen ficka."
+        ),
+        "category": "unexpected",
+        "brand": "Folktandvården",
+        "cost_min": 4000, "cost_max": 7000,
+        "impact_health": -1, "impact_economy": -3, "impact_safety": -1,
+        "duration_days": 14,
+        "triggers": {
+            "min_week": 30,
+            "random_weight": 0.08,
+            "insurance_covers": "frisktandvard",
+        },
+        "social_invite_allowed": False,
+        "declinable": False,
+    },
 ]
 
 

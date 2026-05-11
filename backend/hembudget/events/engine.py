@@ -301,13 +301,39 @@ def tick_for_student(
 
         tpl, _w = candidates.pop(picked_idx)
         cost = _resolve_cost(tpl, rng)
+
+        # SKV-4 · insurance_covers · om eleven har aktiv policy som
+        # matchar triggers.insurance_covers (t.ex. 'frisktandvard')
+        # reduceras cost till 0 och title märks "(täckt)".
+        title = tpl.title
+        description = tpl.description
+        covers_kind = (tpl.triggers or {}).get("insurance_covers")
+        if covers_kind:
+            from ..db.models import InsurancePolicy as _IP
+            has_coverage = (
+                scope_session.query(_IP)
+                .filter(
+                    _IP.kind == covers_kind,
+                    _IP.status == "active",
+                )
+                .first()
+            ) is not None
+            if has_coverage:
+                cost = Decimal(0)
+                title = f"{tpl.title} · TÄCKT"
+                description = (
+                    f"{tpl.description}\n\n"
+                    f"✓ Täcks av din {covers_kind}-försäkring · 0 kr egen "
+                    "kostnad. Acceptera för att boka tiden."
+                )
+
         proposed = today + timedelta(days=rng.randint(1, max(2, tpl.duration_days // 2)))
         deadline = today + timedelta(days=tpl.duration_days)
 
         ev = StudentEvent(
             event_code=tpl.code,
-            title=tpl.title,
-            description=tpl.description,
+            title=title,
+            description=description,
             category=tpl.category,
             cost=cost,
             proposed_date=proposed,

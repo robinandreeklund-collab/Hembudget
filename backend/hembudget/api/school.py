@@ -429,6 +429,35 @@ def _create_profile_for_student(session, student: Student) -> StudentProfile:
             student.id,
         )
 
+    # === Frisktandvård (SKV-4) ===
+    # Slumpa ~40 % chans + tier 1-10 + ålders-justerad premie.
+    # Familje-elever: vi slumpar individuellt (varje familjemedlem har
+    # sitt eget tandavtal, till skillnad från bilen som är 1/hushåll).
+    try:
+        from ..game_engine.profile_generator.dental_picker import pick_dental
+        from ..school.profile_fixtures import _seed_for_student
+        dental_rng = random.Random(_seed_for_student(student.id) + 13)
+        dental = pick_dental(
+            dental_rng,
+            age=gen.age,
+            spend_profile=gen.personality,
+        )
+        dental_field_map = {
+            "has_frisktandvard": dental.has_frisktandvard,
+            "frisktandvard_tier": dental.tier,
+            "frisktandvard_age_category": dental.age_category,
+            "frisktandvard_premium_monthly": dental.premium_monthly,
+        }
+        for col, val in dental_field_map.items():
+            if master_has_column("student_profiles", col):
+                profile_kwargs[col] = val
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "_create_profile_for_student: dental-seeding failed för "
+            "student %s · sparas utan frisktandvård-data",
+            student.id,
+        )
+
     try:
         profile = StudentProfile(**profile_kwargs)
         session.add(profile)

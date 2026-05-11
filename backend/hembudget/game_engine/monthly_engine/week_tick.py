@@ -486,6 +486,24 @@ def tick_month(
                         student.id, year_month,
                     )
 
+                # Frisktandvård-seed (SKV-4) · skapar InsurancePolicy +
+                # välkomstmail för elever med frisktandvård i sin
+                # StudentProfile. Idempotent. Tysta fel.
+                try:
+                    from .dental_seed import seed_dental_for_scope
+                    from datetime import date as _d_d
+                    ym_y, ym_m = year_month.split("-")
+                    today_for_d = _d_d(int(ym_y), int(ym_m), 1)
+                    seed_dental_for_scope(
+                        s, student_id=student.id, today_game=today_for_d,
+                    )
+                except Exception:
+                    log.exception(
+                        "tick_month: dental-seed misslyckades för "
+                        "student=%s ym=%s",
+                        student.id, year_month,
+                    )
+
                 summary["salary"] = generate_salary_phase(
                     s,
                     profile=profile,

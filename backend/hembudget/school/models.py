@@ -515,6 +515,25 @@ class StudentProfile(MasterBase):
         Integer, nullable=False, default=0,
     ))
 
+    # === Frisktandvård (SKV-4 · realistisk tandförsäkring) ===
+    # ~40 % av karaktärerna har frisktandvårdsavtal. Tier 1-10 baseras
+    # på tandhälsa · premie skalas med ålder (ATB 20-23/67+ vs normal
+    # 24-66). När tandhälsa-event triggas (karieskontroll, lagning)
+    # täcker frisktandvården 100 % om policy är aktiv.
+    has_frisktandvard: Mapped[bool] = deferred(mapped_column(
+        Boolean, nullable=False, default=False,
+    ))
+    frisktandvard_tier: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    # "atb" (20-23 eller 67+) | "normal" (24-66)
+    frisktandvard_age_category: Mapped[Optional[str]] = deferred(
+        mapped_column(String(10), nullable=True),
+    )
+    frisktandvard_premium_monthly: Mapped[Optional[int]] = deferred(
+        mapped_column(Integer, nullable=True),
+    )
+
     # === Sprint 8 · företag-vs-jobb-balans ===
     # Veckotid på det vanliga jobbet · default 40h heltid. Eleven kan
     # gå ner till 50% (20h) eller säga upp helt (0h) som beslut när

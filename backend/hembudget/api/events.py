@@ -113,48 +113,49 @@ def list_pending(scope: Session = Depends(db)) -> dict:
         .all()
     )
 
-    # Backstop · kör tick_for_student om INNEVARANDE spel-vecka saknar
-    # events. Tidigare körde vi backstop:en bara när 0 pending events
-    # totalt — men i spel-tid-modellen kan en elev ha gamla pending-
-    # events kvar (deadline långt fram) i veckor utan att nya skapas.
-    # Resultat: eleven såg samma 1-2 events i evighet utan nya
-    # förslag.
-    #
+    # Backstop · säkerställ att senaste 4 spel-veckorna har events.
     # tick_for_student är idempotent per ISO-vecka (already_ticked-
-    # check) så det är säkert att alltid kalla — den skippar om
-    # veckan redan har events.
+    # check) så det är säkert att kalla. Ny elev som spelar from
+    # anchor (2026-01-01) → fyller på vecka 1, 2, 3, 4 av spel-tid.
+    # Eleven får både social-events att hantera + en känsla att
+    # spel-tiden faktiskt rör sig.
     try:
-        week_n = today.isocalendar()[1]
-        from datetime import date as _date_eg, timedelta as _td_eg
-        week_start = _date_eg.fromisocalendar(today.year, week_n, 1)
-        week_end = week_start + _td_eg(days=6)
-        ticked_this_week = (
-            scope.query(StudentEvent)
-            .filter(
-                StudentEvent.proposed_date >= week_start,
-                StudentEvent.proposed_date <= week_end,
-                StudentEvent.source == "system",
-            )
-            .first()
+        from datetime import timedelta as _td_eg
+        from ..school.engines import (
+            get_current_actor_student as _gcas_e,
         )
-        if ticked_this_week is None:
-            from ..school.engines import (
-                get_current_actor_student as _gcas_e,
-            )
-            from ..school.models import Student as _Stu_e
-            sid_e = _gcas_e()
-            if sid_e is not None:
-                with master_session() as ms_e:
-                    stu_e = ms_e.get(_Stu_e, sid_e)
-                    if stu_e is not None:
-                        tick_for_student(
-                            scope_session=scope,
-                            master_session=ms_e,
-                            student_seed=sid_e,
-                            today=today,
-                            max_events_per_tick=3,
-                        )
+        from ..school.models import Student as _Stu_e
+        sid_e = _gcas_e()
+        if sid_e is not None:
+            need_recompute = False
+            with master_session() as ms_e:
+                stu_e = ms_e.get(_Stu_e, sid_e)
+                if stu_e is not None:
+                    # Backfill senaste 4 spel-veckorna · 0..3 veckor
+                    # bakåt från today. tick_for_student skippar om
+                    # veckan redan tickats (already_ticked-flagga).
+                    for w_back in range(4):
+                        tick_day = today - _td_eg(days=w_back * 7)
+                        try:
+                            r = tick_for_student(
+                                scope_session=scope,
+                                master_session=ms_e,
+                                student_seed=sid_e,
+                                today=tick_day,
+                                max_events_per_tick=3,
+                            )
+                            if r.events_created > 0:
+                                need_recompute = True
+                        except Exception:
+                            import logging
+                            logging.getLogger(__name__).exception(
+                                "list_pending: backstop tick failed "
+                                "för day=%s student=%s",
+                                tick_day, sid_e,
+                            )
+                    if need_recompute:
                         scope.commit()
+            if need_recompute:
                 # Re-query · ev. nya events som skapats
                 rows = (
                     scope.query(StudentEvent)
@@ -166,7 +167,10 @@ def list_pending(scope: Session = Depends(db)) -> dict:
                     .all()
                 )
     except Exception:
-        pass
+        import logging
+        logging.getLogger(__name__).exception(
+            "list_pending: backstop misslyckades",
+        )
 
     return {
         "events": [_to_out(e).model_dump() for e in rows],

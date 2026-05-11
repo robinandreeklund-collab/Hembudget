@@ -584,6 +584,20 @@ def _run_master_migrations(engine: Engine) -> None:
             if col_name not in sp_cols:
                 _add("student_profiles", col_sql)
 
+        # === Frisktandvård (SKV-4) · 4 nya kolumner ===
+        dental_cols = [
+            ("has_frisktandvard",
+             "has_frisktandvard BOOLEAN NOT NULL DEFAULT 0"),
+            ("frisktandvard_tier", "frisktandvard_tier INTEGER"),
+            ("frisktandvard_age_category",
+             "frisktandvard_age_category VARCHAR(10)"),
+            ("frisktandvard_premium_monthly",
+             "frisktandvard_premium_monthly INTEGER"),
+        ]
+        for col_name, col_sql in dental_cols:
+            if col_name not in sp_cols:
+                _add("student_profiles", col_sql)
+
     # ALTER COLUMN TYPE: konvertera INTEGER → BIGINT på seed-kolumner
     # som lagrar uint32-värden (kan vara > 2^31-1). create_all ändrar
     # inte typen på existerande kolumner, så prod-Postgres kan ha
