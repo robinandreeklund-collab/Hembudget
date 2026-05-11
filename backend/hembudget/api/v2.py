@@ -15638,13 +15638,28 @@ def teacher_student_detail(
                 .count()
             )
         if _completed_runs == 0:
-            background_tasks.add_task(
-                _seed_initial_student_data_safe,
-                student_id,
-                spend_profile or "balanserad",
-                v2_level,
-                partner or "solo",
-            )
+            # SYNKRON · tidigare BackgroundTask men det överlappade
+            # med v2_create_student's sync-seed om lärar-vyn öppnades
+            # samtidigt → båda seeds skrev till samma scope-DB
+            # parallellt → vissa mails saknades, spend_profile flippade
+            # mellan requests. Nu kör vi inline · läraren får 3-5 s
+            # blockad första gången hen öppnar en elev utan data, men
+            # vyn är aldrig delvis-seedad.
+            try:
+                _seed_initial_student_data_safe(
+                    student_id,
+                    spend_profile or "balanserad",
+                    v2_level,
+                    partner or "solo",
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "teacher_student_detail: auto-recovery seed "
+                    "failed för student %s — lärar-vyn renderar "
+                    "med tom data tills nästa öppning",
+                    student_id,
+                )
     except Exception:
         import logging
         logging.getLogger(__name__).exception(
