@@ -328,7 +328,15 @@ def tick_for_student(
                 )
 
         proposed = today + timedelta(days=rng.randint(1, max(2, tpl.duration_days // 2)))
-        deadline = today + timedelta(days=tpl.duration_days)
+        # För korta templates (duration_days=1-2) kan proposed ovan landa
+        # SENARE än today+duration_days, vilket skulle ge deadline < proposed
+        # och då filtreras eventet ut direkt av list_pending's
+        # `deadline >= today`-villkor. Säkerställ att eleven alltid har
+        # minst en spel-dag på sig att svara från proposed_date.
+        deadline = max(
+            today + timedelta(days=tpl.duration_days),
+            proposed + timedelta(days=1),
+        )
 
         ev = StudentEvent(
             event_code=tpl.code,
