@@ -625,6 +625,42 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         )
         from ..school.models import StudentProfile as _SP_rent
         from datetime import date as _d_rent, timedelta as _td_rent
+
+        # Hämta aktuell elevs profil för housing_type-koll. Tidigare:
+        # `.order_by(student_id.desc()).first()` plockade SENASTE profilen i
+        # master-DB:n (alltså senaste skapade eleven) → fel data för alla
+        # andra elever. Vi använder ContextVar:n `get_current_actor_student`
+        # som scope-middleware sätter per request.
+        _housing_type_for_actor: Optional[str] = None
+        _net_salary_for_actor: Optional[float] = None
+        _age_for_actor: Optional[int] = None
+        try:
+            from ..school.engines import (
+                master_session as _ms_rent2,
+                get_current_actor_student as _gcas_rent,
+            )
+            _actor_id = _gcas_rent()
+            if _actor_id is not None:
+                with _ms_rent2() as _msdb2:
+                    _prof = (
+                        _msdb2.query(_SP_rent)
+                        .filter(_SP_rent.student_id == _actor_id)
+                        .first()
+                    )
+                    if _prof is not None:
+                        _housing_type_for_actor = (
+                            getattr(_prof, "housing_type", None) or None
+                        )
+                        _net_salary_for_actor = (
+                            float(_prof.net_salary_monthly)
+                            if _prof.net_salary_monthly else None
+                        )
+                        _age_for_actor = (
+                            int(_prof.age) if _prof.age is not None else None
+                        )
+        except Exception:
+            pass
+
         active_rentals = (
             session.query(_RC)
             .filter(_RC.status == "active")
@@ -665,30 +701,12 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
                     "långsiktigt boende.",
                 ))
 
-            # Hyresandel av netto — slå mot StudentProfile.net_salary_monthly
-            # OBS: StudentProfile bor i master-DB (MasterBase), inte i
-            # scope-DB. session-parametern här är en scope-DB-session
-            # → vi måste öppna master_session separat. Lazy import för
-            # att undvika circular.
-            try:
-                from ..school.engines import master_session as _ms_rent
-                with _ms_rent() as _msdb:
-                    profile = (
-                        _msdb.query(_SP_rent)
-                        .order_by(_SP_rent.student_id.desc())
-                        .first()
-                    )
-                    # Detacha så vi kan använda fältet utanför sessionen
-                    _net_salary = (
-                        float(profile.net_salary_monthly)
-                        if profile and profile.net_salary_monthly
-                        else None
-                    )
-            except Exception:
-                _net_salary = None
-            profile = _net_salary  # rebrand för enkelhet nedan
-            if profile is not None:
-                net = profile  # vi rebrand-ade till net_salary ovan
+            # Hyresandel av netto — använd actor-scopad net_salary som
+            # vi hämtade ovan (tidigare bug: .order_by(student_id.desc())
+            # plockade fel elevs profil).
+            _net_salary = _net_salary_for_actor
+            if _net_salary is not None:
+                net = _net_salary
                 if net > 0 and rent > 0:
                     share = rent / net
                     if share > 0.40:
@@ -732,24 +750,35 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
                     "året — kostnaden ökar snabbare än lön.",
                 ))
         else:
-            # Ingen aktiv bostad alls. Vi vill bara straffa elever
-            # som *borde* ha ett kontrakt registrerat — alltså inte
-            # tomma scope-DB:n (nyss skapade elever, tester).
-            # Heuristik: om det finns minst ett konto antar vi att
-            # eleven är onboardad och boende-data saknas på riktigt.
-            try:
-                has_any_account = (
-                    session.query(Account.id).limit(1).first() is not None
-                )
-            except Exception:
-                has_any_account = False
-            if has_any_account:
+            # Ingen aktiv hyresrätt. Det betyder INTE att boendet saknas:
+            # elever som äger bostadsrätt/villa/radhus har housing_type
+            # satt på profilen istället för en RentalContract-rad.
+            # Tidigare bugg: koden straffade ALLA elever som inte hade
+            # hyresrätt (inkl. bostadsrätt-ägare) med "boendet är
+            # odefinierat" → falsk negativ.
+            if _housing_type_for_actor in (
+                "bostadsratt", "villa", "radhus",
+            ):
+                safety += 4
                 factors.append(WellbeingFactor(
-                    "safety", -2,
-                    "Inget registrerat hyreskontrakt eller bostadsrätt — "
-                    "boendet är odefinierat.",
+                    "safety", 4,
+                    f"Äger {_housing_type_for_actor} — full kontroll "
+                    "över boendet, inget besittningsskydd att förlora.",
                 ))
-                safety -= 2
+            else:
+                try:
+                    has_any_account = (
+                        session.query(Account.id).limit(1).first() is not None
+                    )
+                except Exception:
+                    has_any_account = False
+                if has_any_account:
+                    factors.append(WellbeingFactor(
+                        "safety", -2,
+                        "Inget registrerat hyreskontrakt eller bostadsrätt — "
+                        "boendet är odefinierat.",
+                    ))
+                    safety -= 2
     except Exception:
         import logging
         logging.getLogger(__name__).exception(
@@ -765,22 +794,29 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         from ..db.models import Account as _Acc_pen
 
         _isk_now = float(_isk_bal(session))
-        # Hämta StudentProfile (master-DB) för ålder
-        try:
-            from ..school.engines import master_session as _ms_pen
-            with _ms_pen() as _msdb_pen:
-                _prof_pen = (
-                    _msdb_pen.query(_SP_pen)
-                    .order_by(_SP_pen.student_id.desc())
-                    .first()
+        # Hämta ålder för AKTUELL elev (inte 'senaste' i master, vilket
+        # gav 38 år på alla elever om en till elev skapades efter).
+        # Återanvänd actor-scopat värde från rental-factorn ovan om vi
+        # hann hämta det där; annars gör en egen scope-koll här.
+        _age_pen = _age_for_actor
+        if _age_pen is None:
+            try:
+                from ..school.engines import (
+                    master_session as _ms_pen,
+                    get_current_actor_student as _gcas_pen,
                 )
-                _age_pen = (
-                    int(_prof_pen.age)
-                    if _prof_pen and _prof_pen.age is not None
-                    else None
-                )
-        except Exception:
-            _age_pen = None
+                _actor_pen = _gcas_pen()
+                if _actor_pen is not None:
+                    with _ms_pen() as _msdb_pen:
+                        _prof_pen = (
+                            _msdb_pen.query(_SP_pen)
+                            .filter(_SP_pen.student_id == _actor_pen)
+                            .first()
+                        )
+                        if _prof_pen and _prof_pen.age is not None:
+                            _age_pen = int(_prof_pen.age)
+            except Exception:
+                _age_pen = None
 
         # ISK aktivt (har innehav) → +economy
         if _isk_now > 0:

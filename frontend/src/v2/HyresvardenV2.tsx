@@ -73,7 +73,17 @@ const NOTICE_TYPE_LABEL: Record<string, string> = {
   ovrig: "Övrigt",
 };
 
-export function HyresvardenV2() {
+/**
+ * Hyresvärden · standalone-vy ELLER inbäddad i Boendemarknad.
+ *
+ * `embedded={true}` används av BoendemarknadV2's "Hyresavtal & värd"-flik
+ * — då rendrar vi INTE eget V2Banner/shell/back-länk/header, så att
+ * tabs-stripen ovanför behålls och eleven kan klicka tillbaka till
+ * "Köpa eller sälja". Tidigare hijack:ade HyresvardenV2 hela layouten
+ * → tabs försvann + back-knappen ledde till pentagonen istället för
+ * tillbaka till Boendemarknad.
+ */
+export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {}) {
   const [data, setData] = useState<V2RentalData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,41 +180,46 @@ export function HyresvardenV2() {
   }
 
   if (error && !data) {
+    const inner = (
+      <div className="bank-loading">
+        <div>
+          <div style={{ color: "#fca5a5", marginBottom: 8 }}>
+            Kunde inte ladda hyres-data
+          </div>
+          <pre style={{ fontSize: 11 }}>{error}</pre>
+        </div>
+      </div>
+    );
+    if (embedded) return inner;
     return (
       <div className="v2-lan-root">
         <V2Banner status={{ role: "student", is_super_admin: false }} />
-        <div className="bank-loading">
-          <div>
-            <div style={{ color: "#fca5a5", marginBottom: 8 }}>
-              Kunde inte ladda hyres-data
-            </div>
-            <pre style={{ fontSize: 11 }}>{error}</pre>
-          </div>
-        </div>
+        {inner}
       </div>
     );
   }
   if (!data) {
+    const inner = <div className="bank-loading">Laddar hyresvärden…</div>;
+    if (embedded) return inner;
     return (
       <div className="v2-lan-root">
         <V2Banner status={{ role: "student", is_super_admin: false }} />
-        <div className="bank-loading">Laddar hyresvärden…</div>
+        {inner}
       </div>
     );
   }
 
   const { contract, notices, summary } = data;
 
-  return (
-    <div className="v2-lan-root">
-      <V2Banner status={{ role: "student", is_super_admin: false }} />
-
-      <div className="shell">
+  const body = (
+    <>
+      {!embedded && (
         <Link className="actor-back" to="/v2/hub">
           Tillbaka till pentagonen
         </Link>
+      )}
 
-        <header className="actor-head">
+      <header className="actor-head">
           <div>
             <span className="pill warm">Aktör 08 · Hyresvärden</span>
             <h1 className="actor-name" style={{ marginTop: 14 }}>
@@ -745,7 +760,16 @@ export function HyresvardenV2() {
             Fascinerande resultat.
           </div>
         </div>
-      </div>
+    </>
+  );
+
+  if (embedded) {
+    return body;
+  }
+  return (
+    <div className="v2-lan-root">
+      <V2Banner status={{ role: "student", is_super_admin: false }} />
+      <div className="shell">{body}</div>
     </div>
   );
 }

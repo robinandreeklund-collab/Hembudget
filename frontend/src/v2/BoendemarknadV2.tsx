@@ -141,7 +141,11 @@ function tabBtnStyle(active: boolean): React.CSSProperties {
  * fungerar det. En uppstädning kommer i Sprint 6.
  */
 function HyresvardenInline() {
-  return <HyresvardenV2 />;
+  // embedded · HyresvardenV2 renderar då bara innehållet utan eget
+  // V2Banner/shell/back-länk så att Boendemarknad-tabsen ovanför
+  // behålls. Annars hijack:as hela layouten och eleven tappar tabsen
+  // + back-knappen leder till pentagonen istället för Boendemarknad.
+  return <HyresvardenV2 embedded />;
 }
 
 
