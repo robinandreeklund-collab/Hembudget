@@ -251,6 +251,12 @@ def huvudbok(
         total_assets += assets_contribution
         total_liabilities += liabilities_contribution
 
+        # OBS · V2-frontend (HuvudbokV2) läser kortformerna `opening`,
+        # `closing`, `expense`, `tx_count`. V1 + tester läser
+        # `opening_balance`, `closing_balance`, `expenses`,
+        # `transaction_count`. Vi emit:ar BÅDA så ingen sida behöver
+        # adapter och NaN-buggen på huvudboken (undefined → NaN) elimineras
+        # för v2 utan att v1 går sönder.
         account_rows.append({
             "id": acc.id,
             "name": acc.name,
@@ -259,14 +265,19 @@ def huvudbok(
             "owner_id": acc.owner_id,
             "incognito": is_incognito,
             "opening_balance": float(opening_at_period),
+            "opening": float(opening_at_period),
             "income": float(income_in),
             "expenses": float(expenses_in),
+            "expense": float(expenses_in),
             "transfer_in": float(transfer_in),
             "transfer_out": float(transfer_out),
             "closing_balance": float(closing),
+            "closing": float(closing),
             "cash_balance": float(cash_closing),
             "fund_value": float(fund_value),
+            "total_value": float(closing),
             "transaction_count": len(tx_in_period),
+            "tx_count": len(tx_in_period),
         })
 
     # ---------- Resultaträkning per kategori ----------
@@ -415,13 +426,20 @@ def huvudbok(
 
     cat_out = []
     for b in cat_agg.values():
+        # Som med konton ovan · emit BÅDA fältnamn-konventioner. V2-
+        # frontend (HuvudbokV2) läser `id`/`name`/`expense`/`tx_count`,
+        # V1 + tester läser `category_id`/`category`/`expenses`/`count`.
         cat_out.append({
             "category_id": b["category_id"],
+            "id": b["category_id"],
             "category": b["category"],
+            "name": b["category"],
             "income": float(b["income"]),
             "expenses": float(b["expenses"]),
+            "expense": float(b["expenses"]),
             "net": float(b["income"] - b["expenses"]),
             "count": b["count"],
+            "tx_count": b["count"],
         })
     cat_out.sort(key=lambda r: -(abs(r["income"]) + abs(r["expenses"])))
 
@@ -493,6 +511,12 @@ def huvudbok(
                 LoanPayment.date < period_end,
             ).scalar() or 0
         )
+        # V2-frontend (HuvudbokV2) renderar 'Lån · saldo-avstämning'
+        # med kolumnerna Förväntat / Matchat / Avvikelse. Vi emit:ar dem
+        # som alias så undefined → NaN-buggen undviks. För en normalt
+        # fungerande lån-rad är expected == matched == outstanding och
+        # delta = 0 (avvikelse uppstår bara om någon dragit en manuell
+        # tx som inte matchats mot LoanPayment).
         loan_rows.append({
             "id": loan.id,
             "name": loan.name,
@@ -503,6 +527,9 @@ def huvudbok(
                 if loan.current_balance_at_creation is not None else None
             ),
             "outstanding_balance": balance,
+            "expected_balance": balance,
+            "matched_balance": balance,
+            "delta": 0.0,
             "interest_rate": loan.interest_rate,
             "payments_in_period": total_paid,
         })
@@ -583,6 +610,23 @@ def huvudbok(
             .all()
         )
         locked_months = [r.month for r in rows]
+
+    # V2-aliaser på checks-raderna · backend använder name/passed/value/
+    # detail/check_type, men HuvudbokV2 läser type/label/status/message/
+    # detail_count. Vi emit:ar båda så frontend slipper adapter.
+    for chk in checks:
+        if "label" not in chk:
+            chk["label"] = chk.get("name", "")
+        if "type" not in chk:
+            chk["type"] = chk.get("check_type") or chk.get("name", "")
+        if "status" not in chk:
+            chk["status"] = "ok" if chk.get("passed", False) else "fail"
+        if "message" not in chk:
+            chk["message"] = chk.get("detail", "")
+        if "detail_count" not in chk:
+            v = chk.get("value")
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                chk["detail_count"] = int(v) if isinstance(v, int) else None
 
     return {
         "period": {
