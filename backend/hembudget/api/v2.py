@@ -142,6 +142,11 @@ class V2StatusResponse(BaseModel):
     v2_fairness_choice: Optional[FairnessChoice] = None
     v2_partner_model: PartnerModel = "solo"
     is_super_admin: bool = False
+    # Seed-livscykel · "pending" tills BackgroundTask har seedat lön,
+    # postlådan, försäkringar etc. Frontend visar en pedagogisk overlay
+    # tills "complete" så eleven aldrig ser tomma vyer pga race mot
+    # async seed. "failed" → lärar-detaljvyn auto-reseedar.
+    seed_status: Literal["pending", "complete", "failed"] = "complete"
 
 
 class OnboardingCompleteRequest(BaseModel):
@@ -13411,6 +13416,9 @@ def get_v2_status(
         # v2_eligible: bara True om läraren explicit aktiverat v2 för
         # eleven. Default False — alla får v1 tills opt-in.
         eligible = bool(getattr(student, "v2_enabled", False))
+        seed_status = getattr(student, "seed_status", None) or "complete"
+        if seed_status not in ("pending", "complete", "failed"):
+            seed_status = "complete"
         return V2StatusResponse(
             role="student",
             v2_eligible=eligible,
@@ -13420,6 +13428,7 @@ def get_v2_status(
             v2_fairness_choice=getattr(student, "v2_fairness_choice", None),
             v2_partner_model=getattr(student, "v2_partner_model", None) or "solo",
             is_super_admin=False,
+            seed_status=seed_status,  # type: ignore[arg-type]
         )
 
 
@@ -16990,6 +16999,11 @@ def v2_create_student(
         student.v2_spend_profile = spend
         student.v2_partner_model = partner
         student.v2_level = payload.starting_level
+        # Markera seed som pågående · BackgroundTask sätter complete/failed.
+        # Frontend visar "Bygger upp ditt liv..."-overlay tills complete så
+        # eleven inte ser tomma vyer medan tick_month + insurance/pension/
+        # rental/event-seed pågår i bakgrunden (3-5 s).
+        student.seed_status = "pending"
         # När level > 1 → onboarding redan klar (eleven börjar på högre nivå)
         if payload.starting_level > 1:
             student.onboarding_completed = True
@@ -17022,6 +17036,7 @@ def v2_create_student(
             student.v2_spend_profile = spend
             student.v2_partner_model = partner
             student.v2_level = payload.starting_level
+            student.seed_status = "pending"
             if payload.starting_level > 1:
                 student.onboarding_completed = True
             s.flush()
@@ -17733,6 +17748,21 @@ def _ensure_student_has_initial_data(
         starting_level=starting_level,
         partner_model=partner_model,
     )
+    # Sätt seed_status='complete' så frontend-overlayn lyfts om eleven
+    # var pending eller stuck i 'failed' tidigare. Auto-recovery har just
+    # garanterat att data finns → eleven kan rendera vyer normalt.
+    try:
+        with master_session() as s_done:
+            stu_done = s_done.get(_Stu, student_id)
+            if stu_done is not None and stu_done.seed_status != "complete":
+                stu_done.seed_status = "complete"
+                s_done.flush()
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "auto-recovery: kunde inte uppdatera seed_status='complete' "
+            "för student %s — seedat ok men overlayn kan hänga",
+            student_id,
+        )
     return True
 
 
@@ -18897,6 +18927,21 @@ def _seed_initial_student_data_safe(
                 starting_level=starting_level,
                 partner_model=partner_model,
             )
+            # Seed klar · markera complete så frontend-overlayn lyfts.
+            try:
+                with master_session() as s2:
+                    stu2 = s2.get(Student, student_id)
+                    if stu2 is not None:
+                        stu2.seed_status = "complete"
+                        s2.flush()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "BackgroundTask: seed_status='complete' update failed "
+                    "för student %s — eleven kan fastna i 'Bygger upp...'-"
+                    "overlay tills auto-recovery städar upp",
+                    student_id,
+                )
         except Exception:
             import logging
             logging.getLogger(__name__).exception(
@@ -18905,6 +18950,18 @@ def _seed_initial_student_data_safe(
                 "auto-recovery i student-detail kör",
                 student_id,
             )
+            # Markera failed så lärar-detalj-vyn vet att reseed behövs
+            # och frontend-overlayn kan visa felmeddelande istället för
+            # att snurra evigt.
+            try:
+                with master_session() as s_err:
+                    stu_err = s_err.get(Student, student_id)
+                    if stu_err is not None:
+                        stu_err.seed_status = "failed"
+                        s_err.flush()
+            except Exception:
+                # Sista utvägen · loggar bara så vi ser i Cloud Logging
+                pass
 
 
 def _seed_initial_student_data(

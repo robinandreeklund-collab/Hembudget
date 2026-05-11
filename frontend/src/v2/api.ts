@@ -10,6 +10,8 @@ export type SpendProfile = "sparsam" | "balanserad" | "slosa";
 export type FairnessChoice = "50_50" | "proportionellt" | "pool";
 export type PartnerModel = "solo" | "ai" | "klasskompis";
 
+export type SeedStatus = "pending" | "complete" | "failed";
+
 export type V2Status = {
   role: "student" | "teacher" | "demo";
   v2_eligible: boolean;
@@ -19,6 +21,10 @@ export type V2Status = {
   v2_fairness_choice: FairnessChoice | null;
   v2_partner_model: PartnerModel;
   is_super_admin: boolean;
+  /** "pending" tills BackgroundTask seedat all initial-data
+   * (lön, postlådan, försäkringar, pension, rental, events). Frontend
+   * visar overlay tills "complete" så eleven inte ser tomma vyer. */
+  seed_status?: SeedStatus;
 };
 
 export type OnboardingComplete = {

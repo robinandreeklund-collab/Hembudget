@@ -120,6 +120,7 @@ import { HandelserV2 } from "./v2/HandelserV2";
 import { HuvudbokV2 } from "./v2/HuvudbokV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
 import { V2RootRedirect } from "./v2/V2RootRedirect";
+import { SeedingOverlay } from "./v2/SeedingOverlay";
 // REMOVED V1: import { DashboardV2Guard } from "./v2/DashboardV2Guard";
 import { V2DevSwitcher } from "./v2/V2DevSwitcher";
 import { V2RosterPage } from "./v2/V2RosterPage";
@@ -335,6 +336,11 @@ export default function App() {
           isSuperAdmin={!!v2Status?.is_super_admin}
         />
       )}
+      {/* Pedagogisk overlay tills BackgroundTask seedat eleven färdigt.
+       * Ligger på app-nivå så den täcker hub, postlådan, bank, företag —
+       * alla vyer som annars skulle visa "0 brev / 0 kr" under den 3-5 s
+       * race-fönstret efter v2_create_student. */}
+      {isV2Path && <SeedingOverlay />}
       {/* App-nivå V2Topbar · single instance · stays put under flip
        * (matchar prototyp där .topbar är utanför .app som flips).
        * Per-page <V2Topbar> är no-ops via singleton-mönster i komponenten. */}

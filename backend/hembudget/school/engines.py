@@ -448,6 +448,17 @@ def _run_master_migrations(engine: Engine) -> None:
             "business_mode_enabled BOOLEAN NOT NULL DEFAULT 0",
         )
 
+    # Seed-livscykel-flagga. Befintliga elever backfillas till 'complete'
+    # eftersom deras data redan är seedad (eller om den failade trigger
+    # auto-recovery via _ensure_student_has_initial_data när läraren
+    # öppnar elev-detaljvyn). Nya elever sätts till 'pending' explicit
+    # i v2_create_student och 'complete'/'failed' i background-tasken.
+    if s_cols and "seed_status" not in s_cols:
+        _add(
+            "students",
+            "seed_status VARCHAR(20) NOT NULL DEFAULT 'complete'",
+        )
+
     # Self-healing-backfill: om en elev redan har ett bolag i sin scope-
     # DB men business_mode_enabled är FALSE betyder det att flaggan har
     # tappats någon gång (t.ex. ephemeral-deploy som blåste bort raden,

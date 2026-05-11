@@ -802,6 +802,11 @@ def create_student(
         )
         s.add(student)
         s.flush()
+        # Markera seed som pågående · BackgroundTask sätter complete vid
+        # slut. Samma race-condition-skydd som i v2_create_student så
+        # frontend kan visa "Bygger upp ditt liv..."-overlay istället för
+        # tomma vyer under de 3-5 s seeden pågår.
+        student.seed_status = "pending"
         # Skapa profil deterministiskt på student_id
         _create_profile_for_student(s, student)
         # Skapa scope-DB direkt så kategorier seeds

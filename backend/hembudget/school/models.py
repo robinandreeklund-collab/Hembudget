@@ -350,6 +350,19 @@ class Student(MasterBase):
     business_mode_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False,
     )
+    # Seed-livscykel · sätts vid student-skapande till "pending" och
+    # markeras "complete" av background-tasken när initial seed (lön,
+    # postlådan, försäkringar, pension, rental, events) är klar. Frontend
+    # läser detta för att visa "Bygger upp ditt liv..."-overlay tills
+    # statusen är complete — annars ser eleven tomma vyer i 3-5 s medan
+    # background-tasken jobbar (race condition mot v2_create_student som
+    # returnerar direkt och schemalägger seed:en async). "failed" sätts
+    # om seed:en kastat exception så lärar-detaljvyn kan trigga
+    # auto-recovery via _ensure_student_has_initial_data.
+    seed_status: Mapped[str] = mapped_column(
+        String(20), default="complete", nullable=False,
+        server_default="complete",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
