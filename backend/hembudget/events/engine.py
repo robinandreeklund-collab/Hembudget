@@ -169,6 +169,23 @@ def tick_for_student(
     samma-code-event (under 14 dagar) — undviker dubletter.
     """
     today = today or date.today()
+
+    # Anchor-guard · generera ALDRIG events före GAME_ANCHOR_DATE
+    # (2026-01-01). Seed-flödet kör tick_month för historiska månader
+    # (Okt/Nov/Dec 2025) för att fylla bankhistorik + lönespecar — men
+    # SOCIALA events ska inte skapas där eftersom eleven inte ens spelade
+    # då. De skulle annars dyka upp som 'missade' i Historik-fliken
+    # (deadline < today efter att eleven nått anchor) vilket ger en
+    # vilseledande start: "du missade 12 events innan du ens loggade in".
+    from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+    if today < GAME_ANCHOR_DATE:
+        return EventTickResult(
+            week_seed=0,
+            candidates_evaluated=0,
+            events_created=0,
+            skipped_reason_counts={"before_anchor": 1},
+        )
+
     week_n = today.isocalendar()[1]
     week_seed_str = f"events-{student_seed}-{today.year}-W{week_n}"
     week_seed = int(hashlib.sha256(week_seed_str.encode()).hexdigest()[:8], 16)

@@ -1084,8 +1084,8 @@ EVENT_TEMPLATES: list[dict] = [
             "random_weight": 0.85,
         },
         "social_invite_allowed": False,
-        "declinable": True,  # man KAN köra på vinterdäck sommar
-                              # (suboptimalt men inte olagligt)
+        "declinable": False,  # Trafikverket: vinterdäck förbjudna efter
+                              # 15 april om inte vinterväglag · måste bytas
     },
     {
         "code": "car_service",
@@ -1105,7 +1105,8 @@ EVENT_TEMPLATES: list[dict] = [
             "random_weight": 0.30,
         },
         "social_invite_allowed": False,
-        "declinable": True,
+        "declinable": False,  # service vid milgräns · bilen blir farlig
+                               # att köra om man skippar (besiktning failar)
     },
     {
         "code": "car_brakes",
@@ -1146,7 +1147,8 @@ EVENT_TEMPLATES: list[dict] = [
             "random_weight": 0.10,
         },
         "social_invite_allowed": False,
-        "declinable": True,
+        "declinable": False,  # sprickan växer · besiktning failar utan
+                               # åtgärd · måste betalas i längden
     },
 
     # === SKV-4 · Tandhälsa-events ===
@@ -1214,7 +1216,7 @@ EVENT_TEMPLATES: list[dict] = [
             "insurance_covers": "frisktandvard",
         },
         "social_invite_allowed": False,
-        "declinable": True,
+        "declinable": False,  # hälsa · ej valbart att skippa
     },
     {
         "code": "dental_root_canal",

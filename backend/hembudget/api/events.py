@@ -102,6 +102,38 @@ def list_pending(scope: Session = Depends(db)) -> dict:
         pass
 
     today = current_game_date()
+
+    # Engångs-städning · radera pre-anchor system-events som
+    # tidigare seed-flöden råkade skapa när tick_month kördes för
+    # historiska månader (Okt-Dec 2025). De var alltid 'missade' i
+    # Historik-fliken eftersom deadline < today efter att eleven nått
+    # anchor → falskt intryck av att eleven 'missade' händelser hen
+    # aldrig fått chans att svara på. Endast system-skapade events
+    # rensas (lärar-skapade med source != 'system' lämnas orörda).
+    # Accepterade/declinade events rörs inte heller eftersom de kan ha
+    # en koppling till en Transaction som driver huvudboken.
+    try:
+        from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+        pre_anchor = (
+            scope.query(StudentEvent)
+            .filter(
+                StudentEvent.proposed_date < GAME_ANCHOR_DATE,
+                StudentEvent.source == "system",
+                StudentEvent.status.in_(["pending", "expired"]),
+                StudentEvent.resulting_transaction_id.is_(None),
+            )
+            .all()
+        )
+        for e in pre_anchor:
+            scope.delete(e)
+        if pre_anchor:
+            scope.flush()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "list_pending: pre-anchor cleanup misslyckades",
+        )
+
     expire_old_events(scope, today=today)
     rows = (
         scope.query(StudentEvent)
@@ -408,7 +440,18 @@ def accept_event(
         signed_amount = -_Dec(str(cost_applied))  # negativt = utgift
         desc = f"Event: {ev.title}"
 
-    # Skapa Transaction
+    # Skapa Transaction · datera i SPEL-tid, inte real-tid.
+    # Tidigare användes _dt.utcnow().date() (real-tid = 2026-05-XX när
+    # eleven är i spel-tid 2026-01-XX). Transaktionerna hamnade då i
+    # huvudbokens 'Maj 2026'-period istället för 'Januari 2026' där
+    # själva event-händelsen utspelar sig pedagogiskt. Vi använder
+    # event:ets proposed_date (= spel-tid när eleven blev erbjuden
+    # händelsen) som datum, med fallback till current_game_date() om
+    # något skulle saknas.
+    tx_date = ev.proposed_date
+    if tx_date is None:
+        from ..business.game_clock import current_game_date
+        tx_date = current_game_date()
     tx = None
     if signed_amount != 0:
         h = _hashlib.sha256(
@@ -416,7 +459,7 @@ def accept_event(
         ).hexdigest()
         tx = Transaction(
             account_id=account_id,
-            date=_dt.utcnow().date(),
+            date=tx_date,
             amount=signed_amount,
             currency="SEK",
             raw_description=desc,
