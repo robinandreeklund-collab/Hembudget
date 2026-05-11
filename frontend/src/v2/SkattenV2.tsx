@@ -51,9 +51,32 @@ function formatAmount(amt: number): string {
   return "0 kr";
 }
 
+type SkattenWindow = {
+  phase: "off_season" | "granska" | "inlamna" | "stangd";
+  tax_year: number;
+  can_read: boolean;
+  submit_open: boolean;
+  today_game: string;
+  opens_on: string | null;
+  closes_on: string | null;
+  description: string;
+};
+
+type SubmitPipelineInfo = {
+  status?: string;
+  besked_due_on?: string;
+  payout_wave?: number;
+  payout_due_on?: string;
+  late_fee?: number;
+  wave_message?: string;
+  case_no?: string;
+};
+
 export function SkattenV2() {
   const [data, setData] = useState<TaxData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [skvWindow, setWindowState] = useState<SkattenWindow | null>(null);
+  const [submitInfo, setSubmitInfo] = useState<SubmitPipelineInfo | null>(null);
   const navigate = useNavigate();
 
   // Form-state · lägg till avdrag
@@ -67,7 +90,8 @@ export function SkattenV2() {
 
   // Submit-state
   const [submittingYear, setSubmittingYear] = useState(false);
-  // Bug #11 · Rudolf-AI granskningsresultat
+  // Bug #11 · Rudolf-AI granskningsresultat (snabb-feedback för
+  // historiska sessioner. Nya submits visar besked-pipeline istället.)
   const [rudolfReview, setRudolfReview] = useState<{
     verdict: "godkand" | "avslag" | "kontroll";
     rudolf_message: string;
@@ -77,10 +101,33 @@ export function SkattenV2() {
   } | null>(null);
 
   function refresh(): Promise<void> {
-    return v2Api
-      .skatten()
-      .then((d) => setData(d))
-      .catch((e) => setError(String((e as Error)?.message || e)));
+    // Hämta både data + window i parallell. Backend gate:r GET /v2/skatten
+    // i off-season (403) — då visar vi locked-view i stället för fel.
+    return Promise.allSettled([
+      v2Api.skatten(),
+      v2Api.skattenWindow(),
+    ]).then(([dRes, wRes]) => {
+      if (wRes.status === "fulfilled") {
+        setWindowState(wRes.value);
+      }
+      if (dRes.status === "fulfilled") {
+        setData(dRes.value);
+        setError(null);
+      } else {
+        // 403 från GET /v2/skatten i off-season är förväntat — då
+        // visar vi locked-view via window-state istället för att
+        // klaga som ett fel.
+        const msg = String(
+          (dRes.reason as Error)?.message || dRes.reason,
+        );
+        if (wRes.status === "fulfilled" && !wRes.value.can_read) {
+          // off_season · ingen fel-render, locked-view nedan
+          setData(null);
+        } else {
+          setError(msg);
+        }
+      }
+    });
   }
 
   useEffect(() => {
@@ -103,8 +150,22 @@ export function SkattenV2() {
     if (!data) return;
     setSubmittingYear(true);
     try {
-      await v2Api.taxSubmitYear(data.year);
-      // Bug #11 · efter submit kallar vi Rudolf-AI för granskning
+      // SKV-2 · submit returnerar pipeline-info (besked_due_on,
+      // payout_wave m.fl.). Visa det i UI · Rudolf-verdict skickas
+      // INTE längre direkt utan via slutskattebesked-mail efter 3
+      // spel-dagar.
+      const res = await v2Api.taxSubmitYear(data.year);
+      setSubmitInfo({
+        status: res.status,
+        besked_due_on: res.besked_due_on,
+        payout_wave: res.payout_wave,
+        payout_due_on: res.payout_due_on,
+        late_fee: res.late_fee,
+        wave_message: res.wave_message,
+        case_no: res.case_no,
+      });
+      // Behåll legacy-Rudolf-call för bakåtkompat (om backend ännu
+      // bara returnerar minimum). Inte längre pedagogiskt centralt.
       try {
         const r = await fetch("/v2/skatten/rudolf-review", {
           method: "POST",
@@ -171,6 +232,15 @@ export function SkattenV2() {
     }
   }
 
+  // SKV-2 · låst-vy under off-season (jan-1 mars). Eleven kan inte
+  // se siffrorna, bara tidslinjen + nedräkning. Pedagogisk poäng:
+  // Skatteverket är inte en evigt-öppen aktör.
+  if (skvWindow && !skvWindow.can_read) {
+    return (
+      <SkattenLockedView window={skvWindow} onBack={() => navigate("/v2/hub")} />
+    );
+  }
+
   if (error) {
     return (
       <div className="v2-skatt-root">
@@ -227,6 +297,28 @@ export function SkattenV2() {
         >
           Tillbaka till pentagonen
         </a>
+
+        {/* SKV-2 · fönster-banner. Visas över UI:t när vi är i något
+            speciellt läge. */}
+        {skvWindow && skvWindow.phase === "granska" && (
+          <SkattenPhaseBanner
+            tone="indigo"
+            eye="● LÄS-LÄGE · 2-16 MARS"
+            title="Granska din deklaration"
+            subtitle={`Inlämningen öppnar ${skvWindow.opens_on || "?"}. Förbered avdrag och kontrollera förtryckta uppgifter — du kan inte trycka 'Lämna in' förrän 17 mars i spel-tid.`}
+          />
+        )}
+        {skvWindow && skvWindow.phase === "stangd" && (
+          <SkattenPhaseBanner
+            tone="warm"
+            eye="● STÄNGD · 4 MAJ HAR PASSERATS"
+            title="Sen inlämning ger förseningsavgift"
+            subtitle={`Skatteverket öppnar igen ${skvWindow.opens_on || "?"} för deklaration av ${skvWindow.tax_year + 1}. Sen inlämning för ${skvWindow.tax_year} ger 1 250 kr i avgift.`}
+          />
+        )}
+        {submitInfo && (
+          <SkattenSubmitInfoBanner info={submitInfo} />
+        )}
 
         <header className="actor-head">
           <div>
@@ -700,4 +792,249 @@ function inputStyle(): React.CSSProperties {
     fontSize: 12.5,
     width: "100%",
   };
+}
+
+
+// === SKV-2 · Locked-view (off-season jan-1 mars) ===
+
+const SKV_TIMELINE: Array<{
+  date: string;
+  title: string;
+  desc: string;
+}> = [
+  { date: "2 mars", title: "Deklarationen i digital brevlåda", desc: "Du kan börja granska + lägga till avdrag." },
+  { date: "12 mars", title: "Kvarskatt från i fjol förfaller", desc: "Sista dagen att betala ev. kvarskatt." },
+  { date: "17 mars", title: "Inlämningstjänsten öppnar", desc: "Du kan trycka 'Lämna in'." },
+  { date: "31 mars", title: "Digital deadline · våg 1", desc: "Skickar du senast nu får du återbäring 7-10 april." },
+  { date: "7-10 april", title: "Återbäringsvåg 1", desc: "Pengarna landar på lönekontot." },
+  { date: "4 maj", title: "Sista dag att deklarera", desc: "Efter detta: förseningsavgift 1 250 kr." },
+  { date: "9-12 juni", title: "Återbäringsvåg 2", desc: "För dig som skickade in 1 apr - 4 maj." },
+];
+
+function SkattenLockedView({
+  window: w,
+  onBack,
+}: {
+  window: SkattenWindow;
+  onBack: () => void;
+}) {
+  return (
+    <div className="v2-skatt-root">
+      <V2Banner status={{ role: "student", is_super_admin: false }} />
+      <div className="shell">
+        <a
+          className="actor-back"
+          onClick={(e) => {
+            e.preventDefault();
+            onBack();
+          }}
+          href="#"
+        >
+          Tillbaka till pentagonen
+        </a>
+
+        <header className="actor-head" style={{ marginTop: 18 }}>
+          <div>
+            <span className="pill" style={{
+              background: "rgba(99,102,241,0.10)",
+              border: "1px solid rgba(99,102,241,0.35)",
+              color: "#c7d2fe",
+            }}>
+              Aktör 03 · Skatteverket · 🔒 LÅST
+            </span>
+            <h1 style={{
+              fontFamily: "Source Serif 4, Georgia, serif",
+              fontSize: 36, fontWeight: 700, color: "#fff",
+              margin: "12px 0 8px",
+            }}>
+              Deklarationen för{" "}
+              <em style={{ color: "#fbbf24", fontStyle: "italic" }}>
+                {w.tax_year}
+              </em>{" "}
+              öppnar 2 mars.
+            </h1>
+            <p style={{
+              fontFamily: "Source Serif 4, Georgia, serif",
+              fontSize: 16, color: "rgba(255,255,255,0.7)",
+              maxWidth: 680, lineHeight: 1.55, margin: 0,
+            }}>
+              {w.description}
+            </p>
+          </div>
+        </header>
+
+        <div style={{
+          marginTop: 24,
+          padding: 18,
+          background: "rgba(15,21,37,0.55)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 10,
+        }}>
+          <div style={{
+            fontFamily: "JetBrains Mono, monospace", fontSize: 10,
+            fontWeight: 700, color: "#c7d2fe", letterSpacing: 1.4,
+            marginBottom: 14,
+          }}>
+            ● SÅ HÄR SER SKATTEÅRET UT
+          </div>
+          <ol style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {SKV_TIMELINE.map((t, i) => (
+              <li key={i} style={{
+                display: "grid",
+                gridTemplateColumns: "100px 1fr",
+                gap: 14,
+                padding: "12px 0",
+                borderBottom: i === SKV_TIMELINE.length - 1
+                  ? "none" : "1px solid rgba(255,255,255,0.05)",
+              }}>
+                <div style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 11, fontWeight: 700, color: "#fbbf24",
+                  letterSpacing: 0.8,
+                }}>
+                  {t.date}
+                </div>
+                <div>
+                  <div style={{
+                    fontFamily: "Source Serif 4, Georgia, serif",
+                    fontSize: 14, fontWeight: 600, color: "#fff",
+                  }}>
+                    {t.title}
+                  </div>
+                  <div style={{
+                    fontFamily: "Source Serif 4, Georgia, serif",
+                    fontSize: 13, color: "rgba(255,255,255,0.65)",
+                    marginTop: 2,
+                  }}>
+                    {t.desc}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div style={{
+          marginTop: 24,
+          padding: 14,
+          background: "rgba(251,191,36,0.06)",
+          border: "1px solid rgba(251,191,36,0.25)",
+          borderRadius: 8,
+          color: "rgba(255,255,255,0.78)",
+          fontFamily: "Source Serif 4, Georgia, serif",
+          fontSize: 14,
+        }}>
+          💡 <strong style={{ color: "#fbbf24" }}>Tips för off-season:</strong>{" "}
+          Spara ROT-/RUT-kvitton och lönespecs nu så har du dem redo
+          när inlämningsfönstret öppnar 17 mars i spel-tid.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// === SKV-2 · Fas-banner överst i normal-UI ===
+
+function SkattenPhaseBanner({
+  tone, eye, title, subtitle,
+}: {
+  tone: "indigo" | "warm";
+  eye: string;
+  title: string;
+  subtitle: string;
+}) {
+  const palette = tone === "indigo"
+    ? { bg: "rgba(99,102,241,0.08)", border: "rgba(99,102,241,0.30)", color: "#c7d2fe" }
+    : { bg: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.30)", color: "#fbbf24" };
+  return (
+    <div style={{
+      marginTop: 14, marginBottom: 10,
+      padding: 14,
+      background: palette.bg,
+      border: `1px solid ${palette.border}`,
+      borderRadius: 8,
+    }}>
+      <div style={{
+        fontFamily: "JetBrains Mono, monospace", fontSize: 10,
+        fontWeight: 700, color: palette.color, letterSpacing: 1.4,
+      }}>
+        {eye}
+      </div>
+      <div style={{
+        fontFamily: "Source Serif 4, Georgia, serif", fontSize: 18,
+        fontWeight: 700, color: "#fff", marginTop: 4,
+      }}>
+        {title}
+      </div>
+      <div style={{
+        fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13,
+        color: "rgba(255,255,255,0.75)", marginTop: 4, lineHeight: 1.5,
+      }}>
+        {subtitle}
+      </div>
+    </div>
+  );
+}
+
+// === SKV-2 · Submit-bekräftelse efter inlämning ===
+
+function SkattenSubmitInfoBanner({
+  info,
+}: {
+  info: SubmitPipelineInfo;
+}) {
+  const isLate = info.late_fee !== undefined && info.late_fee > 0;
+  return (
+    <div style={{
+      marginTop: 14, marginBottom: 14,
+      padding: 16,
+      background: isLate
+        ? "rgba(220,76,43,0.08)"
+        : "linear-gradient(135deg, rgba(110,231,183,0.10), rgba(15,21,37,0.55))",
+      border: `1px solid ${isLate ? "rgba(220,76,43,0.35)" : "rgba(110,231,183,0.35)"}`,
+      borderRadius: 8,
+    }}>
+      <div style={{
+        fontFamily: "JetBrains Mono, monospace", fontSize: 10,
+        fontWeight: 700, color: isLate ? "#fda594" : "#6ee7b7",
+        letterSpacing: 1.4,
+      }}>
+        ● {isLate ? "INLÄMNAD · MEN SENT" : "INLÄMNAD · GRANSKNING PÅGÅR"}
+      </div>
+      <div style={{
+        fontFamily: "Source Serif 4, Georgia, serif", fontSize: 17,
+        fontWeight: 700, color: "#fff", marginTop: 6,
+      }}>
+        Tack för din deklaration!
+      </div>
+      <div style={{
+        fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13,
+        color: "rgba(255,255,255,0.8)", marginTop: 6, lineHeight: 1.5,
+      }}>
+        {info.case_no && (
+          <div>
+            Ärendenummer: <strong style={{
+              fontFamily: "JetBrains Mono, monospace",
+              color: "#c7d2fe",
+            }}>{info.case_no}</strong>
+          </div>
+        )}
+        {info.besked_due_on && (
+          <div style={{ marginTop: 4 }}>
+            Slutskattebesked kommer{" "}
+            <strong style={{ color: "#fff" }}>{info.besked_due_on}</strong>{" "}
+            (~3 spel-dagar · 25 min real-tid).
+          </div>
+        )}
+        {info.wave_message && (
+          <div style={{ marginTop: 4 }}>{info.wave_message}</div>
+        )}
+        {isLate && (
+          <div style={{ marginTop: 6, color: "#fda594" }}>
+            ⚠ Förseningsavgift {info.late_fee} kr har bokförts.
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

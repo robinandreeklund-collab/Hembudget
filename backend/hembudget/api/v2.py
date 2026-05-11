@@ -2324,6 +2324,14 @@ def get_mail(
         except Exception:
             pass
         try:
+            # Pipeline · släpp slutskattebesked + utbetalningar/kvarskatt
+            # för deklarationer som hunnit passerat besked_due_on resp.
+            # payout_due_on i spel-tid.
+            from .skatten_pipeline import process_for_student_if_due
+            process_for_student_if_due(info.student_id)
+        except Exception:
+            pass
+        try:
             _run_dunning_for_student(info.student_id)
         except Exception:
             pass
@@ -3709,6 +3717,18 @@ def get_skatten(
     """
     if info.role != "student" or info.student_id is None:
         return _empty_tax(0, year or _date.today().year)
+
+    # Skatteverket-fönster · läge för att titta på sidan måste vara
+    # granska eller senare (off-season = låst).
+    _gate_skatten_for_read(info.student_id)
+
+    # Pipeline · process ev. pending besked/utbetalningar innan vi
+    # listar (eleven ser nya mail i samma load). Cachat 1 min.
+    try:
+        from .skatten_pipeline import process_for_student_if_due
+        process_for_student_if_due(info.student_id)
+    except Exception:
+        pass
 
     target_year = year or _date.today().year
     deadline = _date(target_year + 1, 5, 2)  # 2 maj året efter
@@ -5628,6 +5648,155 @@ class V2TaxSubmitResponse(BaseModel):
     locked: bool
     final_tax: float
     diff: float
+    # SKV-2-fönster · fördröjt besked + utbetalningsvågar
+    status: Optional[str] = None             # 'submitted' direkt efter
+    besked_due_on: Optional[str] = None      # spel-datum för besked
+    payout_wave: Optional[int] = None        # 1=april, 2=juni, 0=sen
+    payout_due_on: Optional[str] = None      # spel-datum för utbetalning
+    late_fee: Optional[float] = None         # 0 om i tid
+    wave_message: Optional[str] = None       # pedagogisk klartext
+    case_no: Optional[str] = None            # ärendenummer
+
+
+# === Tidsfönster-gate (Skatteverket är inte alltid öppen) ===
+#
+# Skatteverket-aktören har EN deklarationsperiod per inkomstår, baserat
+# på riktiga Skatteverkets kalender (jan-maj av året efter inkomståret).
+# Eleven kan därmed inte "deklarera när som helst" — själva pedagogiken
+# bygger på att deadlinen är fast.
+#
+# Alla `/v2/skatten/*`-POST-endpoints filtrerar via _gate_skatten_for_*
+# och returnerar 403 (off-season/stängd) eller 409 (granska-läge ·
+# inlämning ännu inte öppen).
+#
+# Helper finns i api/skatten_window.py.
+
+class V2SkattenWindowOut(BaseModel):
+    """Status för Skatteverket-fönstret för aktuell elev."""
+    phase: Literal["off_season", "granska", "inlamna", "stangd"]
+    tax_year: int
+    can_read: bool
+    submit_open: bool
+    today_game: str
+    opens_on: Optional[str]
+    closes_on: Optional[str]
+    description: str
+
+
+def _gate_skatten_for_read(student_id: int) -> None:
+    """Kasta 403 om eleven inte ens får titta på Skatteverket-aktören.
+    Off-season (jan-1 mars) är aktören helt låst — pedagogiskt budskap:
+    'kom tillbaka 2 mars'."""
+    from .skatten_window import current_window_for_student
+    state = current_window_for_student(student_id)
+    if not state.can_read:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            (
+                f"Skatteverket är låst tills 2 mars · {state.description} "
+                f"Spel-datum just nu: {state.today_game.isoformat()}."
+            ),
+        )
+
+
+def _gate_skatten_for_edit(student_id: int, *, action: str) -> None:
+    """Tillåt redigering (avdrag, förslag) under granska + inlamna-fas.
+    Blockar off-season och stängd. Eleven kan börja förbereda avdrag
+    så snart granska öppnar 2 mars, men submit är fortfarande spärrad
+    tills 17 mars (use `_gate_skatten_for_submit`).
+    """
+    from .skatten_window import current_window_for_student
+    state = current_window_for_student(student_id)
+    if state.phase == "off_season":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            (
+                f"Du kan inte {action} ännu · Skatteverket öppnar "
+                f"{state.opens_on.isoformat() if state.opens_on else '?'} "
+                "(spel-tid)."
+            ),
+        )
+    if state.phase == "stangd":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            (
+                f"Deadline för {state.tax_year} har passerats (4 maj). "
+                "Sen inlämning ger förseningsavgift och kräver kontakt "
+                f"med Skatteverket. Aktören öppnar igen "
+                f"{state.opens_on.isoformat() if state.opens_on else '?'}."
+            ),
+        )
+
+
+def _gate_skatten_for_submit(student_id: int) -> None:
+    """Bara fasen 'inlamna' (17 mars-4 maj) tillåter submit.
+    Granska-läget får 409 med tydligt 'öppnar 17 mars'-budskap."""
+    from .skatten_window import current_window_for_student
+    state = current_window_for_student(student_id)
+    if state.phase == "off_season":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            (
+                f"Skatteverket öppnar 2 mars (granska-läge), inlämning "
+                f"17 mars. Spel-datum just nu: "
+                f"{state.today_game.isoformat()}."
+            ),
+        )
+    if state.phase == "granska":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            (
+                "Inlämningen öppnar 17 mars i spel-tid. Just nu är "
+                "aktören i LÄS-/förbered-läge — granska förtryckta "
+                "uppgifter och lägg till avdrag innan dess."
+            ),
+        )
+    if state.phase == "stangd":
+        # Sen inlämning · tillåt MEN flagga för förseningsavgift.
+        # Vi kastar inte här — submit_tax_year-flödet lägger på
+        # förseningsavgift istället så eleven får konkret konsekvens.
+        return
+
+
+@router.get("/skatten/window", response_model=V2SkattenWindowOut)
+def get_skatten_window(
+    info: TokenInfo = Depends(require_token),
+) -> V2SkattenWindowOut:
+    """Returnera nuvarande Skatteverket-fönsterstatus.
+
+    Frontend hämtar detta vid mount av /v2/skatten för att rendera
+    locked-view, granska-banner, eller normalt UI med inlämnings-knappen
+    aktiverad.
+
+    Lärare/demo: returnerar 'inlamna' med dagens datum så testning
+    fungerar.
+    """
+    if info.role != "student" or info.student_id is None:
+        # Lärar-/demo-läge: bypass fönstret · alltid 'inlamna' så lärare
+        # kan visa flödet i sin demo.
+        from datetime import date as _d
+        return V2SkattenWindowOut(
+            phase="inlamna",
+            tax_year=_d.today().year - 1,
+            can_read=True,
+            submit_open=True,
+            today_game=_d.today().isoformat(),
+            opens_on=None,
+            closes_on=None,
+            description="Lärar-/demo-läge · alltid öppet.",
+        )
+    from .skatten_window import current_window_for_student
+    state = current_window_for_student(info.student_id)
+    return V2SkattenWindowOut(
+        phase=state.phase,
+        tax_year=state.tax_year,
+        can_read=state.can_read,
+        submit_open=state.submit_open,
+        today_game=state.today_game.isoformat(),
+        opens_on=state.opens_on.isoformat() if state.opens_on else None,
+        closes_on=state.closes_on.isoformat() if state.closes_on else None,
+        description=state.description,
+    )
 
 
 @router.post("/skatten/deductions", response_model=V2TaxDeductionRow)
@@ -5644,6 +5813,12 @@ def post_tax_deduction(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Endast elever kan registrera avdrag",
         )
+    # Avdrag får läggas till under granska + inlämna-fasen — INTE
+    # off-season eller efter stängning. Eleven måste alltså vänta
+    # till 2 mars för att börja skriva.
+    _gate_skatten_for_edit(
+        info.student_id, action="lägga till avdrag",
+    )
 
     with session_scope() as s:
         d = TaxDeduction(
@@ -5674,6 +5849,7 @@ def delete_tax_deduction(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Endast elever kan ta bort avdrag",
         )
+    _gate_skatten_for_edit(info.student_id, action="ta bort avdrag")
     with session_scope() as s:
         d = s.get(TaxDeduction, deduction_id)
         if d is not None:
@@ -5709,6 +5885,7 @@ def post_tax_proposal_decision(
     """
     if info.role != "student" or info.student_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elev")
+    _gate_skatten_for_edit(info.student_id, action="besluta om förslag")
     decision = (body or {}).get("decision")
     if decision not in ("approve", "reject"):
         raise HTTPException(
@@ -5753,6 +5930,11 @@ def post_submit_tax_year(
     if info.role != "student" or info.student_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elev")
 
+    # Skatteverket-fönster · submit får bara ske i inlamna-fasen,
+    # eller efter stängning (då med förseningsavgift). Off-season +
+    # granska blockas med 403/409.
+    _gate_skatten_for_submit(info.student_id)
+
     with master_session() as mdb:
         profile = (
             mdb.query(StudentProfile)
@@ -5772,8 +5954,16 @@ def post_submit_tax_year(
             if profile.tax_rate_effective else None
         )
 
+    # Submit + setup pipelinen i samma transaktion så besked_due_on
+    # m.fl. fält commits atomiskt.
+    from ..business.game_clock import current_game_date_for_student
+    today_game = current_game_date_for_student(info.student_id)
+    from .skatten_pipeline import setup_after_submit
     with session_scope() as s:
         ret = submit_tax_year(s, year, gross_monthly, tax_rate)
+        pipeline_info = setup_after_submit(
+            s, tax_return=ret, today_game=today_game,
+        )
 
     # Pentagon-koppling · skattedeklaration är ett ekonomi-event.
     # +3 economy bara för att lämna in i tid; diff > 0 (kvarskatt) ger
@@ -5828,6 +6018,13 @@ def post_submit_tax_year(
         locked=ret.locked,
         final_tax=float(ret.final_tax),
         diff=float(ret.diff),
+        status=pipeline_info.get("status"),
+        besked_due_on=pipeline_info.get("besked_due_on"),
+        payout_wave=pipeline_info.get("payout_wave"),
+        payout_due_on=pipeline_info.get("payout_due_on"),
+        late_fee=pipeline_info.get("late_fee"),
+        wave_message=pipeline_info.get("wave_message"),
+        case_no=pipeline_info.get("case_no"),
     )
 
 
@@ -17405,7 +17602,8 @@ def _seed_skv_deklaration_events(student_id: int) -> int:
         except Exception:
             return 0
 
-        # Bygg list av alla SKV-milstolpar som passerats sedan anchor
+        # Bygg list av alla SKV-milstolpar som passerats sedan anchor.
+        # 7 händelser totalt enligt riktiga Skatteverkets kalender.
         skv_steps = [
             (
                 "skv_brevlada", _d_skv.fromisoformat,
@@ -17415,6 +17613,16 @@ def _seed_skv_deklaration_events(student_id: int) -> int:
                 "själva inlämningen öppnar 17 mars. Kontrollera "
                 "förtryckta uppgifter, ev. ROT/RUT-arbeten, ränteavdrag.",
                 3, 2,  # mars 2
+            ),
+            (
+                "skv_kvarskatt",
+                _d_skv.fromisoformat,
+                "Påminnelse · sista dag att betala kvarskatt",
+                "Idag är sista dagen att betala eventuell kvarskatt "
+                "från slutskattebesked {prev_prev_year}. Sen betalning "
+                "ger kostnadsränta. Om du inte hade kvarskatt: bortse "
+                "från detta mail.",
+                3, 12,  # mars 12
             ),
             (
                 "skv_open", _d_skv.fromisoformat,
@@ -17434,6 +17642,17 @@ def _seed_skv_deklaration_events(student_id: int) -> int:
                 3, 31,
             ),
             (
+                "skv_wave1",
+                _d_skv.fromisoformat,
+                "Skatteåterbäring · våg 1",
+                "Idag–10 april betalas årets första våg av "
+                "skatteåterbäring ut till dig som godkänt din "
+                "deklaration utan att ändra något. Kontrollera ditt "
+                "lönekonto. Om du fortfarande inte deklarerat — gör "
+                "det senast 4 maj.",
+                4, 7,  # april 7
+            ),
+            (
                 "skv_final_deadline",
                 _d_skv.fromisoformat,
                 "Sista dag att deklarera",
@@ -17442,6 +17661,16 @@ def _seed_skv_deklaration_events(student_id: int) -> int:
                 "(1 250 kr första gången, 6 250 kr om du fortsatt "
                 "inte deklarerar).",
                 5, 4,
+            ),
+            (
+                "skv_wave2",
+                _d_skv.fromisoformat,
+                "Skatteåterbäring · våg 2",
+                "Idag–12 juni betalas årets andra våg av "
+                "skatteåterbäring ut till dig som deklarerat senast "
+                "4 maj. Kontrollera ditt lönekonto. Detta är sista "
+                "ordinarie utbetalningsvåg för i år.",
+                6, 9,  # juni 9
             ),
         ]
 
@@ -17478,8 +17707,12 @@ def _seed_skv_deklaration_events(student_id: int) -> int:
                         )
                         if existing is not None:
                             continue
-                        body = body_tmpl.replace(
-                            "{prev_year}", str(prev_year),
+                        body = (
+                            body_tmpl
+                            .replace("{prev_year}", str(prev_year))
+                            .replace(
+                                "{prev_prev_year}", str(prev_year - 1),
+                            )
                         )
                         s.add(_MI_skv(
                             sender="Skatteverket",

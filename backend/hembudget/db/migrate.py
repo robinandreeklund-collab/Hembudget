@@ -736,6 +736,25 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "companies", col_sql)
                 applied.append(f"companies.{col_name}")
 
+    # === TaxYearReturn · SKV-2-fönster + verdict-state-machine ===
+    # Lägg till explicit kolumnerna som har NOT NULL + default (auto-
+    # migration skippar dem). Övriga (verdict, besked_due_on, payout_*,
+    # submitted_on) plockas av _auto_add_nullable_columns nedan.
+    if _table_exists(engine, "tax_year_returns"):
+        tyr_cols = _columns(engine, "tax_year_returns")
+        if "status" not in tyr_cols:
+            _add_column(
+                engine, "tax_year_returns",
+                "status VARCHAR(30) NOT NULL DEFAULT 'klar'",
+            )
+            applied.append("tax_year_returns.status")
+        if "late_fee" not in tyr_cols:
+            _add_column(
+                engine, "tax_year_returns",
+                "late_fee NUMERIC(14, 2) NOT NULL DEFAULT 0",
+            )
+            applied.append("tax_year_returns.late_fee")
+
     # === V2 Postlådan · MailItem-kolumner ===
     # Bug-fix: tabellen mail_items skapades initialt med bara
     # `sender + mail_type + subject + amount + due_date + status` —

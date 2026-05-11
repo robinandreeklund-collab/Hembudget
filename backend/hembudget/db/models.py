@@ -380,6 +380,15 @@ class TaxYearReturn(TenantMixin, Base):
     inbetald, slutlig skatt, diff, och tidpunkt. Året låses sedan
     så fler ändringar kräver att eleven öppnar deklarationen igen
     (TaxYearReturn.locked = False vid omöppning).
+
+    Status state-machine (Skatteverket-tidsfönster · feature SKV-2):
+        submitted (eleven har skickat in, granskning pågår)
+          ↓ 3 spel-dagar senare
+        besked_klar (Rudolf-verdict + slutskattebesked-mail går ut)
+          ↓
+        ┌─ verdict=godkand → vantar_utbetalning → klar (vid våg)
+        ├─ verdict=avslag → eleven måste omarbeta → status=submitted igen
+        └─ verdict=kontroll → eleven får kompletteringsbegäran → submitted igen
     """
     __tablename__ = "tax_year_returns"
     __table_args__ = (
@@ -392,6 +401,11 @@ class TaxYearReturn(TenantMixin, Base):
     year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
+    )
+    # Spel-tids-stämpel · när eleven faktiskt klickade lämna in
+    # (real-tid är submitted_at; spel-tid är submitted_on).
+    submitted_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
     )
     locked: Mapped[bool] = mapped_column(Boolean, default=True)
     gross_income: Mapped[Decimal] = mapped_column(
@@ -409,6 +423,33 @@ class TaxYearReturn(TenantMixin, Base):
     diff: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), nullable=False,
     )  # positiv = återbäring, negativ = kvarskatt
+
+    # State-machine för fördröjd verdict + utbetalningsvågor
+    # submitted | besked_klar | vantar_utbetalning | klar
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="submitted",
+    )
+    # Rudolf-AI-verdict när status flippar till besked_klar
+    # godkand | avslag | kontroll | None (innan besked)
+    verdict: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # När slutskattebeskedet är klart (3 spel-dagar efter submit)
+    besked_due_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    # När pengarna betalas (våg 1 = 7 april, våg 2 = 9 juni) eller
+    # när kvarskatten förfaller (12 mars Y+2).
+    payout_due_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    # Vilken våg eleven hamnade i (1 = april, 2 = juni, 0 = kvarskatt
+    # eller None innan besked klart)
+    payout_wave: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    # Förseningsavgift om submit efter 4 maj (1 250 kr första gången)
+    late_fee: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0"),
+    )
 
 
 # === V2 Försäkringar (Fas 2D) ===

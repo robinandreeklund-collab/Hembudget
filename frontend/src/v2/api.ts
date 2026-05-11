@@ -3995,7 +3995,27 @@ export const v2Api = {
       locked: boolean;
       final_tax: number;
       diff: number;
+      // SKV-2 · pipeline-info för UI-banner
+      status?: string;
+      besked_due_on?: string;
+      payout_wave?: number;
+      payout_due_on?: string;
+      late_fee?: number;
+      wave_message?: string;
+      case_no?: string;
     }>(`/v2/skatten/${year}/submit`, { method: "POST", body: "{}" }),
+  /** Skatteverket-fönsterstatus · för låsning/banner i SkattenV2. */
+  skattenWindow: () =>
+    api<{
+      phase: "off_season" | "granska" | "inlamna" | "stangd";
+      tax_year: number;
+      can_read: boolean;
+      submit_open: boolean;
+      today_game: string;
+      opens_on: string | null;
+      closes_on: string | null;
+      description: string;
+    }>(`/v2/skatten/window`),
   /** Lärar-API · skapa förslag manuellt. */
   teacherCreateTaxProposal: (
     studentId: number,
