@@ -240,12 +240,22 @@ def _to_app_out(app: JobApplication) -> JobApplicationOut:
 
 @router.get("/jobs", response_model=JobsResponse)
 def list_jobs(
-    ym: str = "2026-01",
+    ym: Optional[str] = None,
     n: int = 6,
     info: TokenInfo = Depends(require_token),
 ):
-    """Lista relevanta jobb för eleven (sorterade på match_score)."""
+    """Lista relevanta jobb för eleven (sorterade på match_score).
+
+    `ym` default = innevarande SPEL-månad (annars defaultar till
+    real-current vilket gör att gamla jobb-deadlines verkar 'redan
+    passerade' när eleven är på en framtida spel-månad).
+    """
     sid = _require_student(info)
+    # SPEL-TID: default ym = innevarande spel-månad
+    from ..business.game_clock import current_game_date_for_student
+    today_game = current_game_date_for_student(sid)
+    if not ym:
+        ym = f"{today_game.year:04d}-{today_game.month:02d}"
     with master_session() as s:
         sp = (
             s.query(StudentProfile)
@@ -285,6 +295,7 @@ def list_jobs(
     jobs = available_jobs_for_student(
         profile, ym, n=max(1, min(n, 12)),
         difficulty_modifier=difficulty_modifier,
+        today_game=today_game,
     )
     mats_msg = MATS_OPENING_MESSAGE
     if difficulty_modifier < 0:

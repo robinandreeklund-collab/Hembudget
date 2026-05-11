@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from datetime import date
+from typing import Optional
 
 from ..pools.stadspool import STAD_BY_KEY
 from ..pools.yrkespool import YRKESPOOL, Yrke
@@ -150,6 +152,7 @@ def available_jobs_for_student(
     n: int = 6,
     same_city_only: bool = True,
     difficulty_modifier: int = 0,
+    today_game: Optional[date] = None,
 ) -> list[JobOpening]:
     """Generera deterministisk pool av jobb för (elev, year_month).
 
@@ -190,7 +193,7 @@ def available_jobs_for_student(
         ms = calculate_match_score(profile, y, rng=random.Random(rng.random()))
         ms = max(0, min(100, ms + difficulty_modifier))
         ad_rng = random.Random(f"ad|{profile.seed}|{year_month}|{y.key}")
-        full_ad = _build_full_ad(y, ad_rng)
+        full_ad = _build_full_ad(y, ad_rng, today_game=today_game)
         opening = JobOpening(
             listing_id=(
                 f"{profile.city_key}-{year_month}-{y.key}-"
@@ -357,7 +360,12 @@ def _yrke_group(yrke_key: str) -> str:
     return "default"
 
 
-def _build_full_ad(yrke: Yrke, rng: random.Random) -> dict:
+def _build_full_ad(
+    yrke: Yrke,
+    rng: random.Random,
+    *,
+    today_game: Optional[date] = None,
+) -> dict:
     """Bygg full annons-data deterministiskt från yrke + rng."""
     from datetime import date as _d, timedelta as _td
 
@@ -427,14 +435,18 @@ def _build_full_ad(yrke: Yrke, rng: random.Random) -> dict:
     desc_pool = job_desc_templates.get(group, job_desc_templates["default"])
     job_description = rng.sample(desc_pool, k=min(5, len(desc_pool)))
 
-    # Sista ansökningsdag · 14-30 dagar fram
-    deadline = _d.today() + _td(days=rng.randint(14, 30))
+    # Sista ansökningsdag · 14-30 dagar fram i SPEL-tid (annars
+    # syns 'sista ans 2026-05-25' när eleven är på spel-2026-07).
+    # Default till real-today bara om today_game inte skickas
+    # (preview-anrop utan student-context).
+    anchor = today_game if today_game is not None else _d.today()
+    deadline = anchor + _td(days=rng.randint(14, 30))
 
     # Tillträdesdatum · "omgående" eller specifikt datum
     if rng.random() < 0.4:
         start_date = "Tillträde omgående"
     else:
-        start = _d.today() + _td(days=rng.randint(45, 120))
+        start = anchor + _td(days=rng.randint(45, 120))
         start_date = f"Tillträde {start.strftime('%-d %B %Y')}"
 
     company_blurb = _COMPANY_BLURBS.get(group, _COMPANY_BLURBS["default"])

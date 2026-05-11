@@ -58,7 +58,10 @@ const STATUS_COLOR: Record<V2ArbetsformedlingenApplication["status"], string> = 
 
 
 export function ArbetsformedlingenV2() {
-  const [ym, setYm] = useState(CURRENT_YM);
+  // SPEL-TID: starta med tom ym så backend bestämmer default till
+  // innevarande spel-månad. När jobsData laddas synkar vi ym till
+  // response.year_month så pickern visar rätt månad.
+  const [ym, setYm] = useState<string>("");
   const [jobsData, setJobsData] = useState<V2ArbetsformedlingenJobsResponse | null>(null);
   const [apps, setApps] = useState<V2ArbetsformedlingenApplication[]>([]);
   const [loading, setLoading] = useState(false);
@@ -77,6 +80,11 @@ export function ArbetsformedlingenV2() {
       .then(([j, a]) => {
         setJobsData(j);
         setApps(a);
+        // Synka pickern till spel-månaden om vi inte har en explicit
+        // user-val ännu
+        if (!ym && j.year_month) {
+          setYm(j.year_month);
+        }
       })
       .catch((e) => setError(String(e?.message || e)))
       .finally(() => setLoading(false));

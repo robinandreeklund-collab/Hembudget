@@ -3020,7 +3020,10 @@ export const v2Api = {
   // === /v2/arbetsformedlingen (Sprint 6 · A1-A5) ===
   arbetsformedlingenJobs: (ym: string, n = 6) =>
     api<V2ArbetsformedlingenJobsResponse>(
-      `/v2/arbetsformedlingen/jobs?ym=${encodeURIComponent(ym)}&n=${n}`,
+      // Tom ym → backend default = innevarande spel-månad
+      ym
+        ? `/v2/arbetsformedlingen/jobs?ym=${encodeURIComponent(ym)}&n=${n}`
+        : `/v2/arbetsformedlingen/jobs?n=${n}`,
     ),
   arbetsformedlingenApply: (opening: V2ArbetsformedlingenJob) =>
     api<V2ArbetsformedlingenApplication>(
