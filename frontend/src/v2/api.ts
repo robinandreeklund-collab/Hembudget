@@ -4169,8 +4169,19 @@ export const v2Api = {
     api<V2TeacherCreditOverview>(
       `/v2/teacher/students/${studentId}/credit-overview`,
     ),
-  postladan: (filter?: V2MailType | "unhandled" | "other") =>
-    api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
+  postladan: (filter?: V2MailType | "unhandled" | "other") => {
+    // Browser-cache-buster · utan `_=ts` cachade browsern den NAKNA
+    // /v2/postladan-URL:n (ALLT-fliken) och serverade stale "0 brev"-
+    // response varje gång eleven klickade tillbaka till ALLT efter en
+    // FAKTUROR/OHANTERADE-klick. FAKTUROR-URL:en (?filter=invoice) är
+    // unik och cachas inte → mails dök upp där men ALLT stannade tom.
+    // Lägg till en monotont ökande timestamp så varje request är unik.
+    const ts = Date.now();
+    const params = new URLSearchParams();
+    if (filter) params.set("filter", filter);
+    params.set("_", String(ts));
+    return api<MailData>(`/v2/postladan?${params.toString()}`);
+  },
   updateMailStatus: (mailId: number, status: V2MailStatus) =>
     api<V2MailItem>(`/v2/postladan/${mailId}/status`, {
       method: "PATCH",

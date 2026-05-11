@@ -2220,7 +2220,8 @@ MailStatus = Literal[
     "unhandled", "viewed", "exported", "paid", "expired", "handled",
 ]
 MailSenderKind = Literal[
-    "bank", "cred", "skv", "ins", "land", "util", "work", "pen", "other",
+    "bank", "cred", "skv", "ins", "land", "util", "work", "pen",
+    "agency", "other",
 ]
 
 
@@ -2393,12 +2394,21 @@ def get_mail(
             # tab-counts visas korrekt även när man har en aktiv filter.
             # Filtrera även här på released_at så pending-events inte
             # smyger in i counts innan de är synliga.
+            #
+            # VIKTIGT: kör ALLTID separat fråga · tidigare aliaserade vi
+            # `all_mails = mails` när filter=None för micro-optimering,
+            # men det betydde att ALLT-flikens räknare blev 0 om
+            # q.all() råkade returnera tom lista (t.ex. pga
+            # session-isolation eller liknande prod-specifik kondition).
+            # FAKTUROR-fliken använde alltid separat fråga och fick rätt
+            # räknare. Olika beteende mellan flikar för samma elev
+            # förvirrade användaren. Nu kör båda flikarna IDENTISK
+            # all_mails-fråga.
             all_mails = (
                 s.query(MailItem)
                 .filter(_released_filter(MailItem))
                 .order_by(MailItem.received_at.desc())
                 .all()
-                if filter else mails
             )
 
             today = _date.today()
@@ -2458,21 +2468,52 @@ def get_mail(
                 ):
                     next_due = m.due_date
 
+            # KRITISKT: coerce-funktion för sender_kind. Tidigare gav
+            # okända värden ("agency", "financial", etc) en
+            # ValidationError som propagerade till outer try/except →
+            # HELA postlådan returnerade tom payload. Olika flikar
+            # hade olika brev → ALLT-fliken (som iterar ALLA mails)
+            # kraschade på första okända kind, medan FAKTUROR (bara
+            # invoices) lyckades. Resultat: ALLT visade 0, FAKTUROR
+            # visade 31. Frustrerande för användaren.
+            _ALLOWED_KINDS = {
+                "bank", "cred", "skv", "ins", "land",
+                "util", "work", "pen", "agency", "other",
+            }
+            def _coerce_kind(k: Optional[str]) -> str:
+                if k in _ALLOWED_KINDS:
+                    return k
+                return "other"
+            _ALLOWED_TYPES = {
+                "invoice", "salary_slip", "authority", "reminder", "info",
+            }
+            def _coerce_type(t: Optional[str]) -> str:
+                if t in _ALLOWED_TYPES:
+                    return t
+                return "info"
+            _ALLOWED_STATUS = {
+                "unhandled", "viewed", "exported", "paid", "handled",
+            }
+            def _coerce_status(s: Optional[str]) -> str:
+                if s in _ALLOWED_STATUS:
+                    return s
+                return "unhandled"
+
             for m in mails:
                 items.append(V2MailItemRow(
                     id=m.id,
                     sender=m.sender,
                     sender_short=m.sender_short,
-                    sender_kind=m.sender_kind,  # type: ignore[arg-type]
+                    sender_kind=_coerce_kind(m.sender_kind),  # type: ignore[arg-type]
                     sender_meta=m.sender_meta,
-                    mail_type=m.mail_type,  # type: ignore[arg-type]
+                    mail_type=_coerce_type(m.mail_type),  # type: ignore[arg-type]
                     subject=m.subject,
                     body_meta=m.body_meta,
                     body=m.body,
                     amount=float(m.amount) if m.amount is not None else None,
                     due_date=m.due_date,
                     received_at=m.received_at,
-                    status=m.status,  # type: ignore[arg-type]
+                    status=_coerce_status(m.status),  # type: ignore[arg-type]
                     upcoming_id=m.upcoming_id,
                     transaction_id=m.transaction_id,
                     is_recurring=bool(m.is_recurring),
@@ -2523,6 +2564,16 @@ def get_mail(
                 items=items,
             )
     except Exception:
+        # KRITISKT: logga exception:en så vi kan se varför postlådan
+        # blev tom. Tidigare svaldes felet tyst → eleven såg "0 brev"
+        # utan att backend signalerade fel. Det förvirrade både
+        # användare och oss vid debug.
+        import logging
+        logging.getLogger(__name__).exception(
+            "get_mail: postlådan-query misslyckades för student %s "
+            "(filter=%r) — returnerar tom payload",
+            info.student_id, filter,
+        )
         return _empty_mail(info.student_id)
 
 
