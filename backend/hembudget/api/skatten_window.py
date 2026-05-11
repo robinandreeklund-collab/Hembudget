@@ -72,89 +72,100 @@ SKV_LATE_FEE_KR = 1_250                # 1 250 kr första gången
 def compute_window(today_game: date) -> WindowState:
     """Avgör fas + nästa fas-datum från ett spel-datum.
 
-    Eleven kan deklarera FÖREGÅENDE års inkomst under jan-maj av
-    INNEVARANDE år. T.ex. 2027-03-17 → deklaration för 2026.
+    SPEL-ANCHOR-HÄNSYN: spelet börjar 2026-01-01. Eleven har ingen
+    inkomst innan dess, så den första deklarationen gäller år 2026
+    och öppnar mars 2027. Tidigare bug: vi räknade alltid
+    tax_year = today.year - 1, vilket gav 'Deklarationen för 2025'
+    redan i januari 2026 — men det året har eleven inte ens spelat.
 
     Algoritm:
-      - tax_year = today_game.year - 1
-      - om today_game.year < ANCHOR_YEAR + 1: ingen deklaration än
-        (off_season för Y=ANCHOR_YEAR, men eleven har inte hunnit fylla
-        ett helt skatteår än så vi visar 'inväntar')
-      - inom innevarande år: jämför mot mm/dd för faserna
+      anchor_year = GAME_ANCHOR_DATE.year  (= 2026)
+      nominal_tax_year = max(anchor_year, today_game.year - 1)
+      first_open = 2 mars (nominal_tax_year + 1)
+      ...
     """
-    y = today_game.year
-    tax_year = y - 1
+    from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+    anchor_year = GAME_ANCHOR_DATE.year
+
+    # Spel-anchor-clamp: aldrig prata om år före spel-start
+    nominal_tax_year = max(anchor_year, today_game.year - 1)
+
+    # Fas-datum ligger året EFTER nominal_tax_year
+    fy = nominal_tax_year + 1
 
     def _d(mm: int, dd: int) -> date:
-        return date(y, mm, dd)
+        return date(fy, mm, dd)
 
     granska_open = _d(*SKV_GRANSKA_OPEN_MONTH_DAY)
     inlamna_open = _d(*SKV_INLAMNA_OPEN_MONTH_DAY)
     inlamna_close = _d(*SKV_INLAMNA_CLOSE_MONTH_DAY)
 
     if today_game < granska_open:
-        # Off-season tills 2 mars
+        # Off-season fram till 2 mars (av fy)
         return WindowState(
             phase="off_season",
-            tax_year=tax_year,
+            tax_year=nominal_tax_year,
             can_read=False,
             submit_open=False,
             opens_on=granska_open,
             closes_on=granska_open,
             today_game=today_game,
             description=(
-                f"Skatteverket öppnar 2 mars för deklaration av {tax_year}. "
-                "Använd tiden till att samla lönespecs, ROT-/RUT-kvitton "
-                "och ev. reseräkningar."
+                f"Skatteverket öppnar {granska_open.isoformat()} för "
+                f"deklaration av {nominal_tax_year}. Använd tiden till "
+                "att samla lönespecs, ROT-/RUT-kvitton och ev. "
+                "reseräkningar."
             ),
         )
     if today_game < inlamna_open:
         # 2-16 mars · granska-läge
         return WindowState(
             phase="granska",
-            tax_year=tax_year,
+            tax_year=nominal_tax_year,
             can_read=True,
             submit_open=False,
             opens_on=inlamna_open,
             closes_on=inlamna_open,
             today_game=today_game,
             description=(
-                f"Deklarationen för {tax_year} ligger i digital brevlåda. "
-                "Granska förtryckta uppgifter, lägg till avdrag — själva "
-                "inlämningen öppnar 17 mars."
+                f"Deklarationen för {nominal_tax_year} ligger i digital "
+                "brevlåda. Granska förtryckta uppgifter, lägg till "
+                "avdrag — själva inlämningen öppnar 17 mars."
             ),
         )
     if today_game <= inlamna_close:
         # 17 mars - 4 maj · inlämnings-fönster
         return WindowState(
             phase="inlamna",
-            tax_year=tax_year,
+            tax_year=nominal_tax_year,
             can_read=True,
             submit_open=True,
             opens_on=None,
             closes_on=inlamna_close,
             today_game=today_game,
             description=(
-                f"Inlämning öppen till 4 maj. Skicka in före 31 mars för "
-                f"återbäring i april (våg 1), annars våg 2 (9-12 juni)."
+                f"Inlämning öppen till 4 maj. Skicka in före 31 mars "
+                f"för återbäring i april (våg 1), annars våg 2 "
+                "(9-12 juni)."
             ),
         )
-    # Efter 4 maj · stängd
-    # Nästa öppning = 2 mars nästa år
-    next_granska = date(y + 1, *SKV_GRANSKA_OPEN_MONTH_DAY)
+    # Efter 4 maj · stängd för nominal_tax_year
+    # Nästa öppning = 2 mars (fy + 1) för nominal_tax_year+1
+    next_granska = date(fy + 1, *SKV_GRANSKA_OPEN_MONTH_DAY)
     return WindowState(
         phase="stangd",
-        tax_year=tax_year,
+        tax_year=nominal_tax_year,
         can_read=True,  # eleven får läsa gamla deklarationer
         submit_open=False,
         opens_on=next_granska,
         closes_on=None,
         today_game=today_game,
         description=(
-            f"Deadline 4 maj har passerats. Eventuell inlämning för "
-            f"{tax_year} ger förseningsavgift {SKV_LATE_FEE_KR} kr. "
-            f"Skatteverket öppnar igen 2 mars {y + 1} för deklaration "
-            f"av {y}."
+            f"Deadline 4 maj har passerats. Eventuell sen inlämning "
+            f"för {nominal_tax_year} ger förseningsavgift "
+            f"{SKV_LATE_FEE_KR} kr. Skatteverket öppnar igen "
+            f"{next_granska.isoformat()} för deklaration av "
+            f"{nominal_tax_year + 1}."
         ),
     )
 

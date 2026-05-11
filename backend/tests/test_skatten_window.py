@@ -60,6 +60,32 @@ def test_window_off_season_jan():
     assert state.opens_on == date(2027, 3, 2)
 
 
+def test_window_anchor_year_clamps_to_2026():
+    """Spel börjar 2026-01-01 · eleven har ingen inkomst innan dess.
+    Första deklarationen är för 2026 (inte 2025), öppnar mars 2027.
+
+    Verkligheten skulle säga 'deklarera för 2025' i jan 2026 — men
+    eleven har inte spelat 2025 så det vore tomt + förvirrande.
+    """
+    state = compute_window(date(2026, 1, 15))
+    assert state.phase == "off_season"
+    assert state.tax_year == 2026, (
+        f"Förväntade 2026 (anchor-clamp), fick {state.tax_year}"
+    )
+    assert state.opens_on == date(2027, 3, 2)
+    assert "2026" in state.description
+    assert "2025" not in state.description
+
+
+def test_window_anchor_july_still_2026():
+    """Mitt i första spel-året (juli 2026) → fortfarande off_season
+    för år 2026 (nästa fönster 2027-03)."""
+    state = compute_window(date(2026, 7, 15))
+    assert state.phase == "off_season"
+    assert state.tax_year == 2026
+    assert state.opens_on == date(2027, 3, 2)
+
+
 def test_window_granska_mars_2():
     """2-16 mars = granska · läs-läge, ingen submit."""
     state = compute_window(date(2027, 3, 2))
