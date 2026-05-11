@@ -17070,21 +17070,23 @@ def v2_create_student(
 
     # === Initial-seed så eleven har data att jobba med från dag 1 ===
     #
-    # Seed:en gör 2 × tick_month (~150-450 INSERTs) + insurance/utility/
-    # pension/rental — totalt ~3-4 sekunder. Tidigare körde vi det
-    # SYNKRONT före response → läraren satt och väntade i 4 s per
-    # skapad elev. Nu schemaläggs det som BackgroundTask: response
-    # returneras direkt med login-koden, seed:en rullar i samma
-    # Cloud-Run-instans (max-instances=1 säkerställer att det är
-    # samma process).
+    # SYNKRON · vi körde tidigare detta som BackgroundTask för att
+    # läraren skulle få response direkt, men det skapade en RACE: när
+    # eleven (eller läraren via impersonering) loggade in innan
+    # BackgroundTask hunnit klart såg hen tomma vyer (postlådan = "0
+    # brev", banken = "0 kr"). Frontend-overlayn missade dessutom
+    # snabba seeds som hann bli "complete" innan första /v2/status-pollen
+    # kom in → eleven såg den tomma vyn igen.
     #
-    # Edge case: om eleven loggar in INNAN seed:en hunnit klart ser
-    # hen tomma vyer. _ensure_student_has_initial_data i
-    # teacher_student_detail (auto-recovery) städar upp om något
-    # failade. För eleven själv finns ingen explicit "förbereder
-    # data..."-state ännu — för 4 s extra första gången är det OK.
-    background_tasks.add_task(
-        _seed_initial_student_data_safe,
+    # Lösningen: kör seeden INLINE. Läraren väntar 3-5 s extra per skapad
+    # elev — acceptabelt för UX-garantien att postlådan ALDRIG är tom
+    # när eleven loggar in. Vid batch-create skyddar _seed_semaphore
+    # mot pool/minne-spike (max 2 samtidiga).
+    #
+    # Sätter seed_status='complete' explicit efter — backenden använder
+    # det fortfarande som signal till frontend-overlayn (defense in
+    # depth om något skippar denna kodväg, t.ex. en framtida CLI-import).
+    _seed_initial_student_data_safe(
         sid,
         spend,
         payload.starting_level,

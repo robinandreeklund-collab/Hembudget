@@ -821,12 +821,12 @@ def create_student(
         partner = getattr(student_obj, "v2_partner_model", None) or "solo"
 
     # === Initial-seed (samma som v2_create_student) ===
-    # Schemaläggs som BackgroundTask (~3-4 s i scope-DB) så response
-    # returneras direkt med login-koden. Auto-recovery i
-    # teacher_student_detail kör om något failar.
+    # SYNKRON · tidigare BackgroundTask men det gav en race-condition
+    # där eleven kunde logga in innan seeden hunnit klart och se tomma
+    # vyer. Läraren väntar 3-5 s extra istället — UX-garanti att
+    # postlådan/banken aldrig är tomma vid första inloggningen.
     from .v2 import _seed_initial_student_data_safe
-    background_tasks.add_task(
-        _seed_initial_student_data_safe,
+    _seed_initial_student_data_safe(
         out.id,
         spend,
         v2_level,
