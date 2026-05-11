@@ -305,7 +305,8 @@ export type V2MailStatus =
   | "exported"
   | "paid"
   | "expired"
-  | "handled";
+  | "handled"
+  | "failed";
 export type V2MailSenderKind =
   | "bank"
   | "cred"
@@ -711,6 +712,7 @@ export type V2InsurancePolicyKind =
   | "bostadsrattsforsakring"
   | "bilforsakring"
   | "djur"
+  | "frisktandvard"
   | "ovrig";
 
 export type V2InsuranceClaimKind =
@@ -2727,6 +2729,28 @@ export const v2Api = {
   insuranceDeletePolicy: (policyId: number) =>
     api<void>(`/v2/forsakringar/policies/${policyId}`, {
       method: "DELETE",
+    }),
+  /** Hämta elevens personliga frisktandvård-offert (SKV-4). */
+  frisktandvardOffer: () =>
+    api<{
+      tier: number;
+      age_category: "atb" | "normal";
+      premium_monthly: number;
+      explanation: string;
+      tier_prices_atb: Record<number, number>;
+      tier_prices_normal: Record<number, number>;
+      already_active: boolean;
+    }>("/v2/forsakringar/frisktandvard-offert"),
+  /** Retry-betalning för en failed-mail (SKV-5). */
+  retryPayment: (mailId: number) =>
+    api<{
+      status: "paid" | "rescheduled" | "still_insufficient";
+      message: string;
+      new_expected_date?: string;
+      shortfall_kr?: number;
+    }>(`/v2/postladan/${mailId}/retry-payment`, {
+      method: "POST",
+      body: "{}",
     }),
   /** Lärar-API · seedа default-katalog. */
   teacherSeedDefaultInsurance: (studentId: number) =>

@@ -511,10 +511,37 @@ export function MailDetailV2() {
                   Gå till banken & signera →
                 </button>
               )}
+              {/* Försök igen · för failed autogiro-dragningar (SKV-5) */}
+              {m.status === "failed" && (
+                <button
+                  type="button"
+                  className="cta-btn primary"
+                  disabled={exporting}
+                  onClick={async () => {
+                    try {
+                      const res = await v2Api.retryPayment(m.id);
+                      alert(res.message);
+                      if (res.status === "paid") {
+                        // Reload current page
+                        window.location.reload();
+                      }
+                    } catch (e) {
+                      alert(
+                        "Kunde inte försöka igen: "
+                        + String((e as Error)?.message || e),
+                      );
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  Försök igen →
+                </button>
+              )}
               {/* Markera som betald manuellt (utan att gå via BankID) */}
               {(m.mail_type === "invoice" || m.mail_type === "reminder") &&
                 m.status !== "paid" &&
-                m.status !== "expired" && (
+                m.status !== "expired" &&
+                m.status !== "failed" && (
                   <button
                     type="button"
                     className="cta-btn ghost"

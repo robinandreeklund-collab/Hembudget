@@ -43,6 +43,7 @@ const STATUS_LABEL: Record<V2MailStatus, string> = {
   paid: "Betald",
   expired: "Utgången",
   handled: "Hanterat",
+  failed: "Misslyckad",
 };
 
 type TabKey =
