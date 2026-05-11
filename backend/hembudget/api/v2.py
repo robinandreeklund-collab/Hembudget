@@ -3643,7 +3643,15 @@ def get_employer(
     try:
         from ..school.tax import compute_net_salary as _emp_net
         with session_scope() as s:
-            today = _date.today()
+            # SPEL-tid · annars cuttar vi bort historiska lönespecar
+            # (2025-10/11/12) eftersom real-tid är Maj 2026 → cutoff
+            # blir Jan 2026 → eleven ser 0 lönespecar i Arbetsgivaren-
+            # vyn trots att Postlådan visar dem (där filtrerar vi inte
+            # på datum). Använd current_game_date som referens.
+            from ..business.game_clock import (
+                current_game_date as _cgd_emp,
+            )
+            today = _cgd_emp()
             from datetime import timedelta as _td
             cutoff_d = today - _td(days=120)
 
@@ -17086,12 +17094,33 @@ def v2_create_student(
     # Sätter seed_status='complete' explicit efter — backenden använder
     # det fortfarande som signal till frontend-overlayn (defense in
     # depth om något skippar denna kodväg, t.ex. en framtida CLI-import).
-    _seed_initial_student_data_safe(
-        sid,
-        spend,
-        payload.starting_level,
-        partner,
-    )
+    #
+    # Om seed:en misslyckas raisar _seed_initial_student_data_safe →
+    # vi returnerar 500 med student_id så läraren kan rensa upp via
+    # /v2/teacher/students/:id (DELETE). Tidigare svaldes felet och
+    # eleven skapades med tom postlåda → läraren såg 200 OK men eleven
+    # var bruten. Det vill vi inte längre.
+    try:
+        _seed_initial_student_data_safe(
+            sid,
+            spend,
+            payload.starting_level,
+            partner,
+        )
+    except Exception as seed_exc:
+        import logging
+        logging.getLogger(__name__).exception(
+            "v2_create_student: seed misslyckades för student %s",
+            sid,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Eleven skapades (id={sid}) men initial-seed misslyckades. "
+                f"Radera och försök igen, eller kör manuell reseed via "
+                f"lärar-detalj-vyn. Fel: {seed_exc}"
+            ),
+        ) from seed_exc
 
     return V2CreatedStudentRow(
         student_id=sid,
@@ -18934,6 +18963,60 @@ def _seed_initial_student_data_safe(
                 starting_level=starting_level,
                 partner_model=partner_model,
             )
+            # POST-SEED-VERIFIKATION · säkerställ att scope-DB:n faktiskt
+            # innehåller data. Om _seed_initial_student_data:s tick_month
+            # tysta-misslyckats (t.ex. transaction-isolation-bugg i prod-
+            # Postgres som inte syns i SQLite-tester) skulle eleven få
+            # seed_status='complete' med tom postlåda. Markera då 'failed'
+            # istället och kasta så v2_create_student returnerar 500 →
+            # läraren ser tydligt att något gick snett istället för att
+            # skapa en bruten elev som ser ut att fungera.
+            mail_count = 0
+            try:
+                from ..school.engines import (
+                    scope_for_student as _sfs_verify,
+                    scope_context as _sctx_verify,
+                )
+                from ..db.base import session_scope as _ss_verify
+                from ..db.models import MailItem as _MI_verify
+                scope_key_verify = _sfs_verify(stu)
+                with _sctx_verify(scope_key_verify):
+                    with _ss_verify() as _vs:
+                        mail_count = _vs.query(_MI_verify).count()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "_seed_initial_student_data_safe: post-seed mail-count "
+                    "lookup misslyckades för student %s",
+                    student_id,
+                )
+
+            if mail_count == 0:
+                # Seed genomfördes utan exception men producerade INGEN
+                # post. Det är en bug (sannolikt tick_month som inte tickade
+                # eller fixed_expenses som bröts av ny scope-DB-state).
+                # Vi vill INTE returnera 200 med tom postlåda → markera
+                # failed och raise.
+                import logging
+                logging.getLogger(__name__).error(
+                    "_seed_initial_student_data_safe: seed färdig men "
+                    "scope-DB:n har 0 MailItem för student %s. Markerar "
+                    "seed_status='failed' så lärar-detalj kan re-seeda.",
+                    student_id,
+                )
+                try:
+                    with master_session() as s_zero:
+                        stu_zero = s_zero.get(Student, student_id)
+                        if stu_zero is not None:
+                            stu_zero.seed_status = "failed"
+                            s_zero.flush()
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"Seed för student {student_id} producerade 0 mail — "
+                    "scope-DB:n är tom. Inspektera Cloud Logging."
+                )
+
             # Seed klar · markera complete så frontend-overlayn lyfts.
             try:
                 with master_session() as s2:
@@ -18944,15 +19027,15 @@ def _seed_initial_student_data_safe(
             except Exception:
                 import logging
                 logging.getLogger(__name__).exception(
-                    "BackgroundTask: seed_status='complete' update failed "
-                    "för student %s — eleven kan fastna i 'Bygger upp...'-"
-                    "overlay tills auto-recovery städar upp",
+                    "_seed_initial_student_data_safe: seed_status='complete' "
+                    "update failed för student %s — eleven kan fastna i "
+                    "'Bygger upp...'-overlay tills auto-recovery städar upp",
                     student_id,
                 )
         except Exception:
             import logging
             logging.getLogger(__name__).exception(
-                "BackgroundTask: _seed_initial_student_data failed "
+                "_seed_initial_student_data_safe: seed misslyckades "
                 "för student %s — eleven kan ha tomma vyer tills "
                 "auto-recovery i student-detail kör",
                 student_id,
@@ -18969,6 +19052,12 @@ def _seed_initial_student_data_safe(
             except Exception:
                 # Sista utvägen · loggar bara så vi ser i Cloud Logging
                 pass
+            # Re-raise · v2_create_student körs SYNKRONT så vi vill
+            # att den returnerar 500 istället för 200-med-bruten-elev.
+            # Tidigare svaldes felet tyst → läraren såg "200 OK" men
+            # eleven hade tom postlåda. Med raise:n får läraren tydlig
+            # feedback att skapandet failade.
+            raise
 
 
 def _seed_initial_student_data(
