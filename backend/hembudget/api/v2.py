@@ -2868,6 +2868,161 @@ def create_v2_transfer(
     return transfer_result
 
 
+# === Retry-betalning efter misslyckat autogiro (SKV-5) ===
+
+class V2RetryPaymentResponse(BaseModel):
+    """Resultat av 'Försök igen' på en misslyckad betalning."""
+    status: Literal["paid", "rescheduled", "still_insufficient"]
+    message: str
+    new_expected_date: Optional[str] = None
+    shortfall_kr: Optional[int] = None
+
+
+@router.post(
+    "/postladan/{mail_id}/retry-payment",
+    response_model=V2RetryPaymentResponse,
+)
+def retry_failed_payment(
+    mail_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2RetryPaymentResponse:
+    """Eleven trycker 'Försök igen' på en misslyckad autogiro-betalning.
+
+    Flöde:
+      1. Hittar MailItem(status='failed') + dess UpcomingTransaction
+      2. Räknar saldot på det avsedda kontot (samma logik som
+         _auto_debit_signed_upcomings_if_due använder)
+      3. Om saldot räcker → drar direkt + flippar mail till 'paid'
+      4. Om INTE → schemalägger upcoming till 1 spel-dag fram,
+         autogiro=True igen så nästa auto-debit-körning fångar den
+         (om eleven fyller på under tiden)
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast eleven själv kan försöka betala igen.",
+        )
+
+    from datetime import datetime as _dt_ret, timedelta as _td_ret
+    from decimal import Decimal as _Dec_ret
+    from hashlib import sha256 as _sha_ret
+    from sqlalchemy import func as _sf_ret, or_ as _sor_ret
+    from ..business.game_clock import current_game_date_for_student
+
+    today_game = current_game_date_for_student(info.student_id)
+
+    with session_scope() as s:
+        m = s.get(MailItem, mail_id)
+        if m is None:
+            raise HTTPException(404, "Mail saknas")
+        if m.status != "failed":
+            raise HTTPException(
+                409,
+                "Den här fakturan har inte misslyckats — inget att "
+                "försöka igen.",
+            )
+        if m.upcoming_id is None:
+            raise HTTPException(
+                409,
+                "Fakturan saknar kopplad betalning · exportera först "
+                "till banken.",
+            )
+
+        u = s.get(UpcomingTransaction, m.upcoming_id)
+        if u is None:
+            raise HTTPException(404, "Betalningsrad saknas")
+
+        acc_id = u.debit_account_id
+        if acc_id is None:
+            # Default till första checking
+            default_acc = (
+                s.query(Account)
+                .filter(Account.type == "checking")
+                .order_by(Account.id.asc())
+                .first()
+            )
+            if default_acc is None:
+                raise HTTPException(409, "Inget lönekonto hittades")
+            acc_id = default_acc.id
+
+        # Saldo-räkning · SAMMA filter som auto-debit
+        bal_q = (
+            s.query(_sf_ret.coalesce(_sf_ret.sum(Transaction.amount), 0))
+            .filter(
+                Transaction.account_id == acc_id,
+                Transaction.date <= today_game,
+                _sor_ret(
+                    Transaction.released_at.is_(None),
+                    Transaction.released_at <= _dt_ret.utcnow(),
+                ),
+            )
+        )
+        base = s.get(Account, acc_id)
+        bal = (
+            _Dec_ret(str(base.opening_balance or 0))
+            + _Dec_ret(str(bal_q.scalar() or 0))
+        )
+
+        if bal < u.amount:
+            shortfall = int(u.amount - bal)
+            # Schemalägg framåt · auto-debit-cykeln kör nästa GET
+            u.expected_date = today_game + _td_ret(days=1)
+            u.autogiro = True
+            # Behåll mail som failed tills dragningen faktiskt går
+            return V2RetryPaymentResponse(
+                status="still_insufficient",
+                message=(
+                    f"Saldot räcker fortfarande inte · saknas "
+                    f"{shortfall} kr. Försöker igen automatiskt "
+                    f"{u.expected_date.isoformat()} (spel-tid). "
+                    "Fyll på kontot under tiden."
+                ),
+                new_expected_date=u.expected_date.isoformat(),
+                shortfall_kr=shortfall,
+            )
+
+        # Saldot räcker · dra DIREKT (idempotent hash matchar auto-debit-
+        # mönstret så om något redan har dragit den får vi inte
+        # duplicate).
+        raw = (
+            f"autogiro|{info.student_id}|{u.id}|"
+            f"{today_game.isoformat()}|{u.amount}|retry"
+        )
+        tx_hash = _sha_ret(raw.encode()).hexdigest()[:32]
+        existing_tx = (
+            s.query(Transaction).filter(Transaction.hash == tx_hash).first()
+        )
+        if existing_tx is None:
+            tx = Transaction(
+                account_id=acc_id,
+                date=today_game,
+                amount=-_Dec_ret(str(u.amount)),
+                currency="SEK",
+                raw_description=f"Autogiro · {u.name} (retry)",
+                normalized_merchant=u.name,
+                hash=tx_hash,
+                is_transfer=False,
+                user_verified=True,
+            )
+            s.add(tx)
+            s.flush()
+            u.matched_transaction_id = tx.id
+
+        u.expected_date = today_game
+        u.autogiro = True
+        m.status = "paid"
+
+        return V2RetryPaymentResponse(
+            status="paid",
+            message=(
+                f"Betalningen genomfördes · {int(u.amount)} kr dras "
+                f"från lönekontot idag ({today_game.isoformat()})."
+            ),
+            new_expected_date=today_game.isoformat(),
+            shortfall_kr=0,
+        )
+
+
 # === Upcoming-uppdatering (V2 · /upcoming-V1 är gateblockad i school) ===
 
 class V2UpcomingUpdateRequest(BaseModel):
@@ -18043,16 +18198,29 @@ def _auto_debit_signed_upcomings_if_due(student_id: int) -> int:
 
                 for u in due:
                     acc_id = u.debit_account_id or default_acc.id
-                    # Saldo-kontroll · går vi minus → markera failed
-                    # (autogiro-False) så eleven får signera om eller
-                    # fylla på kontot manuellt.
-                    bal_q = s.query(
-                        __import__("sqlalchemy").func.coalesce(
-                            __import__("sqlalchemy").func.sum(
-                                Transaction.amount,
-                            ), 0,
-                        ),
-                    ).filter(Transaction.account_id == acc_id)
+                    # Saldo-kontroll · matchar UI:s _released_filter
+                    # (Transaction.released_at <= NOW eller NULL) plus
+                    # cappar mot u.expected_date så framtida planerade
+                    # lönen INTE räknas som "tillgänglig nu". Tidigare
+                    # bug: bal_q summerade ALLA tx oavsett released_at
+                    # → backend trodde 6 434 kr fanns medan UI:t visade
+                    # 5 798 → faktura drogs och saldo blev -691.
+                    from sqlalchemy import func as _sql_func, or_ as _sql_or
+                    bal_q = (
+                        s.query(
+                            _sql_func.coalesce(
+                                _sql_func.sum(Transaction.amount), 0,
+                            )
+                        )
+                        .filter(
+                            Transaction.account_id == acc_id,
+                            Transaction.date <= u.expected_date,
+                            _sql_or(
+                                Transaction.released_at.is_(None),
+                                Transaction.released_at <= _dt_ad.utcnow(),
+                            ),
+                        )
+                    )
                     base = s.get(Account, acc_id)
                     bal = (
                         (_Dec_ad(str(base.opening_balance or 0)))
@@ -18060,8 +18228,76 @@ def _auto_debit_signed_upcomings_if_due(student_id: int) -> int:
                     )
                     if bal < u.amount:
                         # Otillräckligt saldo · släpp signaturen så
-                        # raden blir osignerad och eleven kan agera
+                        # raden blir osignerad och eleven kan agera.
                         u.autogiro = False
+                        # Markera ev. relaterat MailItem som FAILED
+                        # så eleven ser fakturan i "Misslyckade"-flik
+                        # och kan trycka 'Försök igen' efter påfyllning.
+                        related_fail = (
+                            s.query(MailItem)
+                            .filter(MailItem.upcoming_id == u.id)
+                            .first()
+                        )
+                        sender_name = (
+                            related_fail.sender if related_fail else u.name
+                        )
+                        if related_fail is not None:
+                            related_fail.status = "failed"
+                        # Pedagogiskt failed-mail från Spelbanken
+                        shortfall = int(u.amount - bal)
+                        fail_subj = (
+                            f"Betalning misslyckades · {sender_name} "
+                            f"{int(u.amount)} kr"
+                        )
+                        # Idempotent · skapa inte dubbletter om
+                        # auto-debit kallas flera gånger för samma upcoming
+                        existing_fail = (
+                            s.query(MailItem)
+                            .filter(MailItem.subject == fail_subj)
+                            .first()
+                        )
+                        if existing_fail is None:
+                            s.add(MailItem(
+                                sender="Spelbanken",
+                                sender_short="BNK",
+                                sender_kind="financial",
+                                sender_meta=(
+                                    f"Autogiro-retur · {u.expected_date.isoformat()}"
+                                ),
+                                mail_type="info",
+                                subject=fail_subj,
+                                body_meta=(
+                                    f"Saknades {shortfall} kr · "
+                                    f"saldo {int(bal)} kr"
+                                ),
+                                body=(
+                                    f"Hej! Vi försökte dra "
+                                    f"{int(u.amount)} kr till "
+                                    f"{sender_name} idag "
+                                    f"({u.expected_date.isoformat()}) "
+                                    f"men kontot hade bara {int(bal)} kr "
+                                    f"— du saknade {shortfall} kr.\n\n"
+                                    f"Vad händer nu?\n"
+                                    f"• Fakturan ligger kvar som "
+                                    f"OBETALD i postlådan.\n"
+                                    f"• Fyll på lönekontot (t.ex. flytta "
+                                    f"från sparkontot via 'Ny överföring' "
+                                    f"i bankvyn).\n"
+                                    f"• Gå tillbaka till fakturan och "
+                                    f"klicka 'Försök igen' så drar vi "
+                                    f"om i nästa spel-vecka.\n"
+                                    f"• Om du inte agerar börjar "
+                                    f"leverantören skicka påminnelser "
+                                    f"(60 kr extra avgift första gången, "
+                                    f"sen 60 kr, sen inkasso).\n\n"
+                                    f"Vänliga hälsningar,\n"
+                                    f"Spelbanken"
+                                ),
+                                amount=u.amount,
+                                due_date=u.expected_date,
+                                status="unhandled",
+                                released_at=None,
+                            ))
                         continue
 
                     # Idempotent hash · samma signering får aldrig
