@@ -26,17 +26,23 @@ const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
 
 function currentMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  // Fallback om /v2/game-time inte hunnit svara · sätt till spel-anchor
+  // (2026-01) istället för real-tid. Annars defaultar perioden till
+  // "Maj 2026" (real-tid) trots att eleven är i Jan 2026 i spel-tid —
+  // huvudboken visar då 0 kr inkomster/utgifter eftersom ingen data
+  // finns i real-månaden. Riktiga värdet hämtas via v2Api.gameTime().
+  return "2026-01";
 }
 
-function lastNMonths(n: number): string[] {
+function lastNMonths(n: number, base: string): string[] {
+  // Bygg N månader BAKÅT från SPEL-månaden, inte real-månad.
+  // Default-base är 2026-01 (anchor) tills /v2/game-time har laddats.
+  const [yStr, mStr] = base.split("-");
+  const baseY = parseInt(yStr, 10) || 2026;
+  const baseM = (parseInt(mStr, 10) || 1) - 1;  // 0-indexerat
   const out: string[] = [];
-  const d = new Date();
   for (let i = 0; i < n; i++) {
-    const y = d.getFullYear();
-    const m = d.getMonth() - i;
-    const dt = new Date(y, m, 1);
+    const dt = new Date(baseY, baseM - i, 1);
     out.push(
       `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`,
     );
@@ -55,10 +61,26 @@ const ACCOUNT_TYPE_LABEL: Record<string, string> = {
 
 export function HuvudbokV2() {
   const [period, setPeriod] = useState<string>(currentMonth());
+  const [gameYm, setGameYm] = useState<string>(currentMonth());
   const [data, setData] = useState<LedgerData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  // Hämta elevens spel-månad så period-väljaren defaultar dit i stället
+  // för till real-tidens månad. Annars listar "Maj 2026" trots att
+  // eleven precis skapats och spel-tiden är "Jan 2026".
+  useEffect(() => {
+    v2Api.gameTime()
+      .then((gt) => {
+        setGameYm(gt.year_month);
+        // Om perioden fortfarande är fallback-default (anchor), byt till
+        // elevens faktiska spel-månad. Användaren har inte rört väljaren
+        // än så det är säkert att uppdatera.
+        setPeriod((p) => (p === currentMonth() ? gt.year_month : p));
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -75,7 +97,8 @@ export function HuvudbokV2() {
       });
   }, [period]);
 
-  const monthOptions = useMemo(() => lastNMonths(12), []);
+  const monthOptions = useMemo(() => lastNMonths(12, gameYm), [gameYm]);
+  const gameYear = parseInt(gameYm.split("-")[0], 10) || 2026;
 
   return (
     <div className="v2-lan-root">
@@ -119,8 +142,8 @@ export function HuvudbokV2() {
                   {m}
                 </option>
               ))}
-              <option value={String(new Date().getFullYear())}>
-                Hela {new Date().getFullYear()}
+              <option value={String(gameYear)}>
+                Hela {gameYear}
               </option>
             </select>
           </label>

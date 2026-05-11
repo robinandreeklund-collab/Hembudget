@@ -304,21 +304,6 @@ export function HubV2() {
               <Link to="/v2/avanza" className="hub-char-pill">
                 Avanza
               </Link>
-              <Link
-                to="/v2/handelser"
-                className={`hub-char-pill${
-                  hub.pending_events && hub.pending_events.length > 0
-                    ? " alert"
-                    : ""
-                }`}
-              >
-                Händelser
-                {hub.pending_events && hub.pending_events.length > 0
-                  && ` · ${hub.pending_events.length}`}
-              </Link>
-              <Link to="/v2/huvudbok" className="hub-char-pill">
-                Huvudboken
-              </Link>
               <Link to="/v2/moduler" className="hub-char-pill">
                 Mina moduler
               </Link>
@@ -725,6 +710,29 @@ export function HubV2() {
               <div className="compass-node-eye">Verktyg 02</div>
               <div className="compass-node-name">Bokföring</div>
               <div className="compass-node-val">klassa transaktioner</div>
+            </Link>
+            <Link to="/v2/huvudbok" className="compass-node">
+              <div className="compass-node-eye">Verktyg 07</div>
+              <div className="compass-node-name">Huvudboken</div>
+              <div className="compass-node-val">balans · resultat · netto</div>
+            </Link>
+            <Link
+              to="/v2/handelser"
+              className={`compass-node${
+                hub.pending_events && hub.pending_events.length > 0
+                  ? " alert"
+                  : ""
+              }`}
+            >
+              <div className="compass-node-eye">Verktyg 08</div>
+              <div className="compass-node-name">
+                Händelser
+                {hub.pending_events && hub.pending_events.length > 0
+                  && ` · ${hub.pending_events.length}`}
+              </div>
+              <div className="compass-node-val">
+                förslag · sociala val
+              </div>
             </Link>
             <Link to="/v2/simulator" className="compass-node">
               <div className="compass-node-eye">Verktyg 05</div>
