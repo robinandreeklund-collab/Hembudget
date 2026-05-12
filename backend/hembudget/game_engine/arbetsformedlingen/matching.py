@@ -28,26 +28,143 @@ MATS_OPENING_MESSAGE = (
 )
 
 
-# Företagsnamn-pool för en realistisk svensk arbetsmarknad
+# Företagsnamn-pool för en realistisk svensk arbetsmarknad.
+# Nyckel = yrkespool.YRKESPOOL.key. Måste täcka ALLA aktiva yrken
+# annars hamnar elever på DEFAULT_EMPLOYERS ("Företaget AB") vilket
+# ser orealistiskt ut. Används av både arbetsförmedlingen-matching
+# OCH _seed_initial_student_data för att garantera att profession +
+# arbetsgivare alltid matchar (bugg innan: undersköterska kunde få
+# 'Volvo Cars' som arbetsgivare).
 EMPLOYER_NAMES = {
-    "vard_underskoterska": ["Region Stockholm", "Region Skåne", "Attendo", "Vardaga"],
-    "vard_sjukskoterska": ["Karolinska Sjukhuset", "Sahlgrenska", "Capio S:t Görans"],
-    "it_konsult_junior": ["Tieto", "Cybercom", "Knowit", "Sigma"],
-    "it_konsult_senior": ["Spotify", "Klarna", "Truecaller", "Ericsson R&D"],
-    "it_systemutvecklare": ["IKEA Tech", "King Digital", "DICE", "Mojang"],
-    "butiksbitrade": ["ICA", "Coop", "H&M", "Lindex", "Stadium"],
-    "kassorska": ["ICA", "Coop", "Hemköp", "Willys"],
-    "kock": ["Operakällaren", "Frantzén", "Restaurang Mat", "Vapiano"],
-    "lar_grundskola": ["Stockholms Stad Skolförvaltning", "Göteborgs Stad", "Malmö Stad"],
-    "lar_vikarie": ["Manpower Education", "Lärarvikarier"],
-    "snickare": ["NCC Bygg", "Skanska", "Peab", "Veidekke"],
-    "elektriker": ["E.ON", "Vattenfall Service", "ELON", "Bravida"],
-    "lastbilschauffor": ["DHL", "PostNord", "Schenker", "Bring"],
-    "ekonom_controller": ["EY", "PwC", "KPMG", "Deloitte"],
-    "polis": ["Polismyndigheten Stockholm", "Polismyndigheten Region Väst"],
-    "brandman": ["Storstockholms Brandförsvar", "Räddningstjänsten"],
+    # --- VÅRD & OMSORG ---
+    "underskoterska": [
+        "Region Stockholm", "Region Skåne", "Region Västra Götaland",
+        "Stockholms Stad", "Göteborgs Stad", "Attendo", "Vardaga",
+        "Aleris Vård",
+    ],
+    "sjukskoterska": [
+        "Karolinska Universitetssjukhuset",
+        "Sahlgrenska Universitetssjukhuset",
+        "Capio S:t Görans Sjukhus", "Region Stockholm",
+        "Region Västra Götaland", "Region Skåne",
+    ],
+    "personlig_assistent": [
+        "Humana Assistans", "Frösunda Omsorg", "Olivia Personlig Assistans",
+        "Assistans i Stockholm", "Kommunal Assistans",
+    ],
+    "tandlakare": [
+        "Folktandvården Stockholm", "Folktandvården Västra Götaland",
+        "Distriktstandvården", "Praktikertjänst", "Smile Tandvård",
+    ],
+    # --- IT ---
+    "it_konsult_junior": ["Tietoevry", "Cybercom", "Knowit", "Sigma IT"],
+    "it_konsult_senior": [
+        "Spotify Sverige", "Klarna Bank AB", "Truecaller",
+        "Ericsson R&D", "Capgemini",
+    ],
+    "it_systemutvecklare": [
+        "IKEA Tech", "King Digital Entertainment", "DICE",
+        "Mojang Studios", "Volvo Cars Digital",
+    ],
+    # --- DETALJHANDEL & SERVICE ---
+    "butiksbitrade": ["ICA", "Coop", "H&M", "Lindex", "Stadium", "Clas Ohlson"],
+    "kassorska": ["ICA", "Coop", "Hemköp", "Willys", "City Gross"],
+    "kock": [
+        "Operakällaren", "Frantzén", "Restaurang Mat",
+        "Vapiano", "Sturehof",
+    ],
+    "servitor": [
+        "Vapiano", "Espresso House", "Sturehof", "Restaurang Volt",
+        "Tre Små Rum",
+    ],
+    "saljare_b2b": [
+        "Telia Company", "Tele2 AB", "ATEA", "Office Depot Sverige",
+        "Lyreco",
+    ],
+    # --- BYGG & INDUSTRI ---
+    "snickare": ["NCC AB", "Skanska Sverige", "Peab", "Veidekke", "JM AB"],
+    "elektriker": [
+        "Bravida", "Vattenfall Services", "Eltel Networks",
+        "Caverion", "Eitech",
+    ],
+    "industrioperator": [
+        "Sandvik AB", "SKF", "Volvo Group Trucks", "Scania CV",
+        "ABB Sverige",
+    ],
+    "vaktmastare": [
+        "Coor Service", "ISS Facility Services", "Sodexo",
+        "Stockholms Stad Fastighet", "Akademiska Hus",
+    ],
+    # --- TRANSPORT & LOGISTIK ---
+    "lastbilschauffor": ["DHL", "PostNord", "DB Schenker", "Bring", "DSV"],
+    "bussforare": [
+        "Nobina", "Keolis Sverige", "Vy Buss", "Arriva Sverige",
+        "Transdev",
+    ],
+    "lagermedarbetare": [
+        "Amazon Sverige", "PostNord Logistik", "DHL Supply Chain",
+        "IKEA Distribution", "Bring Frigoscandia",
+    ],
+    # --- UTBILDNING ---
+    "lar_grundskola": [
+        "Stockholms Stad Skolförvaltning", "Göteborgs Stad",
+        "Malmö Stad", "Internationella Engelska Skolan",
+        "Kunskapsskolan",
+    ],
+    "lar_vikarie": [
+        "Manpower Education", "Lärarvikarier i Sverige",
+        "VikarieDirekt", "Adecco Education",
+    ],
+    "forskollarare": [
+        "Stockholms Stad förskola", "Göteborgs Stad förskola",
+        "Pysslingen Förskolor", "Vittra", "Tellusbarn",
+    ],
+    # --- EKONOMI & ADMIN ---
+    "ekonom_controller": [
+        "EY Sverige", "PwC Sverige", "KPMG", "Deloitte",
+        "BDO Sverige",
+    ],
+    "redovisningskonsult": [
+        "Visma Spcs", "Fortnox", "BDO Sverige",
+        "Mazars Sweden", "Aspia",
+    ],
+    # --- OFFENTLIG SEKTOR ---
+    "polis": [
+        "Polismyndigheten Stockholm", "Polismyndigheten Region Väst",
+        "Polismyndigheten Region Syd",
+    ],
+    "brandman": [
+        "Storstockholms Brandförsvar", "Räddningstjänsten Storgöteborg",
+        "Räddningstjänsten Skåne Nordväst",
+    ],
+    "anstalld_kommun": [
+        "Stockholms Stad", "Göteborgs Stad", "Malmö Stad",
+        "Uppsala kommun", "Linköpings kommun",
+    ],
+    # --- KREATIVT ---
+    "grafisk_designer": [
+        "Bonnier News", "Schibsted Sverige", "Forsman & Bodenfors",
+        "Volontaire", "Garbergs",
+    ],
+    # --- STUDERANDE (gymnasium-extra) ---
+    "studerande_gymnasium": [
+        "ICA", "Coop", "Pizzeria Casa Mia", "Café Pascal",
+        "Espresso House",
+    ],
 }
 DEFAULT_EMPLOYERS = ["Företaget AB", "Branschledaren", "Lokalbolaget", "Norra AB"]
+
+
+def pick_employer_for_yrke(yrke_key: str, seed: int) -> str:
+    """Deterministisk arbetsgivar-pick för ett yrke.
+
+    Används av _seed_initial_student_data så att samma student_id
+    alltid får samma arbetsgivare (annars skulle reseed ändra
+    employer-historiken). seed=student_id rekommenderas.
+    """
+    import random as _r
+    pool = EMPLOYER_NAMES.get(yrke_key, DEFAULT_EMPLOYERS)
+    return _r.Random(seed).choice(pool)
 
 
 @dataclass(frozen=True)

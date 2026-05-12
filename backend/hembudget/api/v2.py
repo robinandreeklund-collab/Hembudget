@@ -19332,11 +19332,17 @@ def _seed_initial_student_data(
                 # → eleven såg två olika yrken på samma karaktär.
                 # game_engine är source-of-truth.
                 sp.profession = profile.yrke_display
-                # Arbetsgivaren finns på AnstallningsAvtal (master)
-                # men sätts via en separat synk i Sprint 7. Här fyller
-                # vi i ett rimligt default så hub inte blir tomt.
-                if not sp.employer:
-                    sp.employer = profile.yrke_display + " AB"
+                # ALLTID skriv över employer när profession ändras ·
+                # tidigare kollade vi bara `if not sp.employer` vilket
+                # behöll den GAMLA employern från school.profile_fixtures
+                # (där 'Projektledare → Volvo Cars' picks). Resultat:
+                # 'Undersköterska, hemsjukvård' på Volvo Cars · helt fel.
+                # Använd nu yrke_key-mappad pool så profession + employer
+                # alltid stämmer ihop.
+                from ..game_engine.arbetsformedlingen.matching import (
+                    pick_employer_for_yrke as _pick_emp,
+                )
+                sp.employer = _pick_emp(profile.yrke_key, student.id)
                 sp.has_mortgage = profile.housing.type in (
                     "bostadsratt", "villa", "radhus",
                 )
