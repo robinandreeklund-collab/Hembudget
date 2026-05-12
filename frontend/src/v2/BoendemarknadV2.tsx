@@ -161,6 +161,31 @@ export function BoendemarknadV2() {
   );
 }
 
+const ymLabelStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  fontFamily: "var(--mono)",
+  fontSize: 11,
+  letterSpacing: 0.5,
+  color: "var(--text-mid)",
+  textTransform: "uppercase",
+};
+
+const ymInputStyle: React.CSSProperties = {
+  padding: "6px 10px",
+  background: "rgba(15,21,37,0.65)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  borderRadius: 6,
+  color: "#fff",
+  fontFamily: "var(--mono)",
+  fontSize: 12,
+  // Invertera native date-picker-ikonen så den syns på mörk bakgrund
+  // (Chrome/Edge stöder colorScheme; Safari är mer eller mindre svart-
+  // som-default men accepterar pseudo-element)
+  colorScheme: "dark",
+};
+
+
 function tabBtnStyle(active: boolean): React.CSSProperties {
   return {
     padding: "10px 18px",
@@ -295,7 +320,7 @@ function KopSaljPanel() {
   return (
     <div className="boendemarknad-kop">
       <header style={{ marginBottom: 16, display: "flex", gap: 16, alignItems: "center" }}>
-        <label>
+        <label style={ymLabelStyle}>
           Spelmånad:&nbsp;
           <input
             type="month"
@@ -304,6 +329,7 @@ function KopSaljPanel() {
               setUserTouchedYm(true);
               setYm(e.target.value || gameYm);
             }}
+            style={ymInputStyle}
           />
         </label>
         {listings && (
@@ -808,7 +834,7 @@ function HyrmarknadPanel() {
   return (
     <div>
       <header style={{ marginBottom: 16, display: "flex", gap: 16, alignItems: "center" }}>
-        <label>
+        <label style={ymLabelStyle}>
           Spelmånad:&nbsp;
           <input
             type="month"
@@ -817,6 +843,7 @@ function HyrmarknadPanel() {
               setUserTouchedYm(true);
               setYm(e.target.value || gameYm);
             }}
+            style={ymInputStyle}
           />
         </label>
       </header>

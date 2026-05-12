@@ -454,6 +454,12 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
                           ? "betald"
                           : n.status === "info"
                           ? "info"
+                          : n.status === "acknowledged"
+                          ? "bekräftad"
+                          : n.status === "action_required"
+                          ? "att hantera"
+                          : n.status === "denied"
+                          ? "nekad"
                           : n.status}
                       </span>
                     )}
