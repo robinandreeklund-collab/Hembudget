@@ -431,8 +431,14 @@ def tick_month(
     """
     if release_base is None:
         try:
-            from datetime import date as _d_now
-            today = _d_now.today()
+            # SPEL-tid, INTE real-tid. Real-tid idag är t.ex. 2026-05-12
+            # medan elevens spel-tid kan vara 2026-02-07. Använder vi
+            # real-tid blir alla spel-månader < real-tid "historiska" →
+            # release_base=None → ALLA transaktioner pre-released → eleven
+            # ser hela månadens transaktioner direkt (inkl. transaktioner
+            # som ska hända senare i spel-månaden).
+            from ..game_clock import current_game_date as _gd
+            today = _gd()
             current_ym = f"{today.year:04d}-{today.month:02d}"
             # Lexikografisk jämförelse fungerar för "YYYY-MM"
             if year_month >= current_ym:

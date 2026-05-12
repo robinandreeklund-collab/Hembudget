@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from ..chat import tools as chat_tools
@@ -13,12 +13,26 @@ from ..db.models import Account, FundHolding, Transaction
 from .deps import db, require_auth
 
 
+def _today_g() -> date:
+    """Spel-tidens 'idag' · fallback till real-tid."""
+    try:
+        from ..business.game_clock import current_game_date
+        return current_game_date()
+    except Exception:
+        return date.today()
+
+
 def _released_filter():
-    """Realtid-projektion · samma princip som /v2/bank — exkludera
-    transaktioner som ännu inte släppts till eleven."""
-    return or_(
-        Transaction.released_at.is_(None),
-        Transaction.released_at <= datetime.utcnow(),
+    """Realtid-projektion + spel-tid-gate · exkluderar transaktioner som
+    ännu inte hänt i spel-tid. Saldot i balances ska aldrig inkludera
+    framtida transaktioner (det skulle visa att eleven har/saknar pengar
+    som inte ännu finns/dragits)."""
+    return and_(
+        or_(
+            Transaction.released_at.is_(None),
+            Transaction.released_at <= datetime.utcnow(),
+        ),
+        Transaction.date <= _today_g(),
     )
 
 router = APIRouter(prefix="/balances", tags=["balances"], dependencies=[Depends(require_auth)])

@@ -93,7 +93,7 @@ from ..school.engines import master_session
 from ..school.models import Student, StudentProfile, Teacher, V2OnboardingEvent
 from ..wellbeing.calculator import calculate_wellbeing
 from .deps import TokenInfo, require_token
-from sqlalchemy import func as _func, or_
+from sqlalchemy import func as _func, or_, and_
 
 
 router = APIRouter(prefix="/v2", tags=["v2"])
@@ -128,13 +128,32 @@ def _today_g() -> _date:
 def _released_filter(model_class):
     """Filter-uttryck: är synlig nu?
 
-    `released_at IS NULL` betyder ingen projektion (ex. legacy-data,
-    manuella imports) → alltid synlig. Annars `released_at <= NOW()`.
+    Två lager:
+    1. Realtid-projektion · `released_at IS NULL` (legacy/manuella) eller
+       `released_at <= NOW_real` (har redan släppts av tid-mappningen).
+    2. För Transaction · även `date <= today_g` (spel-tid). En tx får
+       INTE synas innan spel-tiden nått dess datum, oavsett vad
+       released_at säger. Detta gäller universellt för ALLA månader
+       (historiska + nuvarande + framtida) så eleven aldrig ser
+       transaktioner som "ännu inte har hänt" i spel-tid.
+
+    Vanlig bug innan denna fix: när tick_month använde real-tid (inte
+    spel-tid) för att avgöra current_ym blev release_base=None för
+    spel-månader < real-månad, varpå alla transaktioner i spel-månaden
+    blev pre-released. För eleven syntes då hela månadens utgifter
+    redan dag 1 i spel-månaden.
     """
-    return or_(
+    base_filter = or_(
         model_class.released_at.is_(None),
         model_class.released_at <= datetime.utcnow(),
     )
+    if model_class is Transaction:
+        try:
+            today_g = _today_g()
+            return and_(base_filter, model_class.date <= today_g)
+        except Exception:
+            return base_filter
+    return base_filter
 
 
 # === Schemas ===
