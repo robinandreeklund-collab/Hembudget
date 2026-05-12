@@ -418,11 +418,15 @@ export function BankV2() {
                       kr
                     </div>
                     <div className="acct-bal-meta">
-                      {a.fund_value > 0
-                        ? `cash ${SEK(a.current_balance)} · fond ${SEK(
-                            a.fund_value,
-                          )}`
-                        : a.bank}
+                      {(() => {
+                        const fv = a.fund_value || 0;
+                        const sv = a.stock_value || 0;
+                        if (fv === 0 && sv === 0) return a.bank;
+                        const parts = [`cash ${SEK(a.current_balance)}`];
+                        if (fv > 0) parts.push(`fond ${SEK(fv)}`);
+                        if (sv > 0) parts.push(`aktier ${SEK(sv)}`);
+                        return parts.join(" · ");
+                      })()}
                     </div>
                   </div>
                 </Link>

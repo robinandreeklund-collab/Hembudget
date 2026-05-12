@@ -182,6 +182,8 @@ export type BankAccount = {
   account_number: string | null;
   current_balance: number;
   fund_value: number;
+  /** Aktievärde · quantity × senaste kurs. 0 om kontot inte har aktier. */
+  stock_value?: number;
   total_value: number;
   incognito: boolean;
 };

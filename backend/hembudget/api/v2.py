@@ -888,6 +888,9 @@ class BankAccount(BaseModel):
     account_number: Optional[str] = None
     current_balance: float
     fund_value: float
+    # Aktievärde · quantity × senaste kurs. ISK med aktier visar nu
+    # även detta i bank-listan. Default 0 för konton utan StockHolding.
+    stock_value: float = 0.0
     total_value: float
     incognito: bool
 
@@ -1026,6 +1029,39 @@ def get_bank(
             ):
                 fund_values[acc_id] = Decimal(str(fund_total or 0))
 
+            # Aktievärden per konto · quantity × senaste kurs från master.
+            # Tidigare räknade vi BARA fonder i fund_value → ISK med
+            # aktier visade bara cash-saldot (lurade pedagogiken).
+            stock_values: dict[int, Decimal] = {}
+            try:
+                stock_rows = s.query(StockHolding).all()
+                if stock_rows:
+                    tickers = {h.ticker for h in stock_rows}
+                    from ..school.stock_models import LatestStockQuote as _LSQ
+                    with master_session() as _msq:
+                        prices = {
+                            q.ticker: Decimal(str(q.last))
+                            for q in _msq.query(_LSQ)
+                            .filter(_LSQ.ticker.in_(tickers))
+                            .all()
+                        }
+                    for h in stock_rows:
+                        price = prices.get(h.ticker)
+                        if price is None:
+                            # Fallback: använd avg_cost som värdering
+                            # (bättre än att räkna noll om kurser saknas)
+                            price = h.avg_cost or Decimal("0")
+                        stock_values[h.account_id] = (
+                            stock_values.get(h.account_id, Decimal("0"))
+                            + Decimal(h.quantity) * price
+                        )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "BankResponse: stock_values-beräkning misslyckades · "
+                    "ISK kan visa fel total_value",
+                )
+
             accounts_out: list[BankAccount] = []
             account_names: dict[int, str] = {}
             total_balance = Decimal("0")
@@ -1043,10 +1079,16 @@ def get_bank(
                 movement = Decimal(str(q.scalar() or 0))
                 cur = ob + movement
                 fv = fund_values.get(acc.id, Decimal("0"))
-                tv = cur + fv
+                sv = stock_values.get(acc.id, Decimal("0"))
+                # fund_value-fältet returneras fortfarande för bakåtkompat
+                # men det betyder nu 'icke-cash-portfölj-värde' (fond + aktier).
+                # Frontend bryter ner i UI vid behov (BankV2 visar redan
+                # 'cash X · fond Y' — vi utökar till '· aktier Z' nedan).
+                non_cash = fv + sv
+                tv = cur + non_cash
                 is_incog = bool(getattr(acc, "incognito", False))
                 if not is_incog:
-                    total_balance += tv if fv > 0 else cur
+                    total_balance += tv if non_cash > 0 else cur
                 accounts_out.append(BankAccount(
                     id=acc.id,
                     name=acc.name,
@@ -1055,6 +1097,7 @@ def get_bank(
                     account_number=acc.account_number,
                     current_balance=float(cur),
                     fund_value=float(fv),
+                    stock_value=float(sv),
                     total_value=float(tv),
                     incognito=is_incog,
                 ))
