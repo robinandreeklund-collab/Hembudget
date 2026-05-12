@@ -189,7 +189,7 @@ export function HandelserV2() {
   }
 
   return (
-    <div className="v2-handelser-root">
+    <div className="v2-lan-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
       <div className="shell">
         <a
@@ -203,15 +203,23 @@ export function HandelserV2() {
           ← Tillbaka till pentagonen
         </a>
         <div className="actor-head">
-          <span className="pill warm">● Aktör · Händelser</span>
-          <h1 className="actor-name">
-            Händelser — <em>livet sker, du väljer</em>.
-          </h1>
-          <p className="actor-sub">
-            Sociala bjudningar, oförutsedda kostnader, och chanser. Varje
-            beslut påverkar din pentagon — ekonomi, hälsa, social, fritid,
-            trygghet.
-          </p>
+          <div>
+            <span className="pill warm">Aktör · Händelser</span>
+            <h1 className="actor-name" style={{ marginTop: 14 }}>
+              Händelser — <em>livet sker, du väljer</em>.
+            </h1>
+            <p className="actor-sub">
+              Sociala bjudningar, oförutsedda kostnader, och chanser. Varje
+              beslut påverkar din pentagon — ekonomi, hälsa, social, fritid,
+              trygghet.
+            </p>
+          </div>
+          <div className="actor-meta">
+            Att hantera{" "}
+            <strong>{pending.length + invites.length}</strong>
+            <br />
+            Beslutade <strong>{history.length}</strong>
+          </div>
         </div>
 
         {error && (
