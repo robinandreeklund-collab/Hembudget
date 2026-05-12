@@ -2468,52 +2468,26 @@ def get_mail(
                 ):
                     next_due = m.due_date
 
-            # KRITISKT: coerce-funktion för sender_kind. Tidigare gav
-            # okända värden ("agency", "financial", etc) en
-            # ValidationError som propagerade till outer try/except →
-            # HELA postlådan returnerade tom payload. Olika flikar
-            # hade olika brev → ALLT-fliken (som iterar ALLA mails)
-            # kraschade på första okända kind, medan FAKTUROR (bara
-            # invoices) lyckades. Resultat: ALLT visade 0, FAKTUROR
-            # visade 31. Frustrerande för användaren.
-            _ALLOWED_KINDS = {
-                "bank", "cred", "skv", "ins", "land",
-                "util", "work", "pen", "agency", "other",
-            }
-            def _coerce_kind(k: Optional[str]) -> str:
-                if k in _ALLOWED_KINDS:
-                    return k
-                return "other"
-            _ALLOWED_TYPES = {
-                "invoice", "salary_slip", "authority", "reminder", "info",
-            }
-            def _coerce_type(t: Optional[str]) -> str:
-                if t in _ALLOWED_TYPES:
-                    return t
-                return "info"
-            _ALLOWED_STATUS = {
-                "unhandled", "viewed", "exported", "paid", "handled",
-            }
-            def _coerce_status(s: Optional[str]) -> str:
-                if s in _ALLOWED_STATUS:
-                    return s
-                return "unhandled"
+            # KRITISKT: coerce okända Literal-värden ("agency",
+            # "financial" etc) till "other" så Pydantic-validation inte
+            # kraschar och tystar hela responsen. Se _mail_to_row +
+            # _coerce_mail_*-funktionerna på modulnivå för förklaring.
 
             for m in mails:
                 items.append(V2MailItemRow(
                     id=m.id,
                     sender=m.sender,
                     sender_short=m.sender_short,
-                    sender_kind=_coerce_kind(m.sender_kind),  # type: ignore[arg-type]
+                    sender_kind=_coerce_mail_sender_kind(m.sender_kind),  # type: ignore[arg-type]
                     sender_meta=m.sender_meta,
-                    mail_type=_coerce_type(m.mail_type),  # type: ignore[arg-type]
+                    mail_type=_coerce_mail_type(m.mail_type),  # type: ignore[arg-type]
                     subject=m.subject,
                     body_meta=m.body_meta,
                     body=m.body,
                     amount=float(m.amount) if m.amount is not None else None,
                     due_date=m.due_date,
                     received_at=m.received_at,
-                    status=_coerce_status(m.status),  # type: ignore[arg-type]
+                    status=_coerce_mail_status(m.status),  # type: ignore[arg-type]
                     upcoming_id=m.upcoming_id,
                     transaction_id=m.transaction_id,
                     is_recurring=bool(m.is_recurring),
@@ -13093,20 +13067,24 @@ def _build_salary_slip_data(
 
 
 def _mail_to_row(m: MailItem) -> V2MailItemRow:
+    # KRITISKT: använd coerce-funktioner så ett okänt sender_kind
+    # ('agency', 'financial' etc) inte kraschar Pydantic-validering
+    # och tar ner hela /v2/postladan/{id}/detail-endpointen med 500.
+    # Samma problem som /v2/postladan-endpointen hade tidigare.
     return V2MailItemRow(
         id=m.id,
         sender=m.sender,
         sender_short=m.sender_short,
-        sender_kind=m.sender_kind,  # type: ignore[arg-type]
+        sender_kind=_coerce_mail_sender_kind(m.sender_kind),  # type: ignore[arg-type]
         sender_meta=m.sender_meta,
-        mail_type=m.mail_type,  # type: ignore[arg-type]
+        mail_type=_coerce_mail_type(m.mail_type),  # type: ignore[arg-type]
         subject=m.subject,
         body_meta=m.body_meta,
         body=m.body,
         amount=float(m.amount) if m.amount is not None else None,
         due_date=m.due_date,
         received_at=m.received_at,
-        status=m.status,  # type: ignore[arg-type]
+        status=_coerce_mail_status(m.status),  # type: ignore[arg-type]
         upcoming_id=m.upcoming_id,
         transaction_id=m.transaction_id,
         is_recurring=bool(m.is_recurring),
@@ -13114,6 +13092,33 @@ def _mail_to_row(m: MailItem) -> V2MailItemRow:
         bankgiro=m.bankgiro,
         notes=m.notes,
     )
+
+
+# Module-level coerce-funktioner · återanvänds både av /v2/postladan
+# (lista) och /v2/postladan/{id}/detail. Okända Literal-värden mappas
+# till säkra defaults istället för att kasta ValidationError.
+_ALLOWED_MAIL_KINDS = frozenset({
+    "bank", "cred", "skv", "ins", "land", "util", "work", "pen",
+    "agency", "other",
+})
+_ALLOWED_MAIL_TYPES = frozenset({
+    "invoice", "salary_slip", "authority", "reminder", "info",
+})
+_ALLOWED_MAIL_STATUS = frozenset({
+    "unhandled", "viewed", "exported", "paid", "handled",
+})
+
+
+def _coerce_mail_sender_kind(k: Optional[str]) -> str:
+    return k if k in _ALLOWED_MAIL_KINDS else "other"
+
+
+def _coerce_mail_type(t: Optional[str]) -> str:
+    return t if t in _ALLOWED_MAIL_TYPES else "info"
+
+
+def _coerce_mail_status(s: Optional[str]) -> str:
+    return s if s in _ALLOWED_MAIL_STATUS else "unhandled"
 
 
 @router.get(
