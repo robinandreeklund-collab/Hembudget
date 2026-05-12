@@ -108,6 +108,23 @@ router = APIRouter(prefix="/v2", tags=["v2"])
 # håller överallt.
 
 
+def _today_g() -> _date:
+    """Returnera 'idag' i SPEL-tid (current_game_date).
+
+    Använd överallt där vi tidigare hade _date.today() i v2-endpoints —
+    Transaction.date, deadline-jämförelser, cutoff-fönster osv ska alla
+    spegla elevens spel-tid, inte real-tiden (= månader fram i tiden).
+
+    Fallback till _date.today() om game_clock fail:ar (t.ex. ContextVar
+    inte satt i bakgrunds-jobb) — bättre att returnera nåt än krascha.
+    """
+    try:
+        from ..business.game_clock import current_game_date
+        return current_game_date()
+    except Exception:
+        return _date.today()
+
+
 def _released_filter(model_class):
     """Filter-uttryck: är synlig nu?
 
@@ -627,7 +644,7 @@ def _build_hub_response(info: TokenInfo) -> HubResponse:
             # hamnar man på fel månad om bara pension-spar-transfern
             # körts (då blir summary 0/0 även om föregående månad har
             # full data).
-            today = _date.today()
+            today = _today_g()
             latest_tx = (
                 s.query(Transaction)
                 .filter(_released_filter(Transaction))
@@ -767,7 +784,7 @@ def _build_hub_response(info: TokenInfo) -> HubResponse:
                 .filter(
                     _CEI_hub.to_student_id == target_sid,
                     _CEI_hub.status == "pending",
-                    _CEI_hub.deadline >= _date.today(),
+                    _CEI_hub.deadline >= _today_g(),
                 )
                 .order_by(_CEI_hub.deadline.asc())
                 .limit(5)
@@ -788,7 +805,7 @@ def _build_hub_response(info: TokenInfo) -> HubResponse:
                     source="classmate_invite",
                     from_name=from_name,
                     days_until_deadline=(
-                        inv.deadline - _date.today()
+                        inv.deadline - _today_g()
                     ).days,
                     declinable=True,
                 ))
@@ -1308,7 +1325,7 @@ def _is_savings(category: str) -> bool:
 
 
 def _empty_budget(student_id: int, month: str) -> V2BudgetResponse:
-    today = _date.today()
+    today = _today_g()
     import calendar as _cal
     days_in_month = _cal.monthrange(today.year, today.month)[1]
     return V2BudgetResponse(
@@ -1435,7 +1452,7 @@ def get_budget(
                     is_income=is_inc,
                 ))
 
-            today = _date.today()
+            today = _today_g()
             year, mon = map(int, ym.split("-"))
             days_in_month = _cal.monthrange(year, mon)[1]
             days_into = today.day if (today.year, today.month) == (year, mon) else days_in_month
@@ -1981,7 +1998,7 @@ def get_goals(info: TokenInfo = Depends(require_token)) -> V2GoalsResponse:
 
     try:
         with session_scope() as s:
-            today = _date.today()
+            today = _today_g()
             goals_db = s.query(Goal).order_by(Goal.id).all()
             accounts = {a.id: a.name for a in s.query(Account).all()}
 
@@ -2466,7 +2483,7 @@ def get_mail(
                 )
             all_mails = _all_q.all()
 
-            today = _date.today()
+            today = _today_g()
             unhandled_count = 0
             invoice_count = 0
             salary_slip_count = 0
@@ -3570,7 +3587,7 @@ def get_employer(
         if agreement and agreement.meta:
             try:
                 if agreement.meta.get("review_month"):
-                    today = _date.today()
+                    today = _today_g()
                     rm = int(agreement.meta["review_month"])
                     yr = today.year if rm >= today.month else today.year + 1
                     next_revision = _date(yr, rm, 1)
@@ -3972,7 +3989,7 @@ def get_skatten(
     Demo/teacher får tom payload.
     """
     if info.role != "student" or info.student_id is None:
-        return _empty_tax(0, year or _date.today().year)
+        return _empty_tax(0, year or _today_g().year)
 
     # Skatteverket-fönster · läge för att titta på sidan måste vara
     # granska eller senare (off-season = låst).
@@ -3986,7 +4003,7 @@ def get_skatten(
     except Exception:
         pass
 
-    target_year = year or _date.today().year
+    target_year = year or _today_g().year
     deadline = _date(target_year + 1, 5, 2)  # 2 maj året efter
 
     with master_session() as mdb:
@@ -4936,7 +4953,7 @@ def _compute_uc_for_apply(
         ).filter(Transaction.account_id == acc.id).scalar() or Decimal("0")
         savings_balance += ob + Decimal(str(mv))
 
-    today = _date.today()
+    today = _today_g()
     cutoff = today - timedelta(days=90)
     from sqlalchemy import func as _sf2
     expenses = scope_session.query(
@@ -5221,7 +5238,7 @@ def post_loan_apply(
                 name=f"{spec['label']} · {application.simulated_lender}",
                 lender=application.simulated_lender,
                 principal_amount=amount_dec,
-                start_date=_date.today(),
+                start_date=_today_g(),
                 interest_rate=offered_rate,
                 binding_type="rörlig",
                 amortization_monthly=monthly_payment,
@@ -5247,7 +5264,7 @@ def post_loan_apply(
                     ).hexdigest()[:32]
                     deposit_tx = Transaction(
                         account_id=acc.id,
-                        date=_date.today(),
+                        date=_today_g(),
                         amount=amount_dec,  # positivt
                         currency="SEK",
                         raw_description=(
@@ -6523,7 +6540,7 @@ def teacher_auto_generate_tax_proposals(
         if not st or st.teacher_id != teacher_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
 
-    target_year = year or _date.today().year
+    target_year = year or _today_g().year
     from ..school.engines import scope_context, scope_for_student
     with master_session() as m:
         st = m.get(Student, student_id)
@@ -6614,7 +6631,7 @@ def teacher_tax_overview(
             if profile and profile.tax_rate_effective else None
         )
 
-    target_year = year or _date.today().year
+    target_year = year or _today_g().year
     from ..school.engines import scope_context, scope_for_student
     with master_session() as m:
         st = m.get(Student, student_id)
@@ -8174,7 +8191,7 @@ def patch_utility_subscription(
         if body.status is not None:
             u.status = body.status
             if body.status == "cancelled" and u.ended_on is None:
-                u.ended_on = _date.today()
+                u.ended_on = _today_g()
         if body.binding_end is not None:
             u.binding_end = body.binding_end
         if body.notes is not None:
@@ -8529,7 +8546,7 @@ def get_rental(
             .order_by(RentalContract.id.desc())
             .first()
         )
-        cutoff = _date.today() - _td_r(days=365)
+        cutoff = _today_g() - _td_r(days=365)
         notices = (
             s.query(RentalNotice)
             .filter(RentalNotice.occurred_on >= cutoff)
@@ -8544,7 +8561,7 @@ def get_rental(
         notices_open = sum(
             1 for n in notices
             if n.status in ("action_required", "info")
-            and n.occurred_on >= _date.today() - _td_r(days=30)
+            and n.occurred_on >= _today_g() - _td_r(days=30)
         )
         notices_paid_12m = sum(1 for n in notices if n.status == "paid")
         hikes = [
@@ -8696,7 +8713,7 @@ def patch_rental_contract(
         if body.status is not None:
             c.status = body.status
             if body.status == "terminated" and c.ended_on is None:
-                c.ended_on = _date.today()
+                c.ended_on = _today_g()
         if body.ended_on is not None:
             c.ended_on = body.ended_on
         if body.notes is not None:
@@ -9356,7 +9373,7 @@ def buy_fund(
                 f"{int(cash)} kr (försökte köpa för {int(amount)} kr).",
             )
 
-        today = _date.today()
+        today = _today_g()
         idem = (
             f"v2-fund-buy-{acc.id}-{body.fund_name[:40]}-"
             f"{today.isoformat()}-{amount}"
@@ -9853,7 +9870,7 @@ def get_bokforing(
     - classified (top 100)
     - alla categories
     """
-    today = _date.today()
+    today = _today_g()
     if info.role != "student" or info.student_id is None:
         return _empty_bokforing(0, today)
 
@@ -10064,7 +10081,7 @@ def classify_bulk(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
 
     from ..categorize.engine import CategorizationEngine
-    today = _date.today()
+    today = _today_g()
 
     with session_scope() as s:
         # Hitta unclassified — endast bland synliga transaktioner
@@ -12147,7 +12164,7 @@ def get_tx_detail(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
 
     from datetime import timedelta as _td_tx
-    today = _date.today()
+    today = _today_g()
     cutoff_90 = today - _td_tx(days=90)
     cutoff_30 = today - _td_tx(days=30)
 
