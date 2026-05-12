@@ -563,7 +563,7 @@ def quit_private_job(info: TokenInfo = Depends(require_token)):
                 ),
                 sender_kind="work",
                 sender_meta="uppsägningsbekräftelse",
-                mail_type="authority",
+                mail_type="info",
                 subject=(
                     f"Uppsägning bekräftad · sista anställningsdag "
                     f"{end_on.isoformat()}"

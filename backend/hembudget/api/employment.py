@@ -289,7 +289,7 @@ def hire_offer(
                 "Du kan acceptera eller neka via knapparna nedan.\n"
                 f"_employment_id={emp_id}"
             ),
-            mail_type="authority",
+            mail_type="info",
         )
     except Exception:
         log.exception("hire-offer: kunde inte skicka erbjudande-brev")
@@ -718,7 +718,7 @@ def auto_terminate_employments_for_closed_company(
                     f"Skäl: {reason}\n\n"
                     f"Vänligen kontakta Arbetsförmedlingen för nästa steg."
                 ),
-                mail_type="authority",
+                mail_type="info",
             )
         except Exception:
             log.exception("auto-terminate: brev misslyckades · emp=%s", emp_id)
@@ -863,7 +863,7 @@ def terminate_employment(
                 f"Lycka till framöver.\n\n"
                 f"{company_name}"
             ),
-            mail_type="authority",
+            mail_type="info",
         )
     except Exception:
         log.exception("terminate: brev till anställd misslyckades")

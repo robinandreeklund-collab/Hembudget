@@ -287,7 +287,7 @@ def _create_termination_notice(
         sender_short="HYR",
         sender_kind="land",
         sender_meta="uppsägning · bekräftelse",
-        mail_type="authority",
+        mail_type="info",
         subject=(
             f"Uppsägning bekräftad · sista dag {termination_date.isoformat()}"
         ),

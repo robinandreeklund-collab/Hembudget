@@ -5776,7 +5776,9 @@ def _post_loan_decision_mail(
         sender_short=(lender[:3] or "BNK").upper(),
         sender_kind="agency",
         sender_meta=f"låne­besked · {today.isoformat()}",
-        mail_type="authority",
+        # info · bankens lånebesked är inte myndighet (Skatteverket etc).
+        # Eleven hittar det under 'Övrigt'-tabben, inte 'Myndighet'.
+        mail_type="info",
         subject=subject,
         body_meta=body_meta,
         body="\n".join(body_lines),
