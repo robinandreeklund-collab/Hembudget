@@ -194,10 +194,53 @@ def compute_monthly_drift(
     if alcohol_spend >= 1500:
         result.add("health", -2, f"hög alkoholrelaterad konsumtion ({alcohol_spend} kr)")
 
-    # === SAFETY (karriär) ===
+    # === SAFETY (karriär + boende) ===
     # Kompetens-progression och modul-steg läses från master-DB i M5-
     # integration; här visar vi bara den scope-baserade delen.
-    # SAFETY-drift utan extern data: neutralt.
+    #
+    # Boende-tier-drift · safety påverkas av kvaliteten på elevens
+    # boende. Hemlös (terminated/None) slår hårt; lyx-bostad lyfter
+    # safety över tid. Skala matchar tier_monthly_safety_drift() i
+    # housing_market/rentals.py.
+    try:
+        from ...db.models import ActiveHome as _ActiveHome
+        active_home = (
+            scope_session.query(_ActiveHome)
+            .filter(_ActiveHome.status.in_(("active", "notice_given")))
+            .order_by(_ActiveHome.id.desc())
+            .first()
+        )
+        if active_home is None:
+            # Ingen ActiveHome registrerad · betraktas som hemlös /
+            # ej satt boende → safety-drift -8 / mån
+            result.add(
+                "safety", -8,
+                "inget registrerat boende · högsta otrygghet",
+            )
+        else:
+            # Härled tier från monthly_cost (storlek + hyra-bracket)
+            rent = int(active_home.monthly_cost or 0)
+            if rent <= 5000:
+                tier = 1
+            elif rent <= 9000:
+                tier = 2
+            elif rent <= 14000:
+                tier = 3
+            else:
+                tier = 4
+            drift_map = {1: -2, 2: 0, 3: +1, 4: +2}
+            d = drift_map.get(tier, 0)
+            if d != 0:
+                label = {
+                    1: "trångt korridor-/akutboende",
+                    2: "litet boende",
+                    3: "rymligt familjeboende",
+                    4: "lyxbostad",
+                }[tier]
+                result.add("safety", d, label)
+    except Exception:
+        # Defensiv · drift får aldrig blockera pentagon-uppdatering
+        pass
 
     # === SOCIAL ===
     n_accept, n_decline = _student_event_decisions(scope_session, year_month)

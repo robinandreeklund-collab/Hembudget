@@ -34,7 +34,7 @@ const TYPE_LABEL: Record<V2BoendemarknadListing["type"], string> = {
   radhus: "Radhus",
 };
 
-type Tab = "hyra" | "kop";
+type Tab = "hyra" | "hyrmarknad" | "kop";
 
 const CURRENT_YM = (() => {
   // Default till nuvarande realmånad — eleven kan ändra.
@@ -103,6 +103,15 @@ export function BoendemarknadV2() {
           </button>
           <button
             role="tab"
+            aria-selected={tab === "hyrmarknad"}
+            className={`tab-btn ${tab === "hyrmarknad" ? "active" : ""}`}
+            onClick={() => setTab("hyrmarknad")}
+            style={tabBtnStyle(tab === "hyrmarknad")}
+          >
+            Hyr en lägenhet
+          </button>
+          <button
+            role="tab"
             aria-selected={tab === "kop"}
             className={`tab-btn ${tab === "kop" ? "active" : ""}`}
             onClick={() => setTab("kop")}
@@ -112,7 +121,13 @@ export function BoendemarknadV2() {
           </button>
         </div>
 
-        {tab === "hyra" ? <HyresvardenInline /> : <KopSaljPanel />}
+        {tab === "hyra" ? (
+          <HyresvardenInline />
+        ) : tab === "hyrmarknad" ? (
+          <HyrmarknadPanel />
+        ) : (
+          <KopSaljPanel />
+        )}
       </div>
     </div>
   );
@@ -555,6 +570,236 @@ function KopSaljPanel() {
           </article>
         ))}
       </div>
+    </div>
+  );
+}
+
+
+// ===========================================================
+// Hyrmarknad-panel (Fas 3) · 4 tiers från korridor till lyx
+// ===========================================================
+
+type RentalListing = {
+  listing_id: string;
+  city_key: string;
+  city_display: string;
+  tier: number;
+  tier_label: string;
+  address: string;
+  size_kvm: number;
+  rooms: number;
+  monthly_rent: number;
+  deposit: number;
+  first_hand: boolean;
+  queue_months: number;
+  quality_score: number;
+  description: string;
+};
+
+const TIER_BG: Record<number, string> = {
+  1: "rgba(220,76,43,0.06)",
+  2: "rgba(255,255,255,0.04)",
+  3: "rgba(110,231,183,0.06)",
+  4: "rgba(251,191,36,0.08)",
+};
+const TIER_BORDER: Record<number, string> = {
+  1: "rgba(220,76,43,0.30)",
+  2: "rgba(255,255,255,0.18)",
+  3: "rgba(110,231,183,0.30)",
+  4: "rgba(251,191,36,0.30)",
+};
+const TIER_HEADER: Record<number, string> = {
+  1: "Korridor / akut",
+  2: "Liten lägenhet",
+  3: "Familjelägenhet",
+  4: "Lyx-lägenhet",
+};
+const TIER_WELLBEING: Record<number, string> = {
+  1: "⚠ -2 safety/mån · trångt och instabilt",
+  2: "Baseline · 0 safety-drift",
+  3: "+1 safety/mån · rymligt familjeboende",
+  4: "+2 safety/mån · lyx (kostar i ekonomi)",
+};
+
+function HyrmarknadPanel() {
+  const [ym, setYm] = useState(CURRENT_YM);
+  const [listings, setListings] = useState<RentalListing[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [movingIn, setMovingIn] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function refresh(targetYm: string) {
+    setLoading(true);
+    setError(null);
+    v2Api.boendemarknadListRentals(targetYm)
+      .then((d) => setListings(d.listings))
+      .catch((e) => setError(String((e as Error)?.message || e)))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    refresh(ym);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ym]);
+
+  async function moveIn(listing: RentalListing) {
+    if (!confirm(
+      `Flytta in i ${listing.address}?\n\n`
+        + `· ${listing.size_kvm} kvm · ${listing.rooms} rok\n`
+        + `· Hyra ${listing.monthly_rent.toLocaleString("sv-SE")} kr/mån\n`
+        + `· Deposition ${listing.deposit.toLocaleString("sv-SE")} kr (dras direkt)\n`
+        + `· ${listing.first_hand ? "Förstahandskontrakt" : "Andrahandskontrakt"}\n\n`
+        + `Wellbeing-effekt: ${TIER_WELLBEING[listing.tier]}\n\n`
+        + "OBS: din nuvarande bostad sägs upp automatiskt.",
+    )) return;
+    setMovingIn(listing.listing_id);
+    setMsg(null);
+    try {
+      const r = await v2Api.boendemarknadRentalMoveIn(listing.listing_id, ym);
+      const deltas = Object.entries(r.pentagon_deltas)
+        .filter(([, v]) => v !== 0)
+        .map(([k, v]) => `${k} ${v > 0 ? "+" : ""}${v}`)
+        .join(" · ");
+      setMsg(`✓ ${r.welcome_message}\nPentagon: ${deltas}`);
+      refresh(ym);
+    } catch (e) {
+      setMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setMovingIn(null);
+    }
+  }
+
+  return (
+    <div>
+      <header style={{ marginBottom: 16, display: "flex", gap: 16, alignItems: "center" }}>
+        <label>
+          Spelmånad:&nbsp;
+          <input
+            type="month"
+            value={ym}
+            onChange={(e) => setYm(e.target.value || CURRENT_YM)}
+          />
+        </label>
+      </header>
+
+      <p style={{ color: "var(--text-mid)", fontFamily: "var(--serif)", fontSize: 14, marginBottom: 20 }}>
+        Hitta en hyresrätt — fyra prisklasser från akut-korridor till lyx.
+        Bostadens kvalitet påverkar din wellbeing (safety-axeln) varje månad.
+      </p>
+
+      {msg && (
+        <div style={{
+          padding: "10px 16px", marginBottom: 16, borderRadius: 6,
+          border: msg.startsWith("Fel") ? "1px solid rgba(252,165,165,0.4)" : "1px solid rgba(110,231,183,0.4)",
+          background: msg.startsWith("Fel") ? "rgba(252,165,165,0.06)" : "rgba(110,231,183,0.06)",
+          color: msg.startsWith("Fel") ? "#fca5a5" : "#6ee7b7",
+          fontFamily: "var(--mono)", fontSize: 11, whiteSpace: "pre-wrap",
+        }}>
+          {msg}
+        </div>
+      )}
+
+      {loading && <div>Laddar lediga lägenheter…</div>}
+      {error && <div style={{ color: "var(--danger)" }}>Fel: {error}</div>}
+
+      {[4, 3, 2, 1].map((tier) => {
+        const tierListings = (listings || []).filter((l) => l.tier === tier);
+        if (tierListings.length === 0) return null;
+        return (
+          <section key={tier} style={{ marginBottom: 26 }}>
+            <h3 style={{
+              fontFamily: "var(--serif)",
+              fontSize: 17,
+              color: "#fff",
+              marginBottom: 6,
+            }}>
+              Tier {tier} · <em>{TIER_HEADER[tier]}</em>
+            </h3>
+            <div style={{
+              fontFamily: "var(--mono)",
+              fontSize: 10,
+              color: "var(--text-mid)",
+              letterSpacing: "0.5px",
+              marginBottom: 12,
+              textTransform: "uppercase",
+            }}>
+              {TIER_WELLBEING[tier]}
+            </div>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: 14,
+            }}>
+              {tierListings.map((l) => (
+                <article key={l.listing_id} style={{
+                  border: `1px solid ${TIER_BORDER[l.tier]}`,
+                  background: TIER_BG[l.tier],
+                  borderRadius: 8,
+                  padding: 16,
+                }}>
+                  <div style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 9.5,
+                    letterSpacing: "1.2px",
+                    color: "var(--text-mid)",
+                    textTransform: "uppercase",
+                    marginBottom: 6,
+                  }}>
+                    {l.first_hand ? "Förstahand" : "Andrahand"} ·
+                    {l.queue_months === 0 ? " ledig direkt" : ` ${l.queue_months} mån kö`}
+                  </div>
+                  <h4 style={{
+                    fontFamily: "var(--serif)",
+                    fontSize: 16,
+                    color: "#fff",
+                    margin: "4px 0",
+                  }}>
+                    {l.address}
+                  </h4>
+                  <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mid)" }}>
+                    {l.size_kvm} kvm · {l.rooms} rok · kvalitet {l.quality_score}/10
+                  </div>
+                  <div style={{
+                    fontFamily: "var(--serif)",
+                    fontSize: 22, fontStyle: "italic", fontWeight: 700,
+                    color: "var(--warm)", marginTop: 10,
+                  }}>
+                    {SEK(l.monthly_rent)} kr/mån
+                  </div>
+                  <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-mid)", marginTop: 4 }}>
+                    Deposition {SEK(l.deposit)} kr
+                  </div>
+                  <p style={{ fontFamily: "var(--serif)", fontSize: 13, color: "var(--text)", margin: "10px 0 12px" }}>
+                    {l.description}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => moveIn(l)}
+                    disabled={movingIn === l.listing_id}
+                    style={{
+                      width: "100%",
+                      padding: "9px 14px",
+                      background: "var(--accent)",
+                      color: "#fff",
+                      border: 0,
+                      borderRadius: 100,
+                      cursor: movingIn === l.listing_id ? "wait" : "pointer",
+                      fontFamily: "var(--mono)",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: "1.2px",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {movingIn === l.listing_id ? "Flyttar in…" : "Flytta in →"}
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

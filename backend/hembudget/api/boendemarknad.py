@@ -612,6 +612,274 @@ def move_rental(
         )
 
 
+# ===========================================================
+# Rental marketplace (Fas 3) · hyra istället för köpa
+# ===========================================================
+
+
+class RentalListingOut(BaseModel):
+    listing_id: str
+    city_key: str
+    city_display: str
+    tier: int
+    tier_label: str
+    address: str
+    size_kvm: int
+    rooms: int
+    monthly_rent: int
+    deposit: int
+    first_hand: bool
+    queue_months: int
+    quality_score: int
+    description: str
+
+
+class RentalsListOut(BaseModel):
+    city_key: str
+    city_display: str
+    year_month: str
+    listings: list[RentalListingOut]
+
+
+class RentalMoveInOut(BaseModel):
+    home: ActiveHomeOut
+    pentagon_deltas: dict
+    deposit_charged: int
+    welcome_message: str
+
+
+@router.get("/rentals", response_model=RentalsListOut)
+def list_rentals(
+    ym: str = "2026-01",
+    min_tier: int = 1,
+    max_tier: int = 4,
+    info: TokenInfo = Depends(require_token),
+):
+    """Lista hyresrätt-listings i elevens stad. 4 tiers:
+      1 · korridor/akut       · 12-18 kvm, 3500-5000 kr/mån
+      2 · liten lägenhet      · 25-45 kvm, 5500-8500 kr/mån
+      3 · familjelägenhet     · 50-85 kvm, 9000-13000 kr/mån
+      4 · lyx                 · 90-130 kvm, 14000-22000 kr/mån
+    """
+    from ..game_engine.housing_market.rentals import list_rentals_for_city
+    sid = _require_student(info)
+    with master_session() as s:
+        sp = (
+            s.query(StudentProfile)
+            .filter(StudentProfile.student_id == sid)
+            .first()
+        )
+        if sp is None:
+            raise HTTPException(404, "Profil saknas.")
+    profile = _profile_from_studentprofile(sp)
+    city_key = profile.city_key
+    listings = list_rentals_for_city(
+        city_key=city_key,
+        year_month=ym,
+        n=12,
+        min_tier=min_tier,
+        max_tier=max_tier,
+    )
+    return RentalsListOut(
+        city_key=city_key,
+        city_display=STAD_BY_KEY.get(
+            city_key, STAD_BY_KEY["medelstad"],
+        ).display,
+        year_month=ym,
+        listings=[
+            RentalListingOut(**asdict(l)) for l in listings
+        ],
+    )
+
+
+@router.post(
+    "/rentals/{listing_id}/move-in",
+    response_model=RentalMoveInOut,
+)
+def rental_move_in(
+    listing_id: str,
+    ym: str = "2026-01",
+    info: TokenInfo = Depends(require_token),
+):
+    """Flytta in i en hyresrätt-listing.
+
+    Effekter:
+    - Uppdaterar ActiveHome (status=active, ny address/size/rent)
+    - Drar deposition från lönekonto direkt
+    - Pentagon-event per tier (se rentals.tier_pentagon_deltas)
+    - Skickar välkomstbrev från hyresvärd
+    """
+    from ..game_engine.housing_market.rentals import (
+        find_rental, tier_pentagon_deltas,
+    )
+    sid = _require_student(info)
+    listing = find_rental(listing_id)
+    if listing is None:
+        raise HTTPException(404, "Listing hittades inte")
+
+    with master_session() as ms:
+        sp = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == sid)
+            .first()
+        )
+        if sp is None:
+            raise HTTPException(404, "Profil saknas.")
+        student = ms.get(Student, sid)
+        from ..school.engines import scope_for_student
+        scope_key = scope_for_student(student) if student else f"s_{sid}"
+        if student is not None:
+            ms.expunge(student)
+    profile = _profile_from_studentprofile(sp)
+
+    # Validera att eleven har råd med depositionen
+    deposit = listing.deposit
+    bal = _checking_balance()
+    if bal < deposit:
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            f"För lite på lönekontot för deposition: behöver {deposit} kr, "
+            f"har {bal} kr",
+        )
+
+    from ..game_engine.housing_market.listings import HousingListing as HL
+    new_listing = HL(
+        listing_id=listing.listing_id,
+        city_key=listing.city_key,
+        city_display=listing.city_display,
+        type="hyresratt",
+        address=listing.address,
+        size_kvm=listing.size_kvm,
+        rooms=listing.rooms,
+        asking_price=0,
+        monthly_avgift=listing.monthly_rent,
+        description=listing.description,
+        quality_score=listing.quality_score,
+    )
+
+    with session_scope() as s:
+        ensure_active_home(s, profile=profile, year_month=ym)
+        try:
+            home = move_to_rental(
+                s,
+                student_id=sid,
+                student_scope=scope_key,
+                new_listing=new_listing,
+                year_month=ym,
+            )
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
+        # Dra deposition · Transaction på lönekontot
+        acc = (
+            s.query(Account)
+            .filter(Account.type == "checking")
+            .order_by(Account.id.asc())
+            .first()
+        )
+        if acc is not None:
+            import hashlib
+            tx_hash = hashlib.sha256(
+                f"rental-deposit-{listing.listing_id}-{ym}".encode(),
+            ).hexdigest()[:32]
+            existing = (
+                s.query(Transaction)
+                .filter(Transaction.hash == tx_hash)
+                .first()
+            )
+            if existing is None:
+                from ..business.game_clock import current_game_date
+                today_g = current_game_date()
+                s.add(Transaction(
+                    account_id=acc.id,
+                    date=today_g,
+                    amount=Decimal(-deposit),
+                    currency="SEK",
+                    raw_description=(
+                        f"Deposition · hyresrätt {listing.address}"
+                    ),
+                    normalized_merchant="Hyresvärd",
+                    hash=tx_hash,
+                    user_verified=True,
+                ))
+
+        home_out = ActiveHomeOut(
+            id=home.id,
+            home_type=home.home_type,
+            status=home.status,
+            city_key=home.city_key,
+            address=home.address,
+            size_kvm=home.size_kvm,
+            rooms=home.rooms,
+            monthly_cost=int(home.monthly_cost or 0),
+            purchase_price=None,
+            loan_id=None,
+            listing_id=home.listing_id,
+            entered_on=home.entered_on.isoformat(),
+            termination_date=None,
+            estimated_sale_date=None,
+            household_size_when_chosen=home.household_size_when_chosen,
+        )
+
+    # Pentagon-event per tier
+    deltas = tier_pentagon_deltas(listing.tier)
+    try:
+        from ..game_engine.pentagon import apply_pentagon_delta
+        for axis, delta in deltas.items():
+            if delta == 0:
+                continue
+            apply_pentagon_delta(
+                sid,
+                axis=axis,
+                requested_delta=delta,
+                reason_kind="rental_move_in",
+                reason_id=home.id,
+                reason_table="active_homes",
+                explanation=(
+                    f"Flyttade in i {listing.tier_label}-lägenhet "
+                    f"({listing.size_kvm} kvm, {listing.rooms} rok) · "
+                    f"{listing.address}"
+                ),
+            )
+    except Exception:
+        log.exception("rental_move_in: pentagon-delta misslyckades")
+
+    # Aktivitetslog
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="private.rental_move_in",
+            summary=(
+                f"Flyttade in · tier {listing.tier} "
+                f"({listing.tier_label}) · "
+                f"{listing.size_kvm} kvm, {listing.monthly_rent} kr/mån"
+            ),
+            payload={
+                "listing_id": listing.listing_id,
+                "tier": listing.tier,
+                "address": listing.address,
+                "monthly_rent": listing.monthly_rent,
+                "deposit": listing.deposit,
+            },
+            student_id=sid,
+        )
+    except Exception:
+        pass
+
+    welcome = (
+        f"Välkommen till din nya lägenhet på {listing.address}!\n"
+        f"{listing.size_kvm} kvm · {listing.rooms} rok · "
+        f"{listing.monthly_rent:,} kr/mån".replace(",", " ")
+    )
+
+    return RentalMoveInOut(
+        home=home_out,
+        pentagon_deltas=deltas,
+        deposit_charged=deposit,
+        welcome_message=welcome,
+    )
+
+
 # === Lärar-endpoints (test/preview) ===
 
 

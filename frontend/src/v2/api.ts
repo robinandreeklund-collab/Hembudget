@@ -3035,6 +3035,55 @@ export const v2Api = {
       "/v2/boendemarknad/sell",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  boendemarknadListRentals: (
+    ym: string,
+    minTier?: number,
+    maxTier?: number,
+  ) =>
+    api<{
+      city_key: string;
+      city_display: string;
+      year_month: string;
+      listings: Array<{
+        listing_id: string;
+        city_key: string;
+        city_display: string;
+        tier: number;
+        tier_label: string;
+        address: string;
+        size_kvm: number;
+        rooms: number;
+        monthly_rent: number;
+        deposit: number;
+        first_hand: boolean;
+        queue_months: number;
+        quality_score: number;
+        description: string;
+      }>;
+    }>(
+      `/v2/boendemarknad/rentals?ym=${encodeURIComponent(ym)}`
+      + (minTier ? `&min_tier=${minTier}` : "")
+      + (maxTier ? `&max_tier=${maxTier}` : ""),
+    ),
+  boendemarknadRentalMoveIn: (listingId: string, ym: string) =>
+    api<{
+      home: {
+        id: number;
+        home_type: string;
+        status: string;
+        city_key: string;
+        address: string | null;
+        size_kvm: number;
+        rooms: number;
+        monthly_cost: number;
+      };
+      pentagon_deltas: Record<string, number>;
+      deposit_charged: number;
+      welcome_message: string;
+    }>(
+      `/v2/boendemarknad/rentals/${encodeURIComponent(listingId)}/move-in?ym=${encodeURIComponent(ym)}`,
+      { method: "POST", body: "{}" },
+    ),
   boendemarknadTerminate: (body: { year_month: string }) =>
     api<V2BoendemarknadTerminateResult>(
       "/v2/boendemarknad/terminate-rental",
