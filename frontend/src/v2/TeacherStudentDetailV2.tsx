@@ -169,10 +169,143 @@ export function TeacherStudentDetailV2() {
         {/* Sprint 1-6 spelmotor-panel: tick-historik + pentagon-händelser
             + snabbspola + sjuk/VAB/event-summary. */}
         <TeacherStudentSpelmotorPanel studentId={data.student_id} />
+
+        {/* Karriär-tidslinje (Fas I) · anställning, uppsägning, lön, konkurs */}
+        <CareerTimelineSection studentId={data.student_id} />
       </div>
     </div>
   );
 }
+
+
+type CareerTimelineRow = {
+  id: number;
+  kind: string;
+  summary: string;
+  payload: Record<string, unknown> | null;
+  occurred_at: string;
+};
+
+
+function CareerTimelineSection({ studentId }: { studentId: number }) {
+  const [rows, setRows] = useState<CareerTimelineRow[] | null>(null);
+
+  useEffect(() => {
+    fetch(`/v2/teacher/employment/career-timeline/${studentId}`, {
+      headers: {
+        "Authorization": `Bearer ${localStorage.getItem("hb_token") || ""}`,
+      },
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject(r.statusText))
+      .then((d: { items: CareerTimelineRow[] }) => setRows(d.items))
+      .catch(() => setRows([]));
+  }, [studentId]);
+
+  if (rows === null) return null;
+  if (rows.length === 0) {
+    return (
+      <section style={{ marginTop: 32 }}>
+        <h2 style={careerHeaderStyle}>
+          ● KARRIÄR-TIDSLINJE
+        </h2>
+        <div style={{
+          padding: "20px 16px",
+          background: "rgba(15,21,37,0.4)",
+          border: "1px dashed rgba(255,255,255,0.15)",
+          borderRadius: 8,
+          color: "rgba(255,255,255,0.55)",
+          fontFamily: "Source Serif 4, Georgia, serif",
+          fontSize: 13.5,
+        }}>
+          Inga karriär-händelser registrerade än.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section style={{ marginTop: 32 }}>
+      <h2 style={careerHeaderStyle}>
+        ● KARRIÄR-TIDSLINJE · {rows.length} händelser
+      </h2>
+      <div style={{ display: "grid", gap: 8 }}>
+        {rows.map((r) => (
+          <CareerRow key={r.id} row={r} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+
+const KIND_LABEL: Record<string, { label: string; color: string }> = {
+  "private.resigned": { label: "Privat uppsägning", color: "#fbbf24" },
+  "private.employment_offer_received": { label: "Erbjudande mottaget", color: "#a78bfa" },
+  "private.employment_accepted": { label: "Tackade ja", color: "#6ee7b7" },
+  "private.employment_declined": { label: "Tackade nej", color: "rgba(255,255,255,0.55)" },
+  "private.terminated_by_employer": { label: "Uppsagd", color: "#fda594" },
+  "private.terminated_by_bankruptcy": { label: "Konkurs · uppsagd", color: "#fda594" },
+  "biz.employee_hire_offered": { label: "Skickade erbjudande", color: "#a78bfa" },
+  "biz.employee_hired": { label: "Anställde klasskompis", color: "#6ee7b7" },
+  "biz.employee_offer_declined": { label: "Erbjudande nekat", color: "rgba(255,255,255,0.55)" },
+  "biz.employee_terminated": { label: "Sade upp anställd", color: "#fda594" },
+  "biz.employments_auto_terminated": { label: "Stängde bolag", color: "#fda594" },
+  "biz.payroll_run": { label: "Körde lön", color: "#fbbf24" },
+  "biz.company_created": { label: "Skapade bolag", color: "#6ee7b7" },
+  "biz.company_closed": { label: "Stängde bolag", color: "#fda594" },
+};
+
+
+function CareerRow({ row }: { row: CareerTimelineRow }) {
+  const meta = KIND_LABEL[row.kind] || {
+    label: row.kind, color: "rgba(255,255,255,0.55)",
+  };
+  const d = new Date(row.occurred_at);
+  return (
+    <div style={{
+      padding: "10px 14px",
+      background: "rgba(15,21,37,0.55)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 8,
+      display: "flex",
+      gap: 12,
+      alignItems: "baseline",
+    }}>
+      <span style={{
+        fontFamily: "JetBrains Mono, monospace",
+        fontSize: 9.5, letterSpacing: 1.2,
+        color: meta.color,
+        textTransform: "uppercase",
+        minWidth: 170,
+      }}>
+        {meta.label}
+      </span>
+      <span style={{
+        fontFamily: "Source Serif 4, Georgia, serif",
+        fontSize: 13.5,
+        color: "rgba(255,255,255,0.85)",
+        flex: 1,
+      }}>
+        {row.summary}
+      </span>
+      <span style={{
+        fontFamily: "JetBrains Mono, monospace",
+        fontSize: 10.5,
+        color: "rgba(255,255,255,0.45)",
+      }}>
+        {d.toLocaleDateString("sv-SE")}
+      </span>
+    </div>
+  );
+}
+
+
+const careerHeaderStyle: React.CSSProperties = {
+  fontFamily: "JetBrains Mono, monospace",
+  fontSize: 11, fontWeight: 700, letterSpacing: 1.5,
+  color: "#c7d2fe", textTransform: "uppercase",
+  marginBottom: 14,
+};
 
 function Header({ data }: { data: V2TeacherStudentDetail }) {
   const cls = LEVEL_COLOR_CLASS[data.v2_level] || "l1";

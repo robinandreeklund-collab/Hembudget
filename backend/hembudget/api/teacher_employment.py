@@ -175,3 +175,90 @@ def class_employment_ecosystem(
                 "total_payroll_paid_30d": total_payroll_30d,
             },
         )
+
+
+# ===========================================================
+# Career timeline (Fas I)
+# ===========================================================
+
+
+CAREER_TIMELINE_KINDS = (
+    "private.resigned",
+    "private.employment_offer_received",
+    "private.employment_accepted",
+    "private.employment_declined",
+    "private.terminated_by_employer",
+    "private.terminated_by_bankruptcy",
+    "biz.employee_hire_offered",
+    "biz.employee_hired",
+    "biz.employee_offer_declined",
+    "biz.employee_terminated",
+    "biz.employments_auto_terminated",
+    "biz.payroll_run",
+    "biz.company_created",
+    "biz.company_closed",
+)
+
+
+class CareerTimelineRow(BaseModel):
+    id: int
+    kind: str
+    summary: str
+    payload: Optional[dict] = None
+    occurred_at: str
+
+
+class CareerTimelineOut(BaseModel):
+    student_id: int
+    items: list[CareerTimelineRow]
+
+
+@router.get(
+    "/career-timeline/{student_id}",
+    response_model=CareerTimelineOut,
+)
+def career_timeline(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Returnera kronologisk lista av elevens karriär-händelser
+    (anställning, uppsägning, lön, konkurs).
+
+    Filtrerar StudentActivity.kind till bara employment-relaterade.
+    """
+    teacher_id = info.teacher_id
+    if teacher_id is None:
+        raise HTTPException(403, "Lärar-token utan teacher_id")
+
+    with master_session() as s:
+        stu = s.get(Student, student_id)
+        if stu is None or stu.teacher_id != teacher_id:
+            raise HTTPException(404, "Elev finns ej eller tillhör inte dig")
+
+        rows = (
+            s.query(StudentActivity)
+            .filter(
+                StudentActivity.student_id == student_id,
+                StudentActivity.kind.in_(CAREER_TIMELINE_KINDS),
+            )
+            .order_by(
+                StudentActivity.occurred_at.desc(),
+                StudentActivity.id.desc(),
+            )
+            .limit(200)
+            .all()
+        )
+
+        return CareerTimelineOut(
+            student_id=student_id,
+            items=[
+                CareerTimelineRow(
+                    id=r.id,
+                    kind=r.kind,
+                    summary=r.summary,
+                    payload=r.payload,
+                    occurred_at=r.occurred_at.isoformat(),
+                )
+                for r in rows
+            ],
+        )
