@@ -13,6 +13,9 @@
  * själva trading-flowet via /v2/aktier.
  */
 import { useEffect, useState } from "react";
+import {
+  Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
 import { Link } from "react-router-dom";
 import { v2Api, type BankData, type V2AvanzaData } from "./api";
 import { V2Banner } from "./V2Banner";
@@ -32,6 +35,8 @@ const MONTH_LABEL = (iso: string): string => {
 export function AvanzaV2() {
   const [data, setData] = useState<V2AvanzaData | null>(null);
   const [bank, setBank] = useState<BankData | null>(null);
+  const [iskHistory, setIskHistory] =
+    useState<Awaited<ReturnType<typeof v2Api.iskHistory>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [buyOpen, setBuyOpen] = useState(false);
   const [buyFund, setBuyFund] = useState("");
@@ -46,10 +51,17 @@ export function AvanzaV2() {
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
     v2Api.bank(0).then(setBank).catch(() => null);
+    v2Api.iskHistory(30).then(setIskHistory).catch(() => null);
   }
 
   useEffect(() => {
     refresh();
+    // Auto-refresh ISK-värdet var 60 sek så diagrammet uppdateras
+    // i takt med yfinance-pollen (90 sek backend).
+    const id = window.setInterval(() => {
+      v2Api.iskHistory(30).then(setIskHistory).catch(() => null);
+    }, 60000);
+    return () => window.clearInterval(id);
   }, []);
 
   async function executeBuy() {
@@ -165,6 +177,91 @@ export function AvanzaV2() {
             Schablonskatt: ~ {SEK(summary.schablonskatt_estimate)} kr/år
           </div>
         </header>
+
+        {/* Realtid-utveckling över senaste 30 dagar · uppdateras
+            tillsammans med kurserna (60 sek frontend, 90 sek backend
+            yfinance-poll). Hjälper eleven att se hur ISK rört sig
+            samma som börsen. */}
+        {iskHistory && iskHistory.points.length > 1 && (
+          <div
+            style={{
+              marginTop: 18, marginBottom: 28,
+              padding: "16px 4px 12px",
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10, letterSpacing: 1.5,
+                textTransform: "uppercase",
+                opacity: 0.7, marginLeft: 16, marginBottom: 8,
+              }}
+            >
+              ISK-värde · senaste {iskHistory.days} dagar
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart
+                data={iskHistory.points.map((p) => ({
+                  ts: new Date(p.ts).getTime(),
+                  value: p.total_value,
+                }))}
+                margin={{ top: 4, right: 16, left: 16, bottom: 4 }}
+              >
+                <defs>
+                  <linearGradient id="iskFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#dc4c2b" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#dc4c2b" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="ts"
+                  tickFormatter={(t) =>
+                    new Date(t).toLocaleDateString("sv-SE", {
+                      day: "numeric", month: "short",
+                    })
+                  }
+                  type="number"
+                  domain={["dataMin", "dataMax"]}
+                  scale="time"
+                  tick={{ fontSize: 10, fill: "var(--text-mid, #888)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  minTickGap={50}
+                />
+                <YAxis
+                  tickFormatter={(v) => SEK(v) + " kr"}
+                  tick={{ fontSize: 10, fill: "var(--text-mid, #888)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={80}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--bg-mid, #1a1f2e)",
+                    border: "1px solid var(--line, #444)",
+                    borderRadius: 6,
+                    fontSize: 12,
+                  }}
+                  labelFormatter={(t) =>
+                    new Date(t as number).toLocaleDateString("sv-SE", {
+                      day: "numeric", month: "long", year: "numeric",
+                    })
+                  }
+                  formatter={(v) => [SEK(v as number) + " kr", "Värde"]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#dc4c2b"
+                  strokeWidth={2}
+                  fill="url(#iskFill)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         {noAccount ? (
           <div

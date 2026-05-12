@@ -3893,6 +3893,13 @@ export const v2Api = {
     }>(
       `/stocks/ledger?limit=${limit}${ticker ? `&ticker=${ticker}` : ""}`,
     ),
+  iskHistory: (days = 30) => {
+    const ts = Date.now();
+    return api<{
+      days: number;
+      points: Array<{ ts: string; total_value: number }>;
+    }>(`/v2/avanza/isk-history?days=${days}&_=${ts}`);
+  },
   stocksActivity: () => {
     const ts = Date.now();
     return api<{

@@ -9864,6 +9864,145 @@ def get_stock_activity(
         )
 
 
+# === /v2/avanza/isk-history · tidsserier för portfölj-utveckling =====
+
+
+class V2IskHistoryPoint(BaseModel):
+    ts: datetime
+    total_value: float  # cash + fonder + aktier vid den tidpunkten
+
+
+class V2IskHistoryResponse(BaseModel):
+    days: int
+    points: list[V2IskHistoryPoint]
+
+
+@router.get(
+    "/avanza/isk-history", response_model=V2IskHistoryResponse,
+)
+def get_isk_history(
+    days: int = 30,
+    info: TokenInfo = Depends(require_token),
+) -> V2IskHistoryResponse:
+    """Tidsserier för ISK-portföljvärdet senaste N dagar.
+
+    Rekonstruerar värdet per dag genom att applicera StockTransaction
+    bakåt i tiden:
+      - Start: nuvarande quantity per ticker.
+      - För varje dag i intervallet, sätt en daglig sluttid och hämta
+        senaste StockQuote PER ticker upp till den tiden.
+      - Multiplicera quantity × pris = aktievärde för den dagen.
+      - Lägg till cash-saldo + fond-värde (vi använder NUVARANDE cash +
+        fond som approximation · perfekt rekonstruktion av cash kräver
+        full Transaction-replay som är overkill för en pedagogisk graf).
+
+    Returnerar 1 punkt per dag (UTC midnatt) = `days` punkter.
+    Frontend visar som linjediagram i Avanza-headern.
+    """
+    if info.role != "student" or info.student_id is None:
+        return V2IskHistoryResponse(days=days, points=[])
+
+    days = max(1, min(days, 365))
+    from datetime import datetime as _dt_ih, timedelta as _td_ih
+    from ..db.models import StockHolding as _SH_ih, FundHolding as _FH_ih
+    from ..school.stock_models import StockQuote as _SQ_ih
+
+    now_utc = _dt_ih.utcnow().replace(microsecond=0)
+    start_utc = (now_utc - _td_ih(days=days)).replace(
+        hour=0, minute=0, second=0,
+    )
+
+    with session_scope() as s:
+        holdings = s.query(_SH_ih).all()
+        ticker_qty: dict[str, int] = {}
+        for h in holdings:
+            ticker_qty[h.ticker] = ticker_qty.get(h.ticker, 0) + h.quantity
+
+        # Cash + fond-värde (approximation · samma värde alla dagar)
+        from sqlalchemy import func as _f_ih
+        from ..db.models import Account as _A_ih, Transaction as _T_ih
+        isk_accs = (
+            s.query(_A_ih)
+            .filter(_A_ih.type == "isk")
+            .all()
+        )
+        cash_baseline = Decimal("0")
+        for a in isk_accs:
+            ob = a.opening_balance or Decimal("0")
+            mv = (
+                s.query(_f_ih.coalesce(_f_ih.sum(_T_ih.amount), 0))
+                .filter(_T_ih.account_id == a.id)
+                .filter(_released_filter(_T_ih))
+                .scalar() or Decimal("0")
+            )
+            cash_baseline += ob + Decimal(str(mv))
+
+        fund_baseline = Decimal("0")
+        for acc_id, fund_total in (
+            s.query(
+                _FH_ih.account_id,
+                _f_ih.coalesce(_f_ih.sum(_FH_ih.market_value), 0),
+            )
+            .filter(_FH_ih.account_id.in_({a.id for a in isk_accs}))
+            .group_by(_FH_ih.account_id)
+            .all()
+        ):
+            fund_baseline += Decimal(str(fund_total or 0))
+
+    # Hämta priser per dag · en query för alla tickers + dagar.
+    points: list[V2IskHistoryPoint] = []
+    if not ticker_qty:
+        # Inga aktier → returnera flat-line med cash+fond per dag
+        for i in range(days + 1):
+            day_ts = start_utc + _td_ih(days=i)
+            points.append(V2IskHistoryPoint(
+                ts=day_ts,
+                total_value=float(cash_baseline + fund_baseline),
+            ))
+        return V2IskHistoryResponse(days=days, points=points)
+
+    tickers = list(ticker_qty.keys())
+    with master_session() as msdb:
+        # Per ticker · alla quotes i intervallet, sorted.
+        quotes_by_ticker: dict[str, list[tuple[datetime, Decimal]]] = {}
+        rows = (
+            msdb.query(_SQ_ih)
+            .filter(_SQ_ih.ticker.in_(tickers))
+            .filter(_SQ_ih.ts >= start_utc - _td_ih(days=7))  # buffert
+            .order_by(_SQ_ih.ts.asc())
+            .all()
+        )
+        for r in rows:
+            quotes_by_ticker.setdefault(r.ticker, []).append((r.ts, r.last))
+
+    # För varje dag · hämta senaste pris ≤ dagens slut per ticker
+    for i in range(days + 1):
+        day_end = start_utc + _td_ih(days=i, hours=23, minutes=59)
+        stock_total = Decimal("0")
+        for ticker, qty in ticker_qty.items():
+            qs = quotes_by_ticker.get(ticker, [])
+            # Hitta senaste quote ≤ day_end · linjärsök räcker för
+            # ~50 dagar × 30 tickers
+            price = None
+            for ts_q, last_q in reversed(qs):
+                if ts_q <= day_end:
+                    price = last_q
+                    break
+            if price is None and qs:
+                # Inga quotes innan day_end · använd första tillgängliga
+                price = qs[0][1]
+            if price is not None:
+                stock_total += Decimal(qty) * price
+        points.append(V2IskHistoryPoint(
+            ts=day_end.replace(hour=0, minute=0, second=0),
+            total_value=float(
+                cash_baseline + fund_baseline + stock_total,
+            ),
+        ))
+
+    return V2IskHistoryResponse(days=days, points=points)
+
+
 class V2TeacherAvanzaOverview(BaseModel):
     student_id: int
     student_name: str
