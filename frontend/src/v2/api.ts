@@ -3891,8 +3891,12 @@ export const v2Api = {
     }>(
       `/stocks/ledger?limit=${limit}${ticker ? `&ticker=${ticker}` : ""}`,
     ),
-  stocksMarket: () =>
-    api<{
+  stocksMarket: () => {
+    // Cache-buster · samma URL utan query-string riskerar att cachas
+    // av browser/CDN → 'Kurser uppdaterade 2 h sedan' fastnar trots
+    // att backenden har färska kurser. Lägg till monoton timestamp.
+    const ts = Date.now();
+    return api<{
       stocks: Array<{
         ticker: string;
         name: string;
@@ -3906,7 +3910,8 @@ export const v2Api = {
       count: number;
       market_open: boolean;
       last_updated_at: string | null;
-    }>("/v2/aktier/market"),
+    }>(`/v2/aktier/market?_=${ts}`);
+  },
   stocksBuy: (ticker: string, body: {
     account_id: number;
     quantity: number;
