@@ -147,16 +147,96 @@ class YFinanceProvider(QuoteProvider):
 
         out: list[Quote] = []
         ts = datetime.utcnow().replace(microsecond=0)
+
+        # Använd yf.download() för batchad chart-fetch · färskare än
+        # fast_info som har intern cache och ofta returnerar stale
+        # priser. period='1d' interval='1m' = senaste 1-min-baren =
+        # delayed ~15 min men ALLTID färsk vid varje anrop.
+        try:
+            data = yf.download(
+                tickers=" ".join(tickers),
+                period="1d",
+                interval="1m",
+                group_by="ticker",
+                progress=False,
+                threads=False,  # Cloud Run kan ha låg thread-pool
+                auto_adjust=False,
+            )
+        except Exception as exc:
+            log.warning(
+                "yfinance download failed (försöker fast_info fallback): %s",
+                exc,
+            )
+            return self._fallback_fast_info(yf, tickers, ts)
+
+        if data is None or (hasattr(data, "empty") and data.empty):
+            log.warning(
+                "yfinance download returnerade tom dataframe för %d tickers",
+                len(tickers),
+            )
+            return self._fallback_fast_info(yf, tickers, ts)
+
+        # Pandas DataFrame · multiindex per ticker när vi har > 1 ticker
+        is_multi = len(tickers) > 1
+        for t in tickers:
+            try:
+                if is_multi:
+                    if t not in data.columns.get_level_values(0):
+                        continue
+                    closes = data[t]["Close"].dropna()
+                else:
+                    closes = data["Close"].dropna()
+                if len(closes) == 0:
+                    continue
+                last_raw = closes.iloc[-1]
+                last = Decimal(str(float(last_raw))).quantize(
+                    Decimal("0.01"),
+                )
+                # change_pct vs första baren samma dag
+                prev_raw = closes.iloc[0]
+                change_pct = None
+                if prev_raw and float(prev_raw) > 0:
+                    prev = Decimal(str(float(prev_raw)))
+                    if prev > 0:
+                        change_pct = float((last - prev) / prev) * 100
+                out.append(Quote(
+                    ticker=t,
+                    last=last,
+                    bid=None,
+                    ask=None,
+                    volume=None,
+                    change_pct=change_pct,
+                    ts=ts,
+                ))
+            except Exception as exc:
+                log.warning(
+                    "yfinance per-ticker parse failed for %s: %s", t, exc,
+                )
+                continue
+
+        log.info(
+            "yfinance: fetched %d/%d quotes via download(period=1d,interval=1m)",
+            len(out), len(tickers),
+        )
+        return out
+
+    def _fallback_fast_info(self, yf, tickers, ts) -> list[Quote]:
+        """Backup-väg via fast_info om download() krashar. fast_info
+        cachas internt men är bättre än ingenting."""
+        out: list[Quote] = []
         try:
             data = yf.Tickers(" ".join(tickers))
-        except Exception as exc:  # nätverk, parse-fel
-            log.warning("yfinance fetch failed: %s", exc)
+        except Exception as exc:
+            log.warning("yfinance Tickers() failed: %s", exc)
             return []
 
         for t in tickers:
             try:
                 info = data.tickers[t].fast_info  # type: ignore[attr-defined]
-                last_raw = info.get("last_price") if isinstance(info, dict) else getattr(info, "last_price", None)
+                last_raw = (
+                    info.get("last_price") if isinstance(info, dict)
+                    else getattr(info, "last_price", None)
+                )
                 if last_raw is None:
                     continue
                 last = Decimal(str(last_raw)).quantize(Decimal("0.01"))
@@ -179,8 +259,12 @@ class YFinanceProvider(QuoteProvider):
                     ts=ts,
                 ))
             except Exception as exc:
-                log.warning("yfinance per-ticker fetch failed for %s: %s", t, exc)
+                log.warning("fast_info fallback failed for %s: %s", t, exc)
                 continue
+        log.info(
+            "yfinance fast_info fallback: fetched %d/%d quotes",
+            len(out), len(tickers),
+        )
         return out
 
 
