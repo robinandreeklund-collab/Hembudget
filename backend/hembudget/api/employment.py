@@ -646,6 +646,172 @@ def decline_offer(
 
 
 # ===========================================================
+# Endpoints · Terminate (Fas E)
+# ===========================================================
+
+
+class TerminateIn(BaseModel):
+    reason: str = Field(..., min_length=5, max_length=400)
+
+
+@router.post(
+    "/employments/{employment_id}/terminate",
+    response_model=EmploymentOut,
+)
+def terminate_employment(
+    employment_id: int,
+    body: TerminateIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Företagaren säger upp en klasskompis-anställning.
+
+    30 dgrs LAS-uppsägningstid · last_day sätts till today_g + 30 dgr.
+    ClassmateEmployment.status = 'terminated' direkt så payroll-endpointen
+    slutar betala. StudentProfile.employment_end_on uppdateras så
+    salary_phase också skippar lön efter sista dag.
+    """
+    owner_id = _require_student_id(info)
+    today_g = current_game_date()
+    last_day = today_g + timedelta(days=30)
+
+    with master_session() as ms:
+        emp = ms.get(ClassmateEmployment, employment_id)
+        if emp is None:
+            raise HTTPException(404, "Anställning hittades inte")
+        if emp.owner_student_id != owner_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Du kan bara säga upp dina egna anställda",
+            )
+        if emp.status != "active":
+            raise HTTPException(
+                400,
+                f"Anställningen är inte aktiv (status='{emp.status}')",
+            )
+
+        employee_id = emp.employee_student_id
+        company_name = emp.company_name
+        role = emp.role
+        gross = emp.monthly_gross
+
+        emp.status = "terminated"
+        emp.last_day = last_day
+        emp.termination_reason = body.reason
+        emp.terminated_company_name = company_name
+
+        # Uppdatera den anställdes profil så salary_phase fasar ut lönen
+        prof = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == employee_id)
+            .first()
+        )
+        if prof is not None:
+            # Sätt status='unemployed' med end_on så lönen betalas till
+            # och med last_day men inte längre.
+            prof.employment_status = "unemployed"
+            prof.employment_end_on = last_day
+        ms.commit()
+
+    # Formellt uppsägningsbrev till klasskompis
+    try:
+        _send_mail_to_student(
+            employee_id,
+            sender=company_name,
+            sender_short=company_name[:4],
+            sender_kind="agency",
+            subject=f"Uppsägningsbesked · {company_name}",
+            body_meta=f"Sista dag {last_day.isoformat()}",
+            body=(
+                f"Uppsägningsbesked enligt 8 § lagen (1982:80) om "
+                f"anställningsskydd (LAS).\n\n"
+                f"Härmed sägs din anställning som **{role}** vid "
+                f"**{company_name}** upp.\n\n"
+                f"· Uppsägningstid: 30 dagar (LAS § 11)\n"
+                f"· Sista anställningsdag: {last_day.isoformat()}\n"
+                f"· Lön och förmåner utgår oförändrat under "
+                f"uppsägningstiden\n"
+                f"· Företrädesrätt vid återanställning: 9 månader "
+                f"(LAS § 25)\n\n"
+                f"Skäl till uppsägning:\n{body.reason}\n\n"
+                f"Du har rätt att begära skriftlig bekräftelse av detta "
+                f"besked samt rätt att ogiltigförklara uppsägningen "
+                f"genom att vända dig till facket eller domstol.\n\n"
+                f"Lycka till framöver.\n\n"
+                f"{company_name}"
+            ),
+            mail_type="authority",
+        )
+    except Exception:
+        log.exception("terminate: brev till anställd misslyckades")
+
+    # Lärar-spårning
+    try:
+        log_activity(
+            kind="biz.employee_terminated",
+            summary=f"Sade upp {role} · sista dag {last_day.isoformat()}",
+            payload={
+                "employment_id": employment_id,
+                "employee_student_id": employee_id,
+                "last_day": last_day.isoformat(),
+                "reason": body.reason,
+                "monthly_gross": gross,
+            },
+            student_id=owner_id,
+        )
+        log_activity(
+            kind="private.terminated_by_employer",
+            summary=f"Uppsagd från {company_name} · {role}",
+            payload={
+                "employment_id": employment_id,
+                "company_name": company_name,
+                "last_day": last_day.isoformat(),
+                "reason": body.reason,
+            },
+            student_id=employee_id,
+        )
+    except Exception:
+        pass
+
+    # Pentagon
+    try:
+        from ..game_engine.pentagon import apply_pentagon_delta
+        # Anställd · stor smäll på säkerhet + ekonomi
+        apply_pentagon_delta(
+            employee_id, axis="safety", requested_delta=-5,
+            reason_kind="terminated",
+            reason_id=employment_id,
+            reason_table="classmate_employments",
+            explanation=f"Uppsagd från {company_name}",
+        )
+        apply_pentagon_delta(
+            employee_id, axis="economy", requested_delta=-3,
+            reason_kind="terminated",
+            reason_id=employment_id,
+            reason_table="classmate_employments",
+            explanation="Förlorade inkomst · uppsagd",
+        )
+        apply_pentagon_delta(
+            employee_id, axis="social", requested_delta=-2,
+            reason_kind="terminated",
+            explanation="Social konflikt · uppsagd av klasskompis",
+        )
+        # Företagaren · liten social-smäll
+        apply_pentagon_delta(
+            owner_id, axis="social", requested_delta=-2,
+            reason_kind="terminated_classmate",
+            reason_id=employment_id,
+            reason_table="classmate_employments",
+            explanation="Sade upp klasskompis · social konsekvens",
+        )
+    except Exception:
+        log.exception("terminate: pentagon-delta misslyckades")
+
+    with master_session() as ms:
+        emp = ms.get(ClassmateEmployment, employment_id)
+        return _employment_to_out(emp)
+
+
+# ===========================================================
 # Endpoints · Payroll-run (Fas D)
 # ===========================================================
 

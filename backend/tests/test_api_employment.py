@@ -147,3 +147,24 @@ def test_payroll_run_requires_auth(fx):
     client, *_ = fx
     r = client.post("/v2/employment/payroll/run")
     assert r.status_code in (401, 403)
+
+
+def test_terminate_nonexistent_returns_404(fx):
+    client, a_tok, *_ = fx
+    r = client.post(
+        "/v2/employment/employments/9999/terminate",
+        headers={"Authorization": f"Bearer {a_tok}"},
+        json={"reason": "samarbetssvårigheter"},
+    )
+    assert r.status_code == 404
+
+
+def test_terminate_requires_min_reason(fx):
+    client, a_tok, *_ = fx
+    r = client.post(
+        "/v2/employment/employments/1/terminate",
+        headers={"Authorization": f"Bearer {a_tok}"},
+        json={"reason": "x"},
+    )
+    # 422 från Pydantic-validering (min_length=5)
+    assert r.status_code == 422

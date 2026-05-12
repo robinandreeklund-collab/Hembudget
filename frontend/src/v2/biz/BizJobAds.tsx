@@ -299,6 +299,9 @@ export function BizJobAds() {
                   <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color, letterSpacing: 1, textTransform: "uppercase" }}>
                     {e.status}
                   </span>
+                  {isActive && (
+                    <TerminateButton emp={e} onDone={refresh} />
+                  )}
                 </div>
               );
             })}
@@ -325,6 +328,72 @@ export function BizJobAds() {
         }} />
       )}
     </BizActorShell>
+  );
+}
+
+
+function TerminateButton({
+  emp,
+  onDone,
+}: {
+  emp: ClassmateEmploymentRow;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function run() {
+    const reason = prompt(
+      `Säg upp klasskompis-anställning som ${emp.role}?\n\n`
+        + "Ange skäl (visas i uppsägningsbrevet · minst 5 tecken):",
+      "",
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 5) {
+      alert("Skälet måste vara minst 5 tecken.");
+      return;
+    }
+    if (
+      !confirm(
+        `Bekräfta uppsägning av ${emp.role}.\n\n`
+          + "· 30 dgrs LAS-uppsägningstid\n"
+          + "· Lön fortsätter betalas under uppsägningstiden\n"
+          + "· Klasskompis får uppsägningsbrev + social pentagon-smäll\n"
+          + "· DU får också social pentagon-smäll\n\n"
+          + "Detta går inte att ångra.",
+      )
+    ) return;
+    setBusy(true);
+    try {
+      await api(
+        `/v2/employment/employments/${emp.id}/terminate`,
+        { method: "POST", body: JSON.stringify({ reason: reason.trim() }) },
+      );
+      onDone();
+    } catch (e) {
+      alert(`Fel: ${(e as Error).message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={run}
+      disabled={busy}
+      style={{
+        background: "transparent",
+        border: "1px solid rgba(220,76,43,0.40)",
+        color: "#fda594",
+        padding: "7px 12px",
+        borderRadius: 6,
+        fontFamily: "JetBrains Mono, monospace",
+        fontSize: 10, fontWeight: 700,
+        letterSpacing: 1.2, textTransform: "uppercase",
+        cursor: busy ? "wait" : "pointer",
+      }}
+    >
+      {busy ? "…" : "Säg upp"}
+    </button>
   );
 }
 

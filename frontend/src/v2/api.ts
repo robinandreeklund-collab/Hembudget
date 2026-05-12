@@ -4321,6 +4321,11 @@ export const v2Api = {
         + (yearMonth ? `?year_month=${yearMonth}` : ""),
       { method: "POST", body: JSON.stringify({}) },
     ),
+  employmentTerminate: (employmentId: number, reason: string) =>
+    api<EmploymentOut>(
+      `/v2/employment/employments/${employmentId}/terminate`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
 };
 
 export type PayrollRunOut = {
