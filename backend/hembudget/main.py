@@ -17,8 +17,8 @@ faulthandler.enable()
 from .api import (
     admin, ai, ai_admin, allabolag, arbetsformedlingen, auth, backup,
     balances, bank, biz_class_actions, boendemarknad, budget, chat,
-    company_jobs, credit, elpris, email_auth, employer, foretag,
-    foretag_annual_report, foretag_capacity, foretag_engine,
+    company_jobs, credit, elpris, email_auth, employer, employment,
+    foretag, foretag_annual_report, foretag_capacity, foretag_engine,
     foretag_growth, funds,
     game_engine, landing, leaderboard, ledger, loans, modules, reports,
     scenarios, school, settings_kv, shared_opportunities, smtp_admin,
@@ -293,6 +293,9 @@ def build_app() -> FastAPI:
     app.include_router(teacher_wellbeing.router)
     app.include_router(employer.router)
     app.include_router(teacher_employer.router)
+    # Klasskompis-anställning (Fas C-E): hire/accept/decline/terminate
+    # cross-scope via CompanyEmployment-modellen i master-DB.
+    app.include_router(employment.router)
     app.include_router(bank.router)
 
     # === V2 (parallell migration · ny dashboard) ===

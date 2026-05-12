@@ -277,6 +277,59 @@ export function MailDetailV2() {
   const isSalarySlip = data.salary_slip != null;
   const isStructuredInvoice = data.invoice != null;
 
+  // Anställningserbjudande · body innehåller "_employment_id=N"-marker
+  // som vi skickar med vid accept/decline. Marker döljs visuellt.
+  const employmentIdMatch = m.body?.match(/_employment_id=(\d+)/);
+  const employmentOfferId = employmentIdMatch
+    ? parseInt(employmentIdMatch[1], 10)
+    : null;
+  const bodyClean = m.body
+    ? m.body.replace(/_employment_id=\d+\n?/g, "").trim()
+    : "";
+
+  async function respondToOffer(accept: boolean) {
+    if (employmentOfferId == null) return;
+    let reason: string | undefined;
+    if (!accept) {
+      const r = prompt(
+        "Skäl till att tacka nej (frivilligt — visas för företagaren)",
+        "",
+      );
+      if (r === null) return;
+      reason = r.trim() || undefined;
+    } else {
+      if (
+        !confirm(
+          "Acceptera anställning?\n\n"
+            + "· Din nuvarande anställning sägs upp automatiskt med 30 dgr varsel (LAS).\n"
+            + "· Din profil byter arbetsgivare direkt och första lönespec utbetalas den 25:e.\n\n"
+            + "Är du säker?",
+        )
+      ) {
+        return;
+      }
+    }
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      if (accept) {
+        await v2Api.employmentAccept(employmentOfferId);
+      } else {
+        await v2Api.employmentDecline(employmentOfferId, reason);
+      }
+      await v2Api.updateMailStatus(id, "handled");
+      const refreshed = await v2Api.mailDetail(id);
+      setData(refreshed);
+      setExportMsg(
+        accept ? "✓ Anställning accepterad — välkommen!" : "Du tackade nej.",
+      );
+    } catch (e) {
+      setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // Avsändar-icon-färg per kind
   const senderColors: Record<string, string> = {
     cred: "linear-gradient(135deg, #6366f1 0%, #818cf8 100%)",
@@ -397,7 +450,7 @@ export function MailDetailV2() {
               <InvoiceLayout inv={data.invoice} />
             )}
             {!isCcInvoice && !isSalarySlip && !isStructuredInvoice
-              && m.body && (
+              && bodyClean && (
               <div
                 style={{
                   fontFamily: "var(--serif)",
@@ -407,7 +460,7 @@ export function MailDetailV2() {
                   color: "var(--text)",
                 }}
               >
-                {m.body}
+                {bodyClean}
               </div>
             )}
 
@@ -484,6 +537,30 @@ export function MailDetailV2() {
                 borderTop: "1px solid var(--line)",
               }}
             >
+              {/* Anställningserbjudande · accept / decline · bara om
+                  status fortfarande unhandled OCH employment_id finns. */}
+              {employmentOfferId != null && m.status === "unhandled" && (
+                <>
+                  <button
+                    type="button"
+                    className="cta-btn"
+                    disabled={exporting}
+                    onClick={() => respondToOffer(true)}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    ✓ Acceptera anställning
+                  </button>
+                  <button
+                    type="button"
+                    className="cta-btn ghost"
+                    disabled={exporting}
+                    onClick={() => respondToOffer(false)}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    ✗ Tacka nej
+                  </button>
+                </>
+              )}
               {/* Faktura kan exporteras till banken (skapar UpcomingTransaction) */}
               {(m.mail_type === "invoice" || m.mail_type === "reminder") &&
                 m.amount !== null && (

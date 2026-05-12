@@ -4290,4 +4290,48 @@ export const v2Api = {
     ),
   roster: () =>
     api<V2RosterRow[]>("/v2/teacher/students/v2-roster"),
+
+  // === Klasskompis-anställning (Fas C-E) ===
+  employmentList: () =>
+    api<{ employments: EmploymentOut[] }>("/v2/employment/employments"),
+  employmentOffers: () =>
+    api<{ employments: EmploymentOut[] }>("/v2/employment/offers"),
+  employmentHireOffer: (body: {
+    classmate_student_id: number;
+    role: string;
+    monthly_gross: number;
+  }) =>
+    api<EmploymentOut>("/v2/employment/hire-offer", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  employmentAccept: (employmentId: number) =>
+    api<EmploymentOut>(`/v2/employment/offers/${employmentId}/accept`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  employmentDecline: (employmentId: number, reason?: string) =>
+    api<EmploymentOut>(`/v2/employment/offers/${employmentId}/decline`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason ?? null }),
+    }),
+};
+
+export type EmploymentOut = {
+  id: number;
+  company_id: number;
+  company_name: string;
+  owner_student_id: number;
+  employee_student_id: number;
+  role: string;
+  monthly_gross: number;
+  status:
+    | "pending_offer"
+    | "active"
+    | "declined"
+    | "terminated";
+  offer_sent_on: string;
+  accepted_on: string | null;
+  last_day: string | null;
+  termination_reason: string | null;
 };

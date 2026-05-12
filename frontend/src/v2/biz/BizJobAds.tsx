@@ -48,10 +48,36 @@ const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
 
 
+type ClassmateEmploymentRow = {
+  id: number;
+  company_id: number;
+  company_name: string;
+  owner_student_id: number;
+  employee_student_id: number;
+  role: string;
+  monthly_gross: number;
+  status: "pending_offer" | "active" | "declined" | "terminated";
+  offer_sent_on: string;
+  accepted_on: string | null;
+  last_day: string | null;
+  termination_reason: string | null;
+};
+
+type ClassmateOption = {
+  student_id: number;
+  display_name: string;
+  class_label: string | null;
+};
+
+
 export function BizJobAds() {
   const [ads, setAds] = useState<JobAd[]>([]);
   const [employments, setEmployments] = useState<OwnerEmployment[]>([]);
+  const [classmateEmployments, setClassmateEmployments] = useState<
+    ClassmateEmploymentRow[]
+  >([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [showDirectHire, setShowDirectHire] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function refresh() {
@@ -60,6 +86,11 @@ export function BizJobAds() {
       .catch((e) => setError(String((e as Error).message || e)));
     api<OwnerEmployment[]>("/v2/foretag/job-ads/employments")
       .then(setEmployments)
+      .catch(() => undefined);
+    api<{ employments: ClassmateEmploymentRow[] }>(
+      "/v2/employment/employments",
+    )
+      .then((d) => setClassmateEmployments(d.employments))
       .catch(() => undefined);
   }
 
@@ -106,9 +137,14 @@ export function BizJobAds() {
     >
       {error && <div style={errorBoxStyle}>{error}</div>}
 
-      <button onClick={() => setShowCreate(true)} style={btnPrimary}>
-        + Posta ny jobbannons
-      </button>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={() => setShowCreate(true)} style={btnPrimary}>
+          + Posta ny jobbannons
+        </button>
+        <button onClick={() => setShowDirectHire(true)} style={btnGhost}>
+          ★ Direktanställ klasskompis
+        </button>
+      </div>
 
       {open.length > 0 && (
         <>
@@ -218,9 +254,58 @@ export function BizJobAds() {
         </>
       )}
 
-      {ads.length === 0 && employments.length === 0 && (
+      {classmateEmployments.length > 0 && (
+        <>
+          <div style={{ ...sectionEyeStyle, color: "#a78bfa", marginTop: 32, marginBottom: 12 }}>
+            ● DIREKTANSTÄLLNINGAR · klasskompis-erbjudanden
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {classmateEmployments.map((e) => {
+              const isPending = e.status === "pending_offer";
+              const isActive = e.status === "active";
+              const color = isActive ? "#6ee7b7"
+                : isPending ? "#fbbf24"
+                : e.status === "declined" ? "#fda594"
+                : "rgba(255,255,255,0.5)";
+              const bg = isActive ? "rgba(110,231,183,0.05)"
+                : isPending ? "rgba(251,191,36,0.06)"
+                : "rgba(15,21,37,0.4)";
+              const border = `${color}55`;
+              return (
+                <div key={e.id} style={{
+                  padding: 14,
+                  background: bg,
+                  border: `1px solid ${border}`,
+                  borderRadius: 8,
+                  display: "flex", gap: 12, alignItems: "center",
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "Source Serif 4, Georgia, serif", color: "#fff", fontWeight: 700 }}>
+                      Anställd #{e.employee_student_id} · {e.role}
+                    </div>
+                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.55)", letterSpacing: 0.6, marginTop: 4 }}>
+                      {SEK(e.monthly_gross)} kr brutto/mån · skickat {e.offer_sent_on.slice(0, 10)}
+                      {e.accepted_on && (
+                        <span style={{ marginLeft: 8 }}>· accepterad {e.accepted_on}</span>
+                      )}
+                      {e.last_day && (
+                        <span style={{ marginLeft: 8 }}>· sista dag {e.last_day}</span>
+                      )}
+                    </div>
+                  </div>
+                  <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color, letterSpacing: 1, textTransform: "uppercase" }}>
+                    {e.status}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {ads.length === 0 && employments.length === 0 && classmateEmployments.length === 0 && (
         <div style={emptyStateStyle}>
-          Du har inga jobbannonser. Klicka "Posta ny jobbannons" för att hitta en klasskompis till bolaget.
+          Du har inga jobbannonser. Klicka "Posta ny jobbannons" eller "Direktanställ klasskompis" för att bygga teamet.
         </div>
       )}
 
@@ -230,7 +315,119 @@ export function BizJobAds() {
           if (refreshed) refresh();
         }} />
       )}
+      {showDirectHire && (
+        <DirectHireModal onClose={(refreshed) => {
+          setShowDirectHire(false);
+          if (refreshed) refresh();
+        }} />
+      )}
     </BizActorShell>
+  );
+}
+
+
+function DirectHireModal({
+  onClose,
+}: {
+  onClose: (refreshed: boolean) => void;
+}) {
+  const [classmates, setClassmates] = useState<ClassmateOption[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [role, setRole] = useState("");
+  const [salary, setSalary] = useState("28000");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ classmates: ClassmateOption[]; invites_enabled: boolean }>(
+      "/v2/events/classmates",
+    )
+      .then((d) => {
+        setClassmates(d.classmates);
+        if (d.classmates.length > 0) setSelectedId(d.classmates[0].student_id);
+      })
+      .catch((e) => setErr(String((e as Error).message || e)));
+  }, []);
+
+  async function submit() {
+    if (selectedId == null) { setErr("Välj en klasskompis."); return; }
+    const r = role.trim();
+    const s = parseInt(salary, 10);
+    if (r.length < 2) { setErr("Beskriv rollen kort (min 2 tecken)."); return; }
+    if (!Number.isFinite(s) || s < 15000 || s > 200000) {
+      setErr("Månadslön måste vara mellan 15 000 och 200 000 kr."); return;
+    }
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await api("/v2/employment/hire-offer", {
+        method: "POST",
+        body: JSON.stringify({
+          classmate_student_id: selectedId,
+          role: r,
+          monthly_gross: s,
+        }),
+      });
+      onClose(true);
+    } catch (e) {
+      setErr(String((e as Error).message || e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div onClick={() => onClose(false)} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "#0f1525", border: "1px solid rgba(167,139,250,0.4)",
+        borderRadius: 12, padding: 24, maxWidth: 600, width: "100%",
+      }}>
+        <h2 style={{ fontFamily: "Source Serif 4, Georgia, serif", color: "#fff", marginTop: 0 }}>
+          Direktanställ klasskompis
+        </h2>
+        <p style={{ color: "#aab", fontSize: 13 }}>
+          Skicka ett anställningserbjudande direkt till en klasskompis. De får
+          ett brev i sin postlåda och kan tacka ja eller nej. Om de tackar ja
+          säger de upp sin gamla anställning med 30 dgr LAS-varsel.
+        </p>
+        <label style={{ color: "white", display: "block", marginTop: 12 }}>
+          Klasskompis
+          <select
+            value={selectedId ?? ""}
+            onChange={(e) => setSelectedId(parseInt(e.target.value, 10))}
+            style={inputStyle}
+          >
+            {classmates.length === 0 && (
+              <option value="">Inga klasskompisar tillgängliga</option>
+            )}
+            {classmates.map((c) => (
+              <option key={c.student_id} value={c.student_id}>
+                {c.display_name}
+                {c.class_label ? ` · ${c.class_label}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ color: "white", display: "block", marginTop: 12 }}>
+          Roll (t.ex. "Säljare", "Konsult", "Assistent")
+          <input value={role} onChange={(e) => setRole(e.target.value)} style={inputStyle} />
+        </label>
+        <label style={{ color: "white", display: "block", marginTop: 12 }}>
+          Månadslön brutto (kr)
+          <input type="number" value={salary} onChange={(e) => setSalary(e.target.value)} style={inputStyle} />
+        </label>
+        {err && <div style={{ ...errorBoxStyle, marginTop: 10 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button onClick={submit} disabled={submitting || selectedId == null} style={btnPrimary}>
+            {submitting ? "Skickar…" : "Skicka erbjudande →"}
+          </button>
+          <button onClick={() => onClose(false)} style={btnGhost}>Avbryt</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

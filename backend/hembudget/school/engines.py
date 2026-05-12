@@ -192,6 +192,11 @@ def init_master_engine() -> Engine:
             cur.execute("PRAGMA foreign_keys = ON")
             cur.close()
 
+    # Importera CompanyEmployment så create_all() ser tabellen ·
+    # MasterBase är delad och får inte tabeller registrerade utan
+    # import. (Game-event-models och bank-models följer samma mönster.)
+    from . import employment_models  # noqa: F401
+
     # Bulletproof: även om create_all eller migrationerna failar
     # MÅSTE engine cachas så hela appen inte 500:ar varje request.
     try:
