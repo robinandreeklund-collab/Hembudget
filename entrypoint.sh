@@ -15,11 +15,14 @@ set -uo pipefail
 
 # PgBouncer är OPT-IN. Tidigare default-på-vid-cloudsql visade sig
 # spränga Cloud SQL conn-cap (login-500 i prod) — antingen för att
-# PgBouncer inte startade rent, eller för att dess egna server-conn
-# adderades på toppen av appens. Tills vi har kunnat debugga
-# beteendet säkert kör vi direct-connect till Cloud SQL.
+# PgBouncer inte startade rent (kraschade på 'should not run as root'
+# eftersom -u nobody saknades), eller för att dess egna server-conn
+# adderades på toppen av appens.
 #
-# Återaktivera per-revision via:
+# Root-cause fixad · pgbouncer startar nu som nobody via -u + skriver
+# pidfile till /var/run/pgbouncer (chownas i Dockerfile).
+#
+# Aktivera per-revision när du vill skala till > 1 instans:
 #   gcloud run services update hembudget --region=europe-west1 \
 #     --update-env-vars=HEMBUDGET_ENABLE_PGBOUNCER=1
 PGBOUNCER_ENABLED=0
@@ -78,12 +81,20 @@ if [[ "${PGBOUNCER_ENABLED}" == "1" ]]; then
     # Skriv userlist · format: "username" "password"
     printf '"%s" "%s"\n' "${DB_USER}" "${DB_PASSWORD_RAW}" \
         > /tmp/pgbouncer-userlist.txt
-    chmod 600 /tmp/pgbouncer-userlist.txt
+
+    # PgBouncer vägrar köra som root av säkerhetsskäl. Vi släpper
+    # privilegier till 'nobody' via -u-flaggan. Båda config-filerna
+    # måste vara läsbara för nobody · vi chown:ar dem hellre än att
+    # köra chmod 0644 så lösenordet inte exponeras till andra
+    # användare i containern.
+    chown nobody:nogroup /tmp/pgbouncer.ini /tmp/pgbouncer-userlist.txt
+    chmod 600 /tmp/pgbouncer.ini /tmp/pgbouncer-userlist.txt
 
     # Starta PgBouncer i bakgrunden. -d daemon-flagga undviker eftersom
     # vi vill ha den som child-proc av entrypoint så Cloud Run-loggar
-    # ser stdout.
-    pgbouncer /tmp/pgbouncer.ini &
+    # ser stdout. -u nobody dropper privilegier (annars: 'FATAL
+    # PgBouncer should not run as root').
+    pgbouncer -u nobody /tmp/pgbouncer.ini &
     PGBOUNCER_PID=$!
     echo "[entrypoint] PgBouncer startad · PID=${PGBOUNCER_PID}"
 
