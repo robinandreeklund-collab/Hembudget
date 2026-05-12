@@ -295,40 +295,83 @@ export function MailDetailV2() {
         .trim()
     : "";
 
+  // Fas 4 · BankID-signering state för lån
+  const [bankIdSession, setBankIdSession] = useState<{
+    token: string;
+    expires_at: string;
+  } | null>(null);
+  const [bankIdPin, setBankIdPin] = useState("");
+  const [bankIdBusy, setBankIdBusy] = useState(false);
+  const [bankIdError, setBankIdError] = useState<string | null>(null);
+
   async function respondToLoanOffer(accept: boolean) {
     if (loanApplicationId == null) return;
-    if (accept) {
-      if (
-        !confirm(
-          "Acceptera lånet?\n\n"
-            + "· Lånebeloppet sätts in på ditt lönekonto direkt\n"
-            + "· Månadsbetalning dras varje månad\n"
-            + "· Säkerhetssignera kommer i nästa fas (BankID)\n\n"
-            + "Är du säker?",
-        )
-      ) return;
-    } else {
+    if (!accept) {
       if (!confirm("Tacka nej till lånet?")) return;
+      setExporting(true);
+      setExportMsg(null);
+      try {
+        await v2Api.creditDecline(loanApplicationId);
+        await v2Api.updateMailStatus(id, "handled");
+        const refreshed = await v2Api.mailDetail(id);
+        setData(refreshed);
+        setExportMsg("Du tackade nej till lånet.");
+      } catch (e) {
+        setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
+      } finally {
+        setExporting(false);
+      }
+      return;
     }
-    setExporting(true);
-    setExportMsg(null);
+    // Accept-flow · initiera BankID-session och visa PIN-modal
+    setBankIdBusy(true);
+    setBankIdError(null);
     try {
-      if (accept) {
-        const res = await v2Api.creditAcceptFromMail(loanApplicationId);
+      const s = await v2Api.bankSessionInit(
+        `private_loan_sign_${loanApplicationId}`,
+      );
+      setBankIdSession({ token: s.token, expires_at: s.expires_at });
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      if (msg.includes("PIN saknas") || msg.includes("set-pin")) {
         setExportMsg(
-          `✓ Lån accepterat · ${Math.round(res.deposited_amount).toLocaleString("sv-SE")} kr insatt på lönekontot. ${res.pedagogical_note}`,
+          "BankID saknar PIN. Sätt först din bank-PIN under /v2/bank-id.",
         );
       } else {
-        await v2Api.creditDecline(loanApplicationId);
-        setExportMsg("Du tackade nej till lånet.");
+        setExportMsg(`Fel vid BankID-init: ${msg}`);
       }
+    } finally {
+      setBankIdBusy(false);
+    }
+  }
+
+  async function confirmBankIdAndAccept() {
+    if (!bankIdSession || !loanApplicationId) return;
+    setBankIdBusy(true);
+    setBankIdError(null);
+    try {
+      await v2Api.bankSessionConfirm(bankIdSession.token, bankIdPin);
+      const res = await v2Api.creditAcceptFromMail(
+        loanApplicationId,
+        bankIdSession.token,
+      );
       await v2Api.updateMailStatus(id, "handled");
       const refreshed = await v2Api.mailDetail(id);
       setData(refreshed);
+      setBankIdSession(null);
+      setBankIdPin("");
+      setExportMsg(
+        `✓ Lån signerat & accepterat · ${Math.round(res.deposited_amount).toLocaleString("sv-SE")} kr insatt. ${res.pedagogical_note}`,
+      );
     } catch (e) {
-      setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
+      const msg = String((e as Error)?.message || e);
+      if (msg.includes("Fel PIN") || msg.includes("401")) {
+        setBankIdError("Fel PIN — prova igen.");
+      } else {
+        setBankIdError(`Fel: ${msg}`);
+      }
     } finally {
-      setExporting(false);
+      setBankIdBusy(false);
     }
   }
 
@@ -796,6 +839,127 @@ export function MailDetailV2() {
         {/* Pedagogik */}
         {isCcInvoice && <CcPedaBlock />}
         {isSalarySlip && <SalaryPedaBlock />}
+
+        {/* BankID-modal för lån-signering (Fas 4) */}
+        {bankIdSession && (
+          <div
+            onClick={() => {
+              if (!bankIdBusy) setBankIdSession(null);
+            }}
+            style={{
+              position: "fixed", inset: 0,
+              background: "rgba(0,0,0,0.75)", zIndex: 200,
+              display: "flex", alignItems: "center",
+              justifyContent: "center", padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: "#0f1525",
+                border: "1px solid rgba(99,102,241,0.4)",
+                borderRadius: 12,
+                padding: 28,
+                maxWidth: 460,
+                width: "100%",
+              }}
+            >
+              <div style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10, letterSpacing: 1.4,
+                color: "#a5b4fc",
+              }}>
+                ● BANKID · SIGNERA LÅN
+              </div>
+              <h2 style={{
+                fontFamily: "var(--serif)",
+                color: "#fff",
+                marginTop: 12,
+                marginBottom: 8,
+              }}>
+                Bekräfta med BankID
+              </h2>
+              <p style={{
+                fontFamily: "var(--serif)",
+                fontSize: 13.5,
+                color: "rgba(255,255,255,0.7)",
+                lineHeight: 1.5,
+                marginBottom: 20,
+              }}>
+                Du signerar att acceptera lånet. Lånebeloppet sätts
+                in på lönekontot direkt efter signering. Skriv din
+                BankID-PIN för att bekräfta.
+              </p>
+              <input
+                type="password"
+                inputMode="numeric"
+                autoFocus
+                value={bankIdPin}
+                onChange={(e) => setBankIdPin(e.target.value)}
+                placeholder="BankID-PIN"
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  background: "rgba(0,0,0,0.4)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  borderRadius: 8,
+                  color: "#fff",
+                  fontFamily: "var(--mono)",
+                  fontSize: 16,
+                  letterSpacing: "0.5em",
+                  textAlign: "center",
+                }}
+              />
+              {bankIdError && (
+                <div style={{
+                  marginTop: 10,
+                  padding: "8px 12px",
+                  borderRadius: 6,
+                  background: "rgba(252,165,165,0.08)",
+                  border: "1px solid rgba(252,165,165,0.35)",
+                  color: "#fca5a5",
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                }}>
+                  {bankIdError}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+                <button
+                  type="button"
+                  className="cta-btn"
+                  disabled={bankIdBusy || bankIdPin.length < 4}
+                  onClick={confirmBankIdAndAccept}
+                  style={{ flex: 1, border: 0, cursor: "pointer" }}
+                >
+                  {bankIdBusy ? "Signerar…" : "Signera & acceptera"}
+                </button>
+                <button
+                  type="button"
+                  className="cta-btn ghost"
+                  disabled={bankIdBusy}
+                  onClick={() => {
+                    setBankIdSession(null);
+                    setBankIdPin("");
+                    setBankIdError(null);
+                  }}
+                  style={{ border: 0, cursor: "pointer" }}
+                >
+                  Avbryt
+                </button>
+              </div>
+              <p style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "rgba(255,255,255,0.4)",
+                marginTop: 14,
+                textAlign: "center",
+              }}>
+                Session löper ut {new Date(bankIdSession.expires_at).toLocaleTimeString("sv-SE")}
+              </p>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

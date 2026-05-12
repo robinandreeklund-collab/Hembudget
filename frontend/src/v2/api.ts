@@ -4225,8 +4225,9 @@ export const v2Api = {
       }>;
     }>("/credit/pending-offers"),
   /** Acceptera ett pending privatlån direkt från postlådan
-   * (auto-default till första checking-konto). */
-  creditAcceptFromMail: (applicationId: number) =>
+   * (auto-default till första checking-konto). Stödjer optional
+   * BankID-session-token för signering (Fas 4). */
+  creditAcceptFromMail: (applicationId: number, bankSessionToken?: string) =>
     api<{
       loan_id: number;
       transaction_id: number;
@@ -4237,8 +4238,41 @@ export const v2Api = {
       pedagogical_note: string;
     }>("/credit/private/accept-from-mail", {
       method: "POST",
-      body: JSON.stringify({ application_id: applicationId }),
+      body: JSON.stringify({
+        application_id: applicationId,
+        bank_session_token: bankSessionToken,
+      }),
     }),
+  /** Initiera en BankID-session för lån-signering. */
+  bankSessionInit: (purpose: string) =>
+    api<{
+      token: string;
+      qr_url: string;
+      expires_at: string;
+      purpose: string;
+    }>("/bank/session/init", {
+      method: "POST",
+      body: JSON.stringify({ purpose }),
+    }),
+  /** Polla BankID-sessionens status (confirmed/pending/expired). */
+  bankSessionStatus: (token: string) =>
+    api<{
+      token: string;
+      purpose: string;
+      status: string;
+      confirmed_at: string | null;
+      expires_at: string;
+    }>(`/bank/session/${encodeURIComponent(token)}`),
+  /** Bekräfta BankID-sessionen lokalt (förenklat dev-flöde:
+   * frontend ber användaren mata in PIN direkt i samma fönster). */
+  bankSessionConfirm: (token: string, pin: string) =>
+    api<{ ok: boolean }>(
+      `/bank/session/${encodeURIComponent(token)}/confirm`,
+      {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      },
+    ),
   creditDecline: (applicationId: number) =>
     api<{ ok: boolean; application_id: number; result: string }>(
       "/credit/private/decline",

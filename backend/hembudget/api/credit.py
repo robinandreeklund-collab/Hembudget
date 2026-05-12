@@ -463,6 +463,12 @@ def list_pending_offers(
 
 class PrivateLoanAcceptFromMailIn(BaseModel):
     application_id: int
+    # Fas 4 · valfri BankID-session-token för signering. När angiven
+    # validerar vi att eleven nyligen genomfört BankID med syfte
+    # 'private_loan_sign_{app_id}'. Backend accepterar lånet ENDAST om
+    # token är giltig (eller saknas = legacy fallback för bakåtkompat
+    # i embedded-tester). Frontend skickar alltid in en token.
+    bank_session_token: Optional[str] = None
 
 
 @router.post("/private/accept-from-mail", response_model=PrivateLoanAcceptOut)
@@ -476,9 +482,18 @@ def private_accept_from_mail(
 
     Används från MailDetailV2 där eleven klickar "Acceptera lånet"
     direkt i godkännandebrevet utan att behöva gå till Lånegivaren-
-    vyn och välja konto.
+    vyn och välja konto. Stödjer BankID-signering (Fas 4) via
+    bank_session_token-parametern.
     """
     from ..db.models import Account
+    # Validera BankID-session om token angiven (rekommenderat flöde).
+    if payload.bank_session_token:
+        from .bank import _verify_bank_session
+        _verify_bank_session(
+            info,
+            payload.bank_session_token,
+            required_purpose_prefix=f"private_loan_sign_{payload.application_id}",
+        )
     acc = (
         session.query(Account)
         .filter(Account.type == "checking")
