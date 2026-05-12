@@ -98,7 +98,21 @@ def _build_mail(
     Beloppet är negativt = utgift; positivt = inkomst (ovanligt format
     sett från MailItem som annars bara tar negativa belopp). Vi följer
     konventionen i db.models.MailItem (`amount` signed)."""
-    cost = mit.effective_cost
+    # När försäkring täcker händelsen · eleven måste fortfarande
+    # FRAMSKAFFA hela bruttobeloppet (ny tvättmaskin kostar 8 000 kr
+    # även om försäkringen betalar 6 400 i efterhand). Tidigare visade
+    # vi bara självrisken (effective_cost = 1 600) på fakturan medan
+    # InsuranceClaim skapade en positiv ersättnings-tx på +6 400 →
+    # nettoeffekt blev +4 800 kr UR LUFTEN. Helt orimligt.
+    #
+    # Korrekt verklighet:
+    #   1. Faktura på BRUTTOKOSTNAD 8 000 kr (utgift)
+    #   2. Försäkringsutbetalning +6 400 kr (inkomst, sker via
+    #      claim → tx i roller.py:298 längre ner)
+    #   = Netto -1 600 kr (= självrisken, vad det FAKTISKT kostar)
+    #
+    # Vid INGEN mitigation: cost = base_cost = full kostnad ändå.
+    cost = mit.base_cost if mit.mitigation_used else mit.effective_cost
     is_income = cost < 0  # cost_range gav negativt belopp = bonus etc
     if is_income:
         amount = Decimal(-cost)  # Income = positivt mail-amount
@@ -117,10 +131,18 @@ def _build_mail(
         "",
     ]
     if mit.mitigation_used and mit.mitigation_label:
-        body_lines.append(f"Försäkringsmildring: {mit.mitigation_label}")
+        body_lines.append(f"Försäkring: {mit.mitigation_label}")
         body_lines.append(
-            f"Räknat på orginalbelopp {mit.base_cost:,} kr "
-            f"→ du betalar {mit.effective_cost:,} kr".replace(",", " ")
+            f"Bruttokostnad {mit.base_cost:,} kr"
+            .replace(",", " ")
+        )
+        body_lines.append(
+            f"Försäkringsersättning {mit.base_cost - mit.effective_cost:,} "
+            f"kr · betalas ut separat".replace(",", " ")
+        )
+        body_lines.append(
+            f"Din nettokostnad efter ersättning: "
+            f"{mit.effective_cost:,} kr (självrisk)".replace(",", " ")
         )
     elif cost > 0:
         body_lines.append(
@@ -152,7 +174,10 @@ def _build_mail(
         mail_type=mail_type,
         subject=template.display,
         body_meta=(
-            f"Försäkring täckte" if mit.mitigation_used
+            (
+                f"Brutto {mit.base_cost:,} kr · försäkring "
+                f"{mit.base_cost - mit.effective_cost:,} kr"
+            ).replace(",", " ") if mit.mitigation_used
             else (
                 f"Inkomst {-cost:,} kr".replace(",", " ") if is_income
                 else (
