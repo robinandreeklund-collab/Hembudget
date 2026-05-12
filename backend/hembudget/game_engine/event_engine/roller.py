@@ -130,6 +130,20 @@ def _build_mail(
         body_lines.append("")
         body_lines.append(f"Echo: {template.echo_trigger}")
 
+    # Svensk standard · faktura/bot kommer 3-7 dagar EFTER händelsen
+    # och har 30 dagars betalningstid från fakturadatum. Tidigare hade
+    # vi due_date == occurred_on == received_at, alltså 0 dagar
+    # förfallotid (helt orimligt). Parkeringsbot 7 jan → bot kommer
+    # ~10 jan, ska betalas senast ~10 feb.
+    from datetime import datetime as _dt_ev, time as _time_ev, timedelta as _td_ev
+    payment_terms_days = getattr(template, "payment_terms_days", None) or 30
+    invoice_arrival_days = 3 if cost > 0 else 0  # bot kommer snabbt; info-mail same-day
+    invoice_received_on = occurred_on + _td_ev(days=invoice_arrival_days)
+    due_d = (
+        invoice_received_on + _td_ev(days=payment_terms_days)
+        if (cost or 0) > 0 else None
+    )
+
     return MailItem(
         sender=template.sender,
         sender_short=template.sender_short,
@@ -149,15 +163,15 @@ def _build_mail(
         ),
         body="\n".join(body_lines),
         amount=amount,
-        due_date=occurred_on if (cost or 0) > 0 else None,
+        due_date=due_d,
         status="unhandled",
         released_at=released_at,
         # received_at = SPEL-tid · annars stämplas alla event-mail med
         # real-tid (utcnow) vid seed-körning och eleven ser "7 maj"
         # i postlådan trots att händelsen är i januari.
-        received_at=__import__("datetime").datetime.combine(
-            occurred_on,
-            __import__("datetime").time(10, 0),
+        received_at=_dt_ev.combine(
+            invoice_received_on,
+            _time_ev(10, 0),
         ),
     )
 
