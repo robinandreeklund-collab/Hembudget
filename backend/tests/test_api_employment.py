@@ -168,3 +168,13 @@ def test_terminate_requires_min_reason(fx):
     )
     # 422 från Pydantic-validering (min_length=5)
     assert r.status_code == 422
+
+
+def test_bankruptcy_sweep_requires_teacher(fx):
+    client, a_tok, *_ = fx
+    # Elev kan inte köra global sweep
+    r = client.post(
+        "/v2/employment/sweep/bankruptcies",
+        headers={"Authorization": f"Bearer {a_tok}"},
+    )
+    assert r.status_code == 403

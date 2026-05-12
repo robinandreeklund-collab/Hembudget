@@ -793,6 +793,23 @@ def close_company(
         c.active = False
         c.closed_on = current_game_date()
         s.flush()
+    # Konkurs-detektering · alla aktiva klasskompis-anställningar
+    # avslutas automatiskt med uppsägningsbrev + pentagon-delta.
+    try:
+        if info.student_id is not None:
+            from .employment import (
+                auto_terminate_employments_for_closed_company,
+            )
+            auto_terminate_employments_for_closed_company(
+                owner_student_id=info.student_id,
+                company_id=company_id,
+                reason="Företaget har upphört med sin verksamhet",
+            )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "close_company: auto-terminate misslyckades",
+        )
     return None
 
 

@@ -646,6 +646,130 @@ def decline_offer(
 
 
 # ===========================================================
+# Helper · auto-terminate vid företagsstängning/konkurs (Fas F)
+# ===========================================================
+
+
+def auto_terminate_employments_for_closed_company(
+    *,
+    owner_student_id: int,
+    company_id: int,
+    reason: str = "Företaget har upphört · samtliga anställningar avslutas",
+) -> int:
+    """Avsluta alla aktiva ClassmateEmployments för ett stängt bolag.
+
+    Anropas från foretag.close_company. Returnerar antalet
+    terminerade anställningar. Skickar uppsägningsbrev (utan 30-dgr
+    LAS-buffert · konkurs = omedelbar) till varje anställd.
+    """
+    today_g = current_game_date()
+    closed: list[tuple[int, int, str, str]] = []
+    with master_session() as ms:
+        rows = (
+            ms.query(ClassmateEmployment)
+            .filter(
+                ClassmateEmployment.owner_student_id == owner_student_id,
+                ClassmateEmployment.company_id == company_id,
+                ClassmateEmployment.status == "active",
+            )
+            .all()
+        )
+        for emp in rows:
+            emp.status = "terminated"
+            emp.last_day = today_g
+            emp.termination_reason = reason
+            emp.terminated_company_name = emp.company_name
+            closed.append((
+                emp.id,
+                emp.employee_student_id,
+                emp.role,
+                emp.company_name,
+            ))
+            prof = (
+                ms.query(StudentProfile)
+                .filter(StudentProfile.student_id == emp.employee_student_id)
+                .first()
+            )
+            if prof is not None:
+                prof.employment_status = "unemployed"
+                prof.employment_end_on = today_g
+        ms.commit()
+
+    for emp_id, employee_id, role, company_name in closed:
+        try:
+            _send_mail_to_student(
+                employee_id,
+                sender=company_name,
+                sender_short=company_name[:4],
+                sender_kind="agency",
+                subject=(
+                    f"Konkurs · {company_name} · anställning avslutad"
+                ),
+                body_meta="Företaget har upphört",
+                body=(
+                    f"Tråkigt besked.\n\n"
+                    f"**{company_name}** har upphört med sin verksamhet "
+                    f"(konkurs/likvidation) och samtliga anställningar "
+                    f"avslutas med omedelbar verkan per "
+                    f"{today_g.isoformat()}.\n\n"
+                    f"Du har företrädesrätt vid återanställning i 9 mån "
+                    f"enligt LAS § 25 om bolaget återstartas inom samma "
+                    f"verksamhet.\n\n"
+                    f"Skäl: {reason}\n\n"
+                    f"Vänligen kontakta Arbetsförmedlingen för nästa steg."
+                ),
+                mail_type="authority",
+            )
+        except Exception:
+            log.exception("auto-terminate: brev misslyckades · emp=%s", emp_id)
+        try:
+            log_activity(
+                kind="private.terminated_by_bankruptcy",
+                summary=f"Företaget gick i konkurs · {company_name}",
+                payload={
+                    "employment_id": emp_id,
+                    "company_name": company_name,
+                    "role": role,
+                    "reason": reason,
+                },
+                student_id=employee_id,
+            )
+            log_activity(
+                kind="biz.employments_auto_terminated",
+                summary=(
+                    f"Auto-uppsade {len(closed)} klasskompis vid stängning · "
+                    f"{company_name}"
+                ),
+                payload={
+                    "company_id": company_id,
+                    "n_terminated": len(closed),
+                },
+                student_id=owner_student_id,
+            )
+        except Exception:
+            pass
+        try:
+            from ..game_engine.pentagon import apply_pentagon_delta
+            apply_pentagon_delta(
+                employee_id, axis="safety", requested_delta=-6,
+                reason_kind="bankruptcy",
+                reason_id=emp_id,
+                reason_table="classmate_employments",
+                explanation=f"Konkurs · {company_name}",
+            )
+            apply_pentagon_delta(
+                employee_id, axis="economy", requested_delta=-4,
+                reason_kind="bankruptcy",
+                reason_id=emp_id,
+                explanation="Förlorade inkomst vid konkurs",
+            )
+        except Exception:
+            log.exception("auto-terminate: pentagon misslyckades")
+
+    return len(closed)
+
+
+# ===========================================================
 # Endpoints · Terminate (Fas E)
 # ===========================================================
 
@@ -809,6 +933,79 @@ def terminate_employment(
     with master_session() as ms:
         emp = ms.get(ClassmateEmployment, employment_id)
         return _employment_to_out(emp)
+
+
+# ===========================================================
+# Endpoints · Konkurs-sweep (Fas F)
+# ===========================================================
+
+
+@router.post("/sweep/bankruptcies", response_model=dict)
+def sweep_bankruptcies(info: TokenInfo = Depends(require_token)):
+    """Sök upp ALLA aktiva anställningar vars bolag inte längre är
+    aktivt och auto-avsluta dem. Idempotent · säker att köra ofta.
+
+    Returnerar dict med n_companies_checked + n_employments_terminated.
+    """
+    # Endast lärare eller super-admin · global sweep över alla scopes
+    if info.role != "teacher" and not getattr(info, "is_super_admin", False):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Bara lärare kan köra global konkurs-sweep",
+        )
+
+    n_companies = 0
+    n_terminated = 0
+
+    # Gruppera aktiva employments per owner_student_id för att minimera
+    # antalet scope-byten
+    with master_session() as ms:
+        actives = (
+            ms.query(ClassmateEmployment)
+            .filter(ClassmateEmployment.status == "active")
+            .all()
+        )
+        by_owner: dict[int, list[tuple[int, int]]] = {}
+        for e in actives:
+            by_owner.setdefault(e.owner_student_id, []).append(
+                (e.id, e.company_id),
+            )
+
+    for owner_id, items in by_owner.items():
+        # Hitta unika company_id för denna ägare
+        unique_company_ids = list({c for _, c in items})
+
+        with master_session() as ms:
+            stu = ms.get(Student, owner_id)
+            if stu is None:
+                continue
+            owner_scope = scope_for_student(stu)
+
+        with scope_context(owner_scope):
+            with session_scope() as ss:
+                cos = (
+                    ss.query(Company)
+                    .filter(Company.id.in_(unique_company_ids))
+                    .all()
+                )
+                inactive_ids = [c.id for c in cos if not c.active]
+
+        n_companies += len(inactive_ids)
+        for cid in inactive_ids:
+            count = auto_terminate_employments_for_closed_company(
+                owner_student_id=owner_id,
+                company_id=cid,
+                reason=(
+                    "Bolaget har inte längre aktiv status "
+                    "(konkurs/likvidation/avslutat)"
+                ),
+            )
+            n_terminated += count
+
+    return {
+        "n_companies_inactive": n_companies,
+        "n_employments_terminated": n_terminated,
+    }
 
 
 # ===========================================================
