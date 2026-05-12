@@ -15400,11 +15400,23 @@ def _collect_student_metrics(
                         wb_tuple = None
                 if cached_mail is None:
                     try:
+                        # MÅSTE matcha elevens egen postlåda-räkning:
+                        # 1. status in ("unhandled", "viewed") · elevens
+                        #    summary räknar BÅDA som 'ohanterade' (att
+                        #    eleven öppnat ett brev = inte hanterat).
+                        # 2. _released_filter · framtida mail (released_at
+                        #    > now) ska inte räknas — eleven ser dem ej.
+                        # 3. oldest_days mätt i SPEL-tid · annars visar
+                        #    'Äldsta 188 dgr' fast eleven är i jan och
+                        #    mailet kom i okt (verkliga 90 spel-dagar).
                         items = (
                             s.query(
                                 MailItem.received_at, MailItem.mail_type,
                             )
-                            .filter(MailItem.status == "unhandled")
+                            .filter(
+                                MailItem.status.in_(("unhandled", "viewed"))
+                            )
+                            .filter(_released_filter(MailItem))
                             .order_by(MailItem.received_at.asc())
                             .all()
                         )
@@ -15414,7 +15426,14 @@ def _collect_student_metrics(
                         if items:
                             oldest = items[0][0]
                             if oldest is not None:
-                                delta = datetime.utcnow() - oldest
+                                # Spel-tid · synkat med elev-vyn där
+                                # 'idag' = current_game_date().
+                                today_game = _today_g()
+                                delta = (
+                                    today_game - oldest.date()
+                                    if hasattr(oldest, "date")
+                                    else today_game - oldest
+                                )
                                 oldest_days = max(0, delta.days)
                             has_authority = any(
                                 row[1] == "authority" for row in items
@@ -15514,6 +15533,10 @@ def _prefetch_klass_metrics(
                 authority_case = _sa_case(
                     (_MI.mail_type == "authority", 1), else_=0,
                 )
+                # MÅSTE matcha elevens egen postlåda-räkning · se
+                # _collect_student_metrics för rationale. status in
+                # ("unhandled", "viewed") + _released_filter så
+                # klass-overview visar samma siffror som elev-vyn.
                 mail_rows = (
                     s.query(
                         _MI.tenant_id,
@@ -15522,21 +15545,28 @@ def _prefetch_klass_metrics(
                         _sa_func.max(authority_case),
                     )
                     .filter(
-                        _MI.status == "unhandled",
+                        _MI.status.in_(("unhandled", "viewed")),
                         _MI.tenant_id.in_(missing_mail),
                     )
+                    .filter(_released_filter(_MI))
                     .group_by(_MI.tenant_id)
                     .all()
                 )
                 seen: set[str] = set()
-                now = datetime.utcnow()
+                # SPEL-tid · 'Äldsta är X dgr' ska matcha spel-tiden
+                # eleven befinner sig i, inte real-tid.
+                today_game = _today_g()
                 for tenant, cnt, oldest, has_auth in mail_rows:
                     if tenant is None:
                         continue
                     seen.add(tenant)
                     oldest_days: Optional[int] = None
                     if oldest is not None:
-                        oldest_days = max(0, (now - oldest).days)
+                        oldest_date = (
+                            oldest.date()
+                            if hasattr(oldest, "date") else oldest
+                        )
+                        oldest_days = max(0, (today_game - oldest_date).days)
                     _cache_set(
                         _mailcount_cache, tenant,
                         (int(cnt or 0), oldest_days, bool(has_auth)),
