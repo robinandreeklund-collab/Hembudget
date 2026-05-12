@@ -5122,8 +5122,18 @@ class V2LoanApplyRequest(BaseModel):
     accept_offer: bool = Field(
         default=False,
         description=(
-            "False = bara prövning, ingen Loan skapas. True = eleven "
-            "har sett offerten och vill genomföra (skapar Loan + tx)."
+            "DEPRECATED · använd alltid False och låt eleven sedan "
+            "acceptera via /credit/private/accept-from-mail med "
+            "bank_session_token. När True hoppar vi över BankID-"
+            "signering vilket inte motsvarar verklig låneprocess."
+        ),
+    )
+    bank_session_token: Optional[str] = Field(
+        default=None,
+        description=(
+            "BankID-session-token (purpose='private_loan_sign_<id>'). "
+            "Krävs när accept_offer=True för att förhindra accept "
+            "utan signering."
         ),
     )
 
@@ -5373,6 +5383,32 @@ def post_loan_apply(
         wb_impacts: list[V2WellbeingImpact] = []
 
         if approved and body.accept_offer:
+            # Säkerhetsgate · accept_offer=True kräver BankID-signering
+            # (Fas 4) för att förhindra one-click loan-deposit utan
+            # identitetsverifiering. Token måste ha purpose-prefix
+            # 'private_loan_sign_<application_id>'.
+            if not body.bank_session_token:
+                raise HTTPException(
+                    status.HTTP_401_UNAUTHORIZED,
+                    "BankID-signering krävs · skicka bank_session_token "
+                    "med purpose='private_loan_sign_<application_id>'. "
+                    "Använd helst /credit/private/accept-from-mail-flödet.",
+                )
+            try:
+                from .bank import _verify_bank_session as _vbs_loan
+                _vbs_loan(
+                    info, body.bank_session_token,
+                    required_purpose_prefix=(
+                        f"private_loan_sign_{application.id}"
+                    ),
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(
+                    status.HTTP_401_UNAUTHORIZED,
+                    f"BankID-validering misslyckades: {e}",
+                )
             # Skapa Loan + utbetalningstx + schema
             loan = Loan(
                 name=f"{spec['label']} · {application.simulated_lender}",

@@ -180,29 +180,38 @@ export function LanV2() {
   }
 
   async function acceptApplyOffer() {
-    if (!applyKind || !applyOffer || !applyOffer.approved) return;
-    const amt = parseFloat(
-      applyAmount.replace(/\s/g, "").replace(",", "."),
-    );
-    const term = parseInt(applyTerm, 10);
-    setApplyBusy(true);
+    // Apply-modalen har redan tagit emot ett approved offer via
+    // submitApply(accept_offer=false). Vi accepterar nu via
+    // BankID-signering (Fas 4) · INTE direkt deposit. Eleven har
+    // redan klickat accept i modalen, så vi hoppar över extra
+    // confirm-dialog och initierar BankID-flödet direkt.
+    if (!applyOffer || !applyOffer.approved) return;
+    const appId = applyOffer.application_id;
     setApplyError(null);
+    setPendingMsg(null);
+    setBankErr(null);
+    setBankConfirmed(false);
     try {
-      const res = await v2Api.loanApply({
-        loan_kind: applyKind,
-        amount: amt,
-        term_months: term,
-        purpose: applyPurpose || undefined,
-        debit_account_id: applyAccountId || undefined,
-        accept_offer: true,
+      const s = await v2Api.bankSessionInit(
+        `private_loan_sign_${appId}`,
+      );
+      // Stäng apply-modalen så bara BankID-modalen syns
+      setApplyKind(null);
+      setBankSessionForApp({
+        applicationId: appId,
+        token: s.token,
+        qr_url: s.qr_url,
+        expires_at: s.expires_at,
       });
-      setApplyOffer(res);
-      // Refetcha lan-data så nya lånet syns
-      refresh();
     } catch (e) {
-      setApplyError(String((e as Error)?.message || e));
-    } finally {
-      setApplyBusy(false);
+      const msg = String((e as Error)?.message || e);
+      if (msg.includes("PIN saknas")) {
+        setApplyError(
+          "BankID saknar PIN — sätt först din bank-PIN under /v2/bank-id.",
+        );
+      } else {
+        setApplyError(`Fel vid BankID-init: ${msg}`);
+      }
     }
   }
 
