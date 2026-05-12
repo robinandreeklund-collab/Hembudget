@@ -407,15 +407,36 @@ class QuitJobOut(BaseModel):
     new_employment_status: str
     safety_delta: int
     biz_hours_freed: int
+    employment_end_on: Optional[date] = None
 
 
 @router.post("/quit-private-job", response_model=QuitJobOut)
 def quit_private_job(info: TokenInfo = Depends(require_token)):
-    """Säga upp privat-jobbet · biz-tiden ökar med +44 h/v men privat-
-    pentagon Trygghet sjunker direkt."""
+    """Säga upp privat-jobbet enligt LAS · 1 mån uppsägningstid (default).
+
+    Status sätts till 'self_employed' OM eleven driver ett aktivt
+    bolag, annars 'unemployed'. Anställningen löper formellt ut på
+    employment_end_on (today_game + uppsägningstid) · salary_phase
+    fortsätter generera lön fram till dess.
+    """
     student_id = _require_student(info)
     from ..school.engines import master_session
     from ..school.models import StudentProfile
+    from ..business.game_clock import current_game_date
+    from datetime import timedelta as _td_q
+
+    today_g = current_game_date()
+    # LAS-uppsägningstid · 1 mån default (< 2 års anställning är vanligt
+    # för spelets karaktärer som är 22-30 år gamla). Vi har inte
+    # employment_start_date på profilen så vi hardcodar 1 mån här.
+    notice_days = 30
+    end_on = today_g + _td_q(days=notice_days)
+
+    has_active_business = False
+    old_hours: int = 0
+    old_employer: Optional[str] = None
+    old_profession: Optional[str] = None
+
     with master_session() as ms:
         prof = (
             ms.query(StudentProfile)
@@ -424,72 +445,179 @@ def quit_private_job(info: TokenInfo = Depends(require_token)):
         )
         if prof is None:
             raise HTTPException(404, "Profil saknas")
-        if (getattr(prof, "weekly_hours_employed", 40) or 0) == 0:
-            raise HTTPException(409, "Du har redan inget privat-jobb")
+        current_status = (
+            getattr(prof, "employment_status", None) or "employed"
+        )
+        if current_status != "employed":
+            raise HTTPException(
+                409,
+                f"Du har redan status '{current_status}' · "
+                "ingen aktiv anställning att säga upp.",
+            )
 
-        old_hours = int(prof.weekly_hours_employed or 40)
-        prof.weekly_hours_employed = 0
-        if hasattr(prof, "employment_status"):
-            prof.employment_status = "unemployed"
+        old_hours = int(getattr(prof, "weekly_hours_employed", 40) or 40)
+        old_employer = prof.employer
+        old_profession = prof.profession
+
+        # Detektera aktivt bolag · ägs av eleven, status != 'bankrupt'.
+        try:
+            from ..business.models import Company
+            from ..school.engines import scope_for_student as _sfs_b
+            from ..school.engines import scope_context as _sctx_b
+            from ..db.base import session_scope as _ss_b
+            from ..school.models import Student as _Stu_b
+            stu_b = ms.get(_Stu_b, student_id)
+            if stu_b is not None:
+                scope_key_b = _sfs_b(stu_b)
+                with _sctx_b(scope_key_b):
+                    with _ss_b() as _sb:
+                        co = (
+                            _sb.query(Company)
+                            .filter(Company.is_active.is_(True))
+                            .first()
+                        )
+                        if co is not None:
+                            has_active_business = True
+        except Exception:
+            log.exception(
+                "quit_private_job: kunde inte detektera aktivt bolag",
+            )
+
+        # Sätt employment_end_on + behåll status 'employed' tills
+        # end_on passerats (då auto-skiftar via salary_phase-gaten).
+        # Vi sätter dock NY status direkt så HubV2 visar 'Egenföretagare'
+        # eller 'Söker jobb' utan väntan på end_on.
+        new_status = "self_employed" if has_active_business else "unemployed"
+        prof.employment_status = new_status
+        prof.employment_end_on = end_on
+        if hasattr(prof, "weekly_hours_employed"):
+            prof.weekly_hours_employed = 0
         ms.commit()
 
-    # Privat-pentagon · Trygghet -15
+    # Privat-pentagon · realistiska deltan beroende på fallback-jobb
     try:
         from ..game_engine.pentagon import apply_pentagon_delta
+        if has_active_business:
+            # Egenföretagare · måttlig osäkerhet, frihet positiv
+            apply_pentagon_delta(
+                student_id, axis="safety", requested_delta=-5,
+                reason_kind="private_job_quit",
+                explanation=(
+                    "Sa upp privat-jobb · drivs nu helt av eget bolag · "
+                    "egenföretagar-osäkerhet sänker trygghet."
+                ),
+            )
+            apply_pentagon_delta(
+                student_id, axis="economy", requested_delta=-2,
+                reason_kind="private_job_quit",
+                explanation="Slutar få fast lön efter 1 mån",
+            )
+            apply_pentagon_delta(
+                student_id, axis="leisure", requested_delta=2,
+                reason_kind="private_job_quit",
+                explanation="Frihet från fast jobb-schema",
+            )
+        else:
+            # Arbetslös · större dipp
+            apply_pentagon_delta(
+                student_id, axis="safety", requested_delta=-10,
+                reason_kind="private_job_quit",
+                explanation=(
+                    "Sa upp privat-jobb utan att ha annan inkomstkälla · "
+                    "tryggheten sjunker markant."
+                ),
+            )
+            apply_pentagon_delta(
+                student_id, axis="economy", requested_delta=-5,
+                reason_kind="private_job_quit",
+                explanation="Ingen inkomst efter 1 mån",
+            )
         apply_pentagon_delta(
-            student_id, axis="safety",
-            requested_delta=-15,
+            student_id, axis="social", requested_delta=-1,
             reason_kind="private_job_quit",
-            reason_id=None,
-            reason_table=None,
-            explanation=(
-                "Du sa upp dig från privat-jobbet · "
-                "tryggheten sjunker, men nu har du tid för bolaget."
-            ),
+            explanation="Tappar arbetskollegor",
         )
     except Exception:
         log.exception("apply_pentagon_delta failed för quit_private_job")
 
-    # Generera mail i postlådan
+    # Formellt uppsägningsbrev · ser ut som riktigt bekräftelse-mail
     try:
         from ..db.base import session_scope as _ps
         from ..db.models import MailItem
-        from datetime import datetime as _dt
+        from datetime import datetime as _dt, time as _time_q
+        from ..business.game_clock import current_game_date as _cgd_mail
+        today_for_mail = _cgd_mail()
+        next_action = (
+            "Du driver eget AB · företagsekonomin tar nu fullt ansvar."
+            if has_active_business
+            else (
+                "Du kommer stå utan inkomst · sök nytt jobb via "
+                "/v2/arbetsformedlingen så snart möjligt."
+            )
+        )
         with _ps() as priv_s:
             priv_s.add(MailItem(
-                sender="Maria · HR-chef",
-                sender_short="MARIA",
-                sender_kind="employer",
-                mail_type="info",
-                subject="Du har sagt upp dig",
+                sender=old_employer or "Arbetsgivaren",
+                sender_short=(
+                    (old_employer or "EMP")[:3].upper()
+                ),
+                sender_kind="work",
+                sender_meta="uppsägningsbekräftelse",
+                mail_type="authority",
+                subject=(
+                    f"Uppsägning bekräftad · sista anställningsdag "
+                    f"{end_on.isoformat()}"
+                ),
+                body_meta=f"Sista dag {end_on.isoformat()}",
                 body=(
-                    "Hej. Vi har tagit emot din uppsägning. Sista lönen "
-                    f"betalades ut i månaden. Du går från {old_hours} h/v "
-                    "till heltidsentreprenör.\n\n"
-                    "Konsekvenser för din ekonomi:\n"
-                    f"· Trygghet -15 i pentagon\n"
-                    f"· Lönen från oss försvinner\n"
-                    f"· Du har +{84 - 0} h/v för bolaget\n\n"
-                    "Lycka till. /Maria"
+                    f"Hej {old_profession or 'medarbetare'},\n\n"
+                    f"Vi bekräftar härmed mottagandet av din uppsägning. "
+                    f"Enligt lagen om anställningsskydd (LAS) har du en "
+                    f"uppsägningstid om {notice_days} dagar. Din sista "
+                    f"anställningsdag är **{end_on.strftime('%Y-%m-%d')}**.\n\n"
+                    f"Under uppsägningstiden:\n"
+                    f"· Du har kvar din lön och dina förmåner\n"
+                    f"· Du har företrädesrätt vid återanställning under "
+                    f"9 mån från sista dag\n"
+                    f"· Sista lönespec utbetalas månaden då anställningen "
+                    f"upphör\n\n"
+                    f"Efter sista anställningsdag:\n"
+                    f"{next_action}\n\n"
+                    f"Vi tackar för din tid hos {old_employer or 'oss'} "
+                    f"och önskar dig lycka till framåt.\n\n"
+                    f"Med vänlig hälsning,\n"
+                    f"HR-avdelningen"
                 ),
                 amount=None,
                 due_date=None,
                 status="unhandled",
+                received_at=_dt.combine(today_for_mail, _time_q(9, 0)),
+                released_at=None,
             ))
             priv_s.commit()
     except Exception:
-        log.exception("kunde inte generera quit-mail")
+        log.exception("kunde inte generera uppsägningsbrev")
 
     # Lärar-spårning
     try:
         from ..school.activity import log_activity
+        new_status_label = (
+            "self_employed" if has_active_business else "unemployed"
+        )
         log_activity(
-            kind="private_quit",
+            kind="private.resigned",
             summary=(
-                f"Sa upp sig från privat-jobbet ({old_hours} h/v) · "
-                "satsar fullt på företaget"
+                f"Sa upp sig från {old_employer or 'privat-jobb'} · "
+                f"sista dag {end_on.isoformat()} · → {new_status_label}"
             ),
-            payload={"old_hours": old_hours},
+            payload={
+                "old_employer": old_employer,
+                "old_profession": old_profession,
+                "old_hours": old_hours,
+                "employment_end_on": end_on.isoformat(),
+                "new_status": new_status_label,
+                "has_business": has_active_business,
+            },
         )
     except Exception:
         pass
@@ -497,10 +625,18 @@ def quit_private_job(info: TokenInfo = Depends(require_token)):
     return QuitJobOut(
         ok=True,
         message=(
-            "Du är nu heltidsentreprenör. Trygghet sjönk men du har "
-            "44+ h/v extra för bolaget."
+            f"Uppsägning bekräftad · sista anställningsdag "
+            f"{end_on.isoformat()}. " + (
+                "Du driver eget AB · all inkomst kommer nu från bolaget."
+                if has_active_business
+                else "Sök nytt jobb i Arbetsförmedlingen för att undvika "
+                "ekonomisk dipp."
+            )
         ),
-        new_employment_status="unemployed",
-        safety_delta=-15,
+        new_employment_status=(
+            "self_employed" if has_active_business else "unemployed"
+        ),
+        safety_delta=-5 if has_active_business else -10,
         biz_hours_freed=old_hours,
+        employment_end_on=end_on,
     )

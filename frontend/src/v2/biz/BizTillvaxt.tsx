@@ -759,8 +759,13 @@ function TimeCapacitySection({ onRefresh }: { onRefresh: () => void }) {
     bizConfirm({
       title: "Säga upp privat-jobbet?",
       message:
-        "Konsekvens: Trygghet -15 i pentagon (Maslow-bortfall · " +
-        "stadig inkomst försvinner).\n\n" +
+        "Enligt LAS · 1 mån uppsägningstid. Sista lönespec utbetalas " +
+        "månaden då anställningen upphör. Du har företrädesrätt vid " +
+        "återanställning i 9 mån.\n\n" +
+        "Konsekvenser:\n" +
+        "· Trygghet -5 (du driver eget AB · -10 om du är arbetslös)\n" +
+        "· Ekonomi -2 (slutar få fast lön)\n" +
+        "· Fritid +2 (frihet från jobb-schema)\n\n" +
         "Bonus: +44 h/v frigjorda för bolaget.\n\n" +
         "Detta går inte att ångra.",
       primaryCtaLabel: "Ja, säg upp →",
