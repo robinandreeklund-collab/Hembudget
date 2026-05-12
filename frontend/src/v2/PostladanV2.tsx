@@ -91,7 +91,20 @@ export function PostladanV2() {
   const [data, setData] = useState<MailData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("all");
+  // month-filter · undefined → backend defaultar till aktuell spel-månad
+  // så postlådan inte växer obegränsat. "all" = hela historiken.
+  // "YYYY-MM" = specifik månad. Eleven byter via dropdown ovan flikarna.
+  const [month, setMonth] = useState<string | undefined>(undefined);
+  // Spel-tid · vi behöver veta aktuell spel-månad så månadsväljaren
+  // kan default-markera den + lista månader bakåt.
+  const [gameYm, setGameYm] = useState<string>("2026-01");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    v2Api.gameTime()
+      .then((gt) => setGameYm(gt.year_month))
+      .catch(() => undefined);
+  }, []);
 
   // Stale-response-skydd · när eleven bläddrar snabbt mellan flikarna
   // hinner gamla in-flight-fetches komma tillbaka EFTER att tab bytts.
@@ -100,10 +113,10 @@ export function PostladanV2() {
   // tab-byte och bara accepterar svar från senaste epochen.
   const epochRef = useRef(0);
 
-  function load(currentTab: TabKey) {
+  function load(currentTab: TabKey, currentMonth: string | undefined) {
     const myEpoch = ++epochRef.current;
     v2Api
-      .postladan(TAB_TO_FILTER[currentTab])
+      .postladan(TAB_TO_FILTER[currentTab], currentMonth)
       .then((d) => {
         if (myEpoch !== epochRef.current) return;  // stale, kasta
         setData(d);
@@ -115,11 +128,32 @@ export function PostladanV2() {
   }
 
   useEffect(() => {
-    load(tab);
-    const interval = setInterval(() => load(tab), 30000);
+    load(tab, month);
+    const interval = setInterval(() => load(tab, month), 30000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, month]);
+
+  // Bygg månads-alternativ · 12 spel-månader bakåt från aktuell + 'Alla'
+  const monthOptions: { value: string; label: string }[] = (() => {
+    const [yStr, mStr] = gameYm.split("-");
+    const baseY = parseInt(yStr, 10) || 2026;
+    const baseM = (parseInt(mStr, 10) || 1) - 1;
+    const out: { value: string; label: string }[] = [];
+    for (let i = 0; i < 12; i++) {
+      const dt = new Date(baseY, baseM - i, 1);
+      const value = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+      const label = dt.toLocaleDateString("sv-SE", {
+        month: "long", year: "numeric",
+      });
+      out.push({ value, label: label[0].toUpperCase() + label.slice(1) });
+    }
+    out.push({ value: "all", label: "Hela historiken" });
+    return out;
+  })();
+  // Effektivt valt värde i select:en (matchar backendens default när
+  // eleven inte ändrat något).
+  const selectedMonthValue = month ?? gameYm;
 
   function openMail(item: V2MailItem) {
     // ALLA brev öppnas i detalj-vy. Status sätts till "viewed" av
@@ -317,6 +351,53 @@ export function PostladanV2() {
               {summary.overdue_count === 0 ? "inga försenade" : "försenade"}
             </div>
           </div>
+        </div>
+
+        {/* MÅNADSVÄLJARE · default = aktuell spel-månad så postlådan inte
+            växer obegränsat. Eleven kan välja äldre månad eller hela
+            historiken för att se backlog. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            marginTop: 18,
+            marginBottom: 10,
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 11,
+            letterSpacing: 1.2,
+            textTransform: "uppercase",
+            color: "var(--text-mid)",
+          }}
+        >
+          <label htmlFor="postladan-month" style={{ opacity: 0.7 }}>
+            Period
+          </label>
+          <select
+            id="postladan-month"
+            value={selectedMonthValue}
+            onChange={(e) => {
+              const v = e.target.value;
+              setMonth(v === gameYm ? undefined : v);
+            }}
+            style={{
+              background: "var(--bg-mid, #0f1525)",
+              color: "var(--text)",
+              border: "1px solid var(--line, rgba(255,255,255,0.15))",
+              borderRadius: 6,
+              padding: "6px 12px",
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 11,
+              letterSpacing: 1,
+              cursor: "pointer",
+            }}
+          >
+            {monthOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* TABS */}

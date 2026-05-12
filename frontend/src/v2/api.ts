@@ -4169,16 +4169,17 @@ export const v2Api = {
     api<V2TeacherCreditOverview>(
       `/v2/teacher/students/${studentId}/credit-overview`,
     ),
-  postladan: (filter?: V2MailType | "unhandled" | "other") => {
-    // Browser-cache-buster · utan `_=ts` cachade browsern den NAKNA
-    // /v2/postladan-URL:n (ALLT-fliken) och serverade stale "0 brev"-
-    // response varje gång eleven klickade tillbaka till ALLT efter en
-    // FAKTUROR/OHANTERADE-klick. FAKTUROR-URL:en (?filter=invoice) är
-    // unik och cachas inte → mails dök upp där men ALLT stannade tom.
-    // Lägg till en monotont ökande timestamp så varje request är unik.
+  postladan: (
+    filter?: V2MailType | "unhandled" | "other",
+    month?: string,
+  ) => {
+    // month · "YYYY-MM" begränsar till en spel-månad, "all" visar hela
+    // historiken, undefined = backend defaultar till aktuell spel-månad.
+    // Cache-buster `_=ts` förhindrar browser/CDN att cacha samma URL.
     const ts = Date.now();
     const params = new URLSearchParams();
     if (filter) params.set("filter", filter);
+    if (month) params.set("month", month);
     params.set("_", String(ts));
     return api<MailData>(`/v2/postladan?${params.toString()}`);
   },
