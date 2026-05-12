@@ -197,6 +197,16 @@ export function MailDetailV2() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
+  // Fas 4 · BankID-signering state för lån. MÅSTE deklareras före
+  // alla conditional early-returns annars bryter vi Rules of Hooks
+  // (React kastar och hela vyn blir vitskärm).
+  const [bankIdSession, setBankIdSession] = useState<{
+    token: string;
+    expires_at: string;
+  } | null>(null);
+  const [bankIdPin, setBankIdPin] = useState("");
+  const [bankIdBusy, setBankIdBusy] = useState(false);
+  const [bankIdError, setBankIdError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -294,15 +304,6 @@ export function MailDetailV2() {
         .replace(/_loan_application_id=\d+\n?/g, "")
         .trim()
     : "";
-
-  // Fas 4 · BankID-signering state för lån
-  const [bankIdSession, setBankIdSession] = useState<{
-    token: string;
-    expires_at: string;
-  } | null>(null);
-  const [bankIdPin, setBankIdPin] = useState("");
-  const [bankIdBusy, setBankIdBusy] = useState(false);
-  const [bankIdError, setBankIdError] = useState<string | null>(null);
 
   async function respondToLoanOffer(accept: boolean) {
     if (loanApplicationId == null) return;
