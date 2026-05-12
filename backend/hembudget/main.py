@@ -993,7 +993,30 @@ def _school_bootstrap() -> None:
             # i en bakgrundstråd så startup-hooken returnerar direkt.
             from .school.stock_models import LatestStockQuote
             from .stocks.poller import poll_quotes
-            if s.query(LatestStockQuote).count() == 0:
+            # Bootstrap-poll trigger om:
+            # · LatestStockQuote tom (första container-starten)
+            # · ELLER senaste kurs är > 24 h gammal (deploy efter
+            #   helg, eller poller-tråden dog och datan blev stale)
+            from datetime import datetime as _dt_boot
+            needs_bootstrap_poll = False
+            try:
+                latest = (
+                    s.query(LatestStockQuote)
+                    .order_by(LatestStockQuote.ts.desc())
+                    .first()
+                )
+                if latest is None:
+                    needs_bootstrap_poll = True
+                elif latest.ts is not None:
+                    age_h = (
+                        _dt_boot.utcnow() - latest.ts
+                    ).total_seconds() / 3600
+                    if age_h > 24:
+                        needs_bootstrap_poll = True
+            except Exception:
+                needs_bootstrap_poll = True
+
+            if needs_bootstrap_poll:
                 def _bg_stock_poll():
                     import logging as _log
                     try:

@@ -9639,18 +9639,31 @@ def get_stock_market(
     # uppdateras. Den periodiska schemaläggaren i main.py är primär
     # källan, men om något fel ger gap → eleven får färsk data ändå.
     try:
-        needs_refresh = (
+        # Två cutoffs:
+        # · 10 min · normalt fönster, market-open gaten skyddar
+        # · 6 h · väldigt stale, force=True så vi får data oavsett
+        #   om is_market_open returnerar False (t.ex. om
+        #   MarketCalendar saknar dagen). yfinance ger senast-stängda
+        #   pris efter börstid, så det är OK att kalla med force.
+        stale_min = (
             last_ts is None
             or (now - last_ts) > _td_market(minutes=10)
         )
-        if needs_refresh:
+        very_stale = (
+            last_ts is None
+            or (now - last_ts) > _td_market(hours=6)
+        )
+        if stale_min:
             import threading as _t_refresh
             from ..stocks.poller import poll_quotes as _pq_refresh
 
             def _bg_refresh() -> None:
                 try:
                     with master_session() as _s_r:
-                        _pq_refresh(_s_r, force=False)
+                        # force=True när data är riktigt gammal så vi
+                        # inte fastnar bakom is_market_open-gaten.
+                        # Annars normal poll som hoppar utanför börstid.
+                        _pq_refresh(_s_r, force=very_stale)
                 except Exception:
                     import logging
                     logging.getLogger(__name__).exception(
