@@ -4486,14 +4486,39 @@ def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
             # Räkna alltid om om vi inte har student_id/profile-data
             # i existerande cache (gamla rader använde formel utan
             # ålder/familj/boende = base 100, gav alla A).
+            # Räkna kreditförfrågningar för stale-check · om eleven
+            # nyligen ansökt och check.running_applications inte
+            # speglar det → kreditprofilen är "stale" oavsett tid.
+            from datetime import timedelta as _td_inq_check
+            from ..db.models import CreditApplication as _CA_inq_check
+            inquiry_cutoff_check = _today_g() - _td_inq_check(days=90)
+            running_actual = (
+                s.query(_CA_inq_check)
+                .filter(_CA_inq_check.created_at >= inquiry_cutoff_check)
+                .count()
+            )
             stale = (
                 check is None
                 or (datetime.utcnow() - check.computed_at) > _td(days=7)
                 or check.uc_score_value == 100
+                or check.running_applications != running_actual
             )
             if stale and annual_gross_dec > 0:
+                # Räkna kreditförfrågningar senaste 90 dgr (spel-tid).
+                # Påverkar UC-score · varje hard inquiry sänker poängen
+                # som i verkligheten (UC räknar 12 mån men vi använder
+                # 90 dgr för pedagogisk tighet i en spel-månad).
+                from datetime import timedelta as _td_inq
+                from ..db.models import CreditApplication as _CA_inq
+                inquiry_cutoff = _today_g() - _td_inq(days=90)
+                running_count = (
+                    s.query(_CA_inq)
+                    .filter(_CA_inq.created_at >= inquiry_cutoff)
+                    .count()
+                )
                 check = compute_credit_check(
                     s, annual_gross_dec,
+                    running_applications=running_count,
                     student_id=info.student_id,
                 )
 
@@ -5169,6 +5194,46 @@ def post_loan_apply(
     # Räkna UC + KALP
     with session_scope() as s:
         score_result = _compute_uc_for_apply(s, student_id)
+
+        # Räkna upp CreditApplication-historiken så hard inquiries
+        # syns i kreditprofilen. Sparar också NY CreditCheck-rad direkt
+        # här så /v2/lan-kreditprofilen uppdateras omedelbart efter
+        # apply (annars gäller 7-dagars-cachen från senaste check).
+        from datetime import timedelta as _td_apply
+        from ..db.models import CreditApplication as _CA_apply
+        inquiry_cutoff_apply = _today_g() - _td_apply(days=90)
+        running_count_apply = (
+            s.query(_CA_apply)
+            .filter(_CA_apply.created_at >= inquiry_cutoff_apply)
+            .count()
+        )
+        # Spara CreditCheck så kreditprofilen uppdateras direkt. Hämta
+        # årsinkomst från StudentProfile innan vi öppnar master-session
+        # för KALP nedan.
+        try:
+            with master_session() as ms_apply:
+                _prof_apply = (
+                    ms_apply.query(StudentProfile)
+                    .filter(StudentProfile.student_id == student_id)
+                    .first()
+                )
+                _annual_gross_apply = (
+                    Decimal(_prof_apply.gross_salary_monthly or 0) * 12
+                    if _prof_apply else Decimal("0")
+                )
+            if _annual_gross_apply > 0:
+                compute_credit_check(
+                    s, _annual_gross_apply,
+                    running_applications=running_count_apply,
+                    student_id=student_id,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "post_loan_apply: kunde inte uppdatera CreditCheck "
+                "efter apply · gamla värden stannar i /v2/lan tills "
+                "7-dagars-TTL passerar",
+            )
 
         # KALP
         with master_session() as ms:
