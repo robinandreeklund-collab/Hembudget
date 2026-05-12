@@ -4625,7 +4625,11 @@ def extra_amortering(
                     "kan inte amortera så mycket.",
                 )
 
-        today = _date.today()
+        # SPEL-tid, inte real-tid · annars stämplas tx med "12 maj" när
+        # eleven är i spel-tid "5 jan". Transaction.date måste matcha
+        # spel-tiden så banken/huvudboken visar händelsen i rätt månad.
+        from ..business.game_clock import current_game_date as _cgd_ea
+        today = _cgd_ea()
         idem = (
             f"v2-extra-amort-{loan_id}-{acc.id}-"
             f"{today.isoformat()}-{amount}"
