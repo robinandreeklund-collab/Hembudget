@@ -3893,6 +3893,33 @@ export const v2Api = {
     }>(
       `/stocks/ledger?limit=${limit}${ticker ? `&ticker=${ticker}` : ""}`,
     ),
+  stocksActivity: () => {
+    const ts = Date.now();
+    return api<{
+      recent_trades: Array<{
+        id: number;
+        ticker: string;
+        side: "buy" | "sell";
+        quantity: number;
+        price: number;
+        courtage: number;
+        total_amount: number;
+        realized_pnl: number | null;
+        executed_at: string;
+        student_rationale: string | null;
+      }>;
+      pending_orders: Array<{
+        id: number;
+        ticker: string;
+        side: "buy" | "sell";
+        quantity: number;
+        reference_price: number;
+        status: string;
+        requested_at: string;
+        student_rationale: string | null;
+      }>;
+    }>(`/v2/aktier/activity?_=${ts}`);
+  },
   stocksMarket: () => {
     // Cache-buster · samma URL utan query-string riskerar att cachas
     // av browser/CDN → 'Kurser uppdaterade 2 h sedan' fastnar trots

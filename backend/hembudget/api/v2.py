@@ -9754,6 +9754,116 @@ def get_stock_market(
     )
 
 
+# === /v2/aktier/activity · senaste affärer + kommande köp =========
+
+
+class V2StockTradeRow(BaseModel):
+    """En genomförd aktieaffär · för aktivitetslistan."""
+    id: int
+    ticker: str
+    side: str  # "buy" | "sell"
+    quantity: int
+    price: float
+    courtage: float
+    total_amount: float
+    realized_pnl: Optional[float] = None
+    executed_at: datetime
+    student_rationale: Optional[str] = None
+
+
+class V2PendingOrderRow(BaseModel):
+    """En kö-order som väntar på börsöppning."""
+    id: int
+    ticker: str
+    side: str
+    quantity: int
+    reference_price: float
+    status: str
+    requested_at: datetime
+    student_rationale: Optional[str] = None
+
+
+class V2StockActivityResponse(BaseModel):
+    recent_trades: list[V2StockTradeRow]
+    pending_orders: list[V2PendingOrderRow]
+
+
+@router.get("/aktier/activity", response_model=V2StockActivityResponse)
+def get_stock_activity(
+    info: TokenInfo = Depends(require_token),
+) -> V2StockActivityResponse:
+    """Senaste 5 aktieaffärer + alla pending-orders för aktiehandel-vyn.
+
+    Listan visar pedagogiskt EXEKVERINGSpriset (vid sälj också realized
+    P&L) så eleven kan se hur olika köpdatum + säljpriser ackumulerar
+    portfölj-värdet. Pending-orders är köbeställningar som körs vid
+    nästa marknadsöppning — en pedagogisk poäng om handelstider.
+    """
+    if info.role != "student" or info.student_id is None:
+        return V2StockActivityResponse(recent_trades=[], pending_orders=[])
+
+    from ..db.models import (
+        StockTransaction as _ST_act,
+        PendingOrder as _PO_act,
+    )
+    with session_scope() as s:
+        try:
+            trades_db = (
+                s.query(_ST_act)
+                .order_by(_ST_act.executed_at.desc())
+                .limit(5)
+                .all()
+            )
+            pending_db = (
+                s.query(_PO_act)
+                .filter(_PO_act.status == "pending")
+                .order_by(_PO_act.id.desc())
+                .all()
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "v2/aktier/activity: query misslyckades",
+            )
+            return V2StockActivityResponse(
+                recent_trades=[], pending_orders=[],
+            )
+
+        return V2StockActivityResponse(
+            recent_trades=[
+                V2StockTradeRow(
+                    id=t.id,
+                    ticker=t.ticker,
+                    side=t.side,
+                    quantity=t.quantity,
+                    price=float(t.price),
+                    courtage=float(t.courtage),
+                    total_amount=float(t.total_amount),
+                    realized_pnl=(
+                        float(t.realized_pnl)
+                        if t.realized_pnl is not None else None
+                    ),
+                    executed_at=t.executed_at,
+                    student_rationale=t.student_rationale,
+                )
+                for t in trades_db
+            ],
+            pending_orders=[
+                V2PendingOrderRow(
+                    id=p.id,
+                    ticker=p.ticker,
+                    side=p.side,
+                    quantity=p.quantity,
+                    reference_price=float(p.reference_price),
+                    status=p.status,
+                    requested_at=p.requested_at,
+                    student_rationale=p.student_rationale,
+                )
+                for p in pending_db
+            ],
+        )
+
+
 class V2TeacherAvanzaOverview(BaseModel):
     student_id: int
     student_name: str

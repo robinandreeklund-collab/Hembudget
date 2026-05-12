@@ -37,6 +37,8 @@ export function AktierV2() {
   const [lastUpdatedAt, setLastUpdatedAt] =
     useState<string | null>(null);
   const [avanza, setAvanza] = useState<V2AvanzaData | null>(null);
+  const [activity, setActivity] =
+    useState<Awaited<ReturnType<typeof v2Api.stocksActivity>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
 
@@ -57,6 +59,7 @@ export function AktierV2() {
         setLastUpdatedAt(m.last_updated_at);
       }),
       v2Api.avanza().then(setAvanza),
+      v2Api.stocksActivity().then(setActivity).catch(() => undefined),
     ]).catch((e) => setError(String((e as Error)?.message || e)));
   }
 
@@ -235,6 +238,115 @@ export function AktierV2() {
             }}
           />
         </div>
+
+        {/* Senaste affärer + kommande köp · pedagogisk historik så
+            eleven kan följa sina transaktioner och förstå när
+            kö-order körs vid marknadsöppning. */}
+        {activity && (activity.recent_trades.length > 0
+          || activity.pending_orders.length > 0) && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                activity.pending_orders.length > 0
+                  ? "1fr 1fr" : "1fr",
+              gap: 24,
+              marginBottom: 24,
+            }}
+          >
+            {activity.pending_orders.length > 0 && (
+              <div>
+                <div className="section-eye">
+                  Kommande köp · {activity.pending_orders.length}
+                </div>
+                <table className="huv-table" style={{ width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th>Ticker</th>
+                      <th>Sida</th>
+                      <th className="num">Antal</th>
+                      <th className="num">Ref-pris</th>
+                      <th>Lagd</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activity.pending_orders.map((p) => (
+                      <tr key={p.id}>
+                        <td><strong>{p.ticker}</strong></td>
+                        <td>{p.side === "buy" ? "Köp" : "Sälj"}</td>
+                        <td className="num">{p.quantity}</td>
+                        <td className="num">{SEK(p.reference_price)} kr</td>
+                        <td style={{ fontSize: 11, opacity: 0.7 }}>
+                          {new Date(p.requested_at).toLocaleString("sv-SE", {
+                            day: "numeric", month: "short",
+                            hour: "2-digit", minute: "2-digit",
+                          })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={{ fontSize: 11, opacity: 0.65, marginTop: 6 }}>
+                  Körs vid nästa marknadsöppning · pris bestäms då
+                </p>
+              </div>
+            )}
+            {activity.recent_trades.length > 0 && (
+              <div>
+                <div className="section-eye">
+                  Senaste affärer · {activity.recent_trades.length}
+                </div>
+                <table className="huv-table" style={{ width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th>Datum</th>
+                      <th>Ticker</th>
+                      <th>Sida</th>
+                      <th className="num">Antal × pris</th>
+                      <th className="num">Totalt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activity.recent_trades.map((t) => (
+                      <tr key={t.id}>
+                        <td style={{ fontSize: 11, opacity: 0.8 }}>
+                          {new Date(t.executed_at).toLocaleDateString("sv-SE", {
+                            day: "numeric", month: "short",
+                          })}
+                        </td>
+                        <td><strong>{t.ticker}</strong></td>
+                        <td>{t.side === "buy" ? "Köp" : "Sälj"}</td>
+                        <td className="num" style={{ fontSize: 12 }}>
+                          {t.quantity} × {SEK(t.price)}
+                        </td>
+                        <td className="num">
+                          {t.side === "sell" && t.realized_pnl !== null ? (
+                            <>
+                              {SEK(t.total_amount)}{" "}
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  color: t.realized_pnl >= 0
+                                    ? "#4ade80" : "#fca5a5",
+                                }}
+                              >
+                                ({t.realized_pnl >= 0 ? "+" : ""}
+                                {SEK(t.realized_pnl)})
+                              </span>
+                            </>
+                          ) : (
+                            <>{SEK(t.total_amount)}</>
+                          )}{" "}
+                          kr
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="act-grid">
           <div>
