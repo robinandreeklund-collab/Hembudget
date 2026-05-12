@@ -13080,8 +13080,14 @@ def _build_salary_slip_data(
         )
 
     gross = float(profile.gross_salary_monthly or 0)
-    net = float(profile.net_salary_monthly or 0)
-    tax = gross - net  # förenklat — verklig spec inkluderar pension-justering
+    # Använd faktiska utbetalda nettolön från mail.amount istället för
+    # profile.net_salary_monthly. Annars visar specen "ideal" netto
+    # även när månaden hade sjukavdrag · spec + bank stämmer inte.
+    expected_net = float(profile.net_salary_monthly or 0)
+    actual_net = float(mail.amount or expected_net)
+    sick_deduction = expected_net - actual_net  # positivt om sjuk
+    net = actual_net
+    tax = gross - expected_net  # förenklat — verklig spec inkluderar pension-justering
 
     # OB-tillägg uppskattning: ~1,5 % av brutto för vård-/serviceyrken
     profession_lower = (profile.profession or "").lower()
@@ -13122,10 +13128,20 @@ def _build_salary_slip_data(
             label="OB-tillägg · totalt",
             amount=ob_total, is_total=False,
         ))
+    net_lines.append(V2SalarySlipBreakdownRow(
+        label="Bruttolön", amount=gross, is_total=False,
+    ))
+    # Sjukavdrag/VAB-avdrag · ligger mellan brutto och skatt i en
+    # svensk lönespec (det är arbetsgivarens del · karensavdrag +
+    # sjukavdrag dag 2-14). Endast synlig om mail.amount avviker
+    # från profile.net_salary_monthly.
+    if sick_deduction > 1:  # > 1 kr för att undvika öres-fel
+        net_lines.append(V2SalarySlipBreakdownRow(
+            label="Sjuk-/VAB-avdrag",
+            amount=-round(sick_deduction, 0),
+            is_total=False,
+        ))
     net_lines.extend([
-        V2SalarySlipBreakdownRow(
-            label="Bruttolön", amount=gross, is_total=False,
-        ),
         V2SalarySlipBreakdownRow(
             label="Preliminärskatt (tabell)",
             amount=-(tax + pension_adj), is_total=False,

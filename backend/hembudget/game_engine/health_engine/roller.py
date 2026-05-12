@@ -348,35 +348,71 @@ def apply_health_episode(
     day = rng.randint(2, 25)
     occurred = _ym_to_date(year_month, day)
 
-    # Sjuk/VAB skapar INTE separat MailItem längre — det visas som rad
-    # på lönespec-mailen istället (matchar verkligheten där löneavdrag
-    # är en specifikationsrad, inte ett separat brev). Eleven ser ändå
-    # händelsen via löneavdrags-Transaction i banken/bokföringen.
+    # === Avdrag direkt på lönespec-tx istället för separat 'Löneavdrag' ===
+    #
+    # I Sverige drar arbetsgivaren karensavdrag/sjukavdrag DIREKT på
+    # lönen — det syns som rader på lönespec, inte som en separat
+    # bank-tx. Tidigare skapade vi en separat negativ tx 'Löneavdrag ·
+    # Influensa' vilket gjorde att:
+    #   1) lönespec-mailet ('Nettolön X kr') stämde inte med banksaldot
+    #   2) eleven kunde inte klassa löneavdraget (ingen rimlig kategori)
+    #   3) lärar-pedagogiken speglade inte verkliga lönespecar
+    #
+    # Nu: hitta månadens existerande lön-tx (huvudperson, INTE partner)
+    # och justera dess belopp + lönespec-mailets amount/body. _annotate_
+    # salary_slip nedan hanterar body-uppdateringen.
     tx_id: Optional[int] = None
     if salary_account is not None and gross_loss > 0:
-        released_at = (
-            release_at_for_day(release_base, day)
-            if release_base is not None
-            else None
+        # Hitta huvudpersonens lön-tx för månaden. Partner-tx innehåller
+        # '(partner)' i raw_description och ska INTE drabbas av eleven-
+        # specifik sjukfrånvaro.
+        from sqlalchemy import not_
+        salary_tx = (
+            s.query(Transaction)
+            .filter(Transaction.account_id == salary_account.id)
+            .filter(Transaction.amount > 0)
+            .filter(
+                Transaction.raw_description.like(f"Lön {year_month}%")
+            )
+            .filter(
+                not_(Transaction.raw_description.contains("(partner)"))
+            )
+            .first()
         )
-        tx = Transaction(
-            account_id=salary_account.id,
-            date=occurred,
-            amount=Decimal(-gross_loss),
-            currency="SEK",
-            raw_description=(
-                f"Löneavdrag · {template.display} ({n_days} dagar)"
-            ),
-            normalized_merchant=(
-                "Försäkringskassan" if is_vab else "Arbetsgivaren"
-            ),
-            hash=_stable_hash(student_scope, year_month, template.key, idx),
-            user_verified=True,
-            released_at=released_at,
-        )
-        s.add(tx)
-        s.flush()
-        tx_id = tx.id
+        if salary_tx is not None:
+            salary_tx.amount = salary_tx.amount - Decimal(gross_loss)
+            s.flush()
+            tx_id = salary_tx.id
+        else:
+            # Defensiv fallback · om lön-tx saknas (race med seed-flöde
+            # eller manuell scope-DB) faller vi tillbaka till tidigare
+            # separat-tx-beteende så pengarna i alla fall är korrekta.
+            # Detta är defense-in-depth · händer i praktiken aldrig.
+            released_at = (
+                release_at_for_day(release_base, day)
+                if release_base is not None
+                else None
+            )
+            tx = Transaction(
+                account_id=salary_account.id,
+                date=occurred,
+                amount=Decimal(-gross_loss),
+                currency="SEK",
+                raw_description=(
+                    f"Löneavdrag · {template.display} ({n_days} dagar)"
+                ),
+                normalized_merchant=(
+                    "Försäkringskassan" if is_vab else "Arbetsgivaren"
+                ),
+                hash=_stable_hash(
+                    student_scope, year_month, template.key, idx,
+                ),
+                user_verified=True,
+                released_at=released_at,
+            )
+            s.add(tx)
+            s.flush()
+            tx_id = tx.id
 
     # Pentagon-delta · använd transaction som reason om vi har en,
     # annars logga utan reason_id (event-loggen visar ändå texten).
@@ -540,7 +576,18 @@ def roll_monthly_health_events(
 def _annotate_salary_slip(
     s: Session, *, year_month: str, occs: list[HealthOccurrence],
 ) -> None:
-    """Lägg till en 'Frånvaro denna månad'-sektion i lönespec-mailen."""
+    """Justera lönespec-mailet · lägg till sjuk/VAB-rader i body OCH
+    minska mail.amount + body_meta så specen visar samma netto som
+    bank-tx:n efter avdrag.
+
+    I Sverige funkar lönespec så: bruttolön, sedan karens/sjukavdrag/
+    VAB-avdrag som rader, sedan skatt, sedan EN nettorad. Banken får
+    EN insättning på exakt det nettot. Tidigare visade vår spec det
+    'orörda' nettot trots att vi också skapade en separat 'Löneavdrag'-
+    tx → spec + bank stämde inte överens. Den här fixen justerar
+    specen så det matchar (och separat-tx:n är borttagen i
+    apply_health_episode).
+    """
     # Hitta huvudpersonens lönespec för månaden (inte partner)
     slip = (
         s.query(MailItem)
@@ -566,24 +613,52 @@ def _annotate_salary_slip(
     vab_days = sum(
         o.n_days for o in occs if o.template.kind == "vab"
     )
+    total_loss = sick_total + vab_total
 
-    lines: list[str] = ["", "Frånvaro denna månad"]
+    # Detaljerad avdragsbreakdown · karens/dag2-14/dag15+ per episod.
+    # I verkliga lönespecar redovisas dessa som separata rader. Visa
+    # också vilken typ av frånvaro (Influensa, VAB-RS-virus etc) så
+    # eleven kan koppla avdrag → orsak.
+    lines: list[str] = ["", "Frånvaro & avdrag denna månad"]
+    for o in occs:
+        loss = o.gross_loss
+        if loss <= 0:
+            continue
+        if o.template.kind == "vab":
+            lines.append(
+                f"{o.template.display} · {o.n_days} dgr · "
+                f"VAB-avdrag {-loss:>8,} kr".replace(",", " ")
+            )
+        else:
+            lines.append(
+                f"{o.template.display} · {o.n_days} dgr · "
+                f"sjukavdrag {-loss:>8,} kr".replace(",", " ")
+            )
     if sick_days > 0:
+        lines.append("")
         lines.append(
-            f"Sjukdom ({sick_days} dgr)         "
+            f"Summa sjukavdrag ({sick_days} dgr)       "
             f"{-sick_total:>10,} kr".replace(",", " ")
         )
     if vab_days > 0:
         lines.append(
-            f"VAB ({vab_days} dgr)              "
+            f"Summa VAB-avdrag ({vab_days} dgr)        "
             f"{-vab_total:>10,} kr".replace(",", " ")
         )
-    total_loss = sick_total + vab_total
+
+    original_net = int(slip.amount or 0)
+    new_net = original_net - total_loss
+
     lines.append("")
     lines.append(
-        f"Justerad nettolön efter avdrag "
-        f"{int(slip.amount or 0) - total_loss:>8,} kr".replace(",", " ")
+        f"Nettolön efter avdrag           "
+        f"{new_net:>10,} kr".replace(",", " ")
     )
 
     slip.body = (slip.body or "") + "\n" + "\n".join(lines)
+    # Uppdatera amount och body_meta så list-vyn (Postlådan) också
+    # visar det justerade nettot · annars är 'Nettolön' på listan en
+    # och summan på banken en annan.
+    slip.amount = Decimal(new_net)
+    slip.body_meta = f"Nettolön {new_net:,} kr".replace(",", " ")
     s.flush()
