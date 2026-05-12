@@ -1000,52 +1000,80 @@ def rental_move_in(
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
-        # Skapa uppsägnings-slutfaktura för 3 mån av gamla hyran så
-        # eleven ser kostnaden av att flytta innan kontraktet löper ut.
-        # Pedagogiskt: man slipper inte hyran bara för att man flyttat.
+        # Generera 3 vanliga månadshyror för gamla bostaden under
+        # uppsägningstiden. I Sverige fungerar det så att hyresgästen
+        # är skyldig att betala normal hyra MÅNADSVIS under hela
+        # uppsägningsperioden — det finns ingen "slutfaktura" på
+        # 3 × hyran. Hyresvärden skickar avier som vanligt.
+        #
+        # Varje hyresavi får released_at så den dyker upp i postlådan
+        # på sin riktiga månad (matchar real-tid-projektionen).
         if prev_rent > 0 and prev_home and prev_home.id != home.id:
             try:
-                from ..db.models import MailItem as _MI_slut
+                from ..db.models import MailItem as _MI_avi
                 from ..business.game_clock import current_game_date
-                slut_amount = prev_rent * 3
-                today_g = current_game_date()
-                from datetime import timedelta as _td_slut
-                due_date = today_g + _td_slut(days=30)
-                slut_body = (
-                    f"Slutfaktura · uppsägningstid 3 månader\n\n"
-                    f"Du har sagt upp ditt kontrakt på "
-                    f"{prev_address or 'din gamla bostad'}. "
-                    f"Enligt avtalet har du 3 månaders uppsägningstid "
-                    f"som måste betalas även om du flyttat.\n\n"
-                    f"Månadshyra: {prev_rent:,} kr\n".replace(",", " ")
-                    + f"× 3 månader = {slut_amount:,} kr\n\n".replace(",", " ")
-                    + "Förfaller om 30 dagar. Sätt upp autogiro "
-                    "eller markera som betald via banken."
+                from ..game_engine.release_schedule import (
+                    release_at_for_day,
                 )
-                s.add(_MI_slut(
-                    sender=(
-                        f"{profile.city_key.title()} Bostäder"
-                        if profile.city_key else "Hyresvärden"
-                    ),
-                    sender_short="HYR",
-                    sender_kind="land",
-                    sender_meta="slutfaktura",
-                    mail_type="invoice",
-                    subject=(
-                        f"Slutfaktura · uppsägningstid {slut_amount:,} kr"
-                    ).replace(",", " "),
-                    body_meta=f"Förfaller {due_date.isoformat()}",
-                    body=slut_body,
-                    amount=Decimal(-slut_amount),
-                    due_date=due_date,
-                    status="unhandled",
-                    received_at=datetime.combine(
-                        today_g, datetime.min.time(),
-                    ).replace(hour=10),
-                ))
+                from datetime import datetime as _dt_avi
+                today_g = current_game_date()
+                base_real = _dt_avi.utcnow()
+                landlord = (
+                    f"{profile.city_key.title()} Bostäder"
+                    if profile.city_key else "Hyresvärden"
+                )
+                for offset_month in range(1, 4):
+                    # Spel-månadens första dag · target_month år/månad
+                    target_y = today_g.year
+                    target_m = today_g.month + offset_month
+                    while target_m > 12:
+                        target_m -= 12
+                        target_y += 1
+                    target_d = date(target_y, target_m, 1)
+                    target_ym = f"{target_y:04d}-{target_m:02d}"
+                    # released_at: efter offset_month spel-månader
+                    # = 30 spel-dagar per offset → real-tid via day mapping
+                    released_at = release_at_for_day(
+                        base_real, day_in_month=1 + (offset_month - 1) * 30,
+                    )
+                    s.add(_MI_avi(
+                        sender=landlord,
+                        sender_short="HYR",
+                        sender_kind="land",
+                        sender_meta=(
+                            f"hyresavi · uppsägningstid · {target_ym}"
+                        ),
+                        mail_type="invoice",
+                        subject=(
+                            f"Hyresavi {target_ym} · "
+                            f"{prev_address or 'gamla bostaden'}"
+                        ),
+                        body_meta=(
+                            f"Uppsägningstid · "
+                            f"{prev_rent:,} kr".replace(",", " ")
+                        ),
+                        body=(
+                            f"Hyresavi för {target_ym}\n\n"
+                            f"Trots att du flyttat ut är du skyldig att "
+                            f"betala hyra under uppsägningstiden enligt "
+                            f"hyresavtalet (LH § 5).\n\n"
+                            f"Bostad: {prev_address or 'gamla bostaden'}\n"
+                            f"Månadshyra: {prev_rent:,} kr\n".replace(",", " ")
+                            + f"Förfaller: {target_d.isoformat()} (den 1:a)\n\n"
+                            + f"Detta är månad {offset_month} av 3 i "
+                            + f"uppsägningstiden."
+                        ),
+                        amount=Decimal(-prev_rent),
+                        due_date=target_d,
+                        status="unhandled",
+                        received_at=_dt_avi.combine(
+                            target_d, _dt_avi.min.time(),
+                        ).replace(hour=9),
+                        released_at=released_at,
+                    ))
             except Exception:
                 log.exception(
-                    "rental_move_in: kunde inte skapa slutfaktura",
+                    "rental_move_in: kunde inte skapa hyresavi-serie",
                 )
 
         # Sync StudentProfile (master-DB) så HubV2 + dashboard visar
