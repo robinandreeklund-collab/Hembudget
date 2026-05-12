@@ -2296,12 +2296,18 @@ def _empty_mail(student_id: int) -> V2MailResponse:
 @router.get("/postladan", response_model=V2MailResponse)
 def get_mail(
     filter: Optional[str] = None,
+    month: Optional[str] = None,
     info: TokenInfo = Depends(require_token),
 ) -> V2MailResponse:
-    """Postlådan · alla brev sorterade nyaste först.
+    """Postlådan · brev sorterade nyaste först.
 
     `filter` kan vara: "unhandled", "invoice", "salary_slip",
     "authority", "info", eller None (alla).
+
+    `month` (YYYY-MM) · begränsa till en spel-månad. Default = aktuell
+    spel-månad så postlådan inte blir oöverskådlig efter några spel-
+    månader. Frontend har månadsväljare för att navigera bakåt.
+    Skicka "all" för att se hela historiken.
 
     Demo/teacher får tom payload.
     """
@@ -2358,6 +2364,37 @@ def get_mail(
                 getattr(st, "v2_spend_profile", None) or "balanserad"
             )
 
+    # Bestäm månads-fönster · default = aktuell spel-månad så
+    # postlådan inte växer obegränsat. month="all" → ingen begränsning.
+    # Annars "YYYY-MM" eller fallback till spel-månad.
+    from ..business.game_clock import current_game_date as _cgd_mail
+    today_game_for_month = _cgd_mail()
+    month_window: Optional[tuple[_date, _date]] = None
+    if month != "all":
+        try:
+            if month and "-" in month:
+                y_m, m_m = month.split("-")
+                m_year = int(y_m); m_month = int(m_m)
+            else:
+                m_year = today_game_for_month.year
+                m_month = today_game_for_month.month
+            m_start = _date(m_year, m_month, 1)
+            if m_month == 12:
+                m_end = _date(m_year + 1, 1, 1)
+            else:
+                m_end = _date(m_year, m_month + 1, 1)
+            month_window = (m_start, m_end)
+        except Exception:
+            # Ogiltigt month-värde · fall tillbaka till aktuell spel-månad
+            m_year = today_game_for_month.year
+            m_month = today_game_for_month.month
+            m_start = _date(m_year, m_month, 1)
+            if m_month == 12:
+                m_end = _date(m_year + 1, 1, 1)
+            else:
+                m_end = _date(m_year, m_month + 1, 1)
+            month_window = (m_start, m_end)
+
     try:
         with session_scope() as s:
             q = (
@@ -2367,6 +2404,15 @@ def get_mail(
                     MailItem.received_at.desc(), MailItem.id.desc()
                 )
             )
+            # Månadsfönster · filtrera på received_at:s datumdel mellan
+            # m_start (inkl) och m_end (exkl). Använder cast till date
+            # via func.date() för dialekt-portabilitet.
+            if month_window is not None:
+                from sqlalchemy import func as _sf_month
+                q = q.filter(
+                    _sf_month.date(MailItem.received_at) >= month_window[0],
+                    _sf_month.date(MailItem.received_at) < month_window[1],
+                )
             if filter == "unhandled":
                 # 'Ohanterade' = både unhandled OCH viewed.
                 # Brev som eleven läst men inte aktivt hanterat
@@ -2404,12 +2450,21 @@ def get_mail(
             # räknare. Olika beteende mellan flikar för samma elev
             # förvirrade användaren. Nu kör båda flikarna IDENTISK
             # all_mails-fråga.
-            all_mails = (
+            # all_mails räknar alla tab-counts · måste använda SAMMA
+            # månads-fönster så Allt/Ohanterade/Fakturor visar
+            # konsistent siffror för vald månad.
+            _all_q = (
                 s.query(MailItem)
                 .filter(_released_filter(MailItem))
                 .order_by(MailItem.received_at.desc())
-                .all()
             )
+            if month_window is not None:
+                from sqlalchemy import func as _sf_all
+                _all_q = _all_q.filter(
+                    _sf_all.date(MailItem.received_at) >= month_window[0],
+                    _sf_all.date(MailItem.received_at) < month_window[1],
+                )
+            all_mails = _all_q.all()
 
             today = _date.today()
             unhandled_count = 0
@@ -2620,27 +2675,11 @@ def update_mail_status(
             except Exception:
                 pass
 
-        result = V2MailItemRow(
-            id=m.id,
-            sender=m.sender,
-            sender_short=m.sender_short,
-            sender_kind=m.sender_kind,  # type: ignore[arg-type]
-            sender_meta=m.sender_meta,
-            mail_type=m.mail_type,  # type: ignore[arg-type]
-            subject=m.subject,
-            body_meta=m.body_meta,
-            body=m.body,
-            amount=float(m.amount) if m.amount is not None else None,
-            due_date=m.due_date,
-            received_at=m.received_at,
-            status=m.status,  # type: ignore[arg-type]
-            upcoming_id=m.upcoming_id,
-            transaction_id=m.transaction_id,
-            is_recurring=bool(m.is_recurring),
-            ocr_reference=m.ocr_reference,
-            bankgiro=m.bankgiro,
-            notes=m.notes,
-        )
+        # KRITISKT: använd _mail_to_row så okända sender_kind/mail_type/
+        # status coercas till säkra defaults. Tidigare användes raw
+        # m.sender_kind direkt → 'Markera som hanterat'-knappen på
+        # Länsförsäkringar-brev (sender_kind utanför Literal) gav 500.
+        result = _mail_to_row(m)
     # Bust hub-cachen så ohanterade-räknaren uppdateras direkt
     invalidate_hub_cache(info.student_id)
     return result
@@ -13105,7 +13144,7 @@ _ALLOWED_MAIL_TYPES = frozenset({
     "invoice", "salary_slip", "authority", "reminder", "info",
 })
 _ALLOWED_MAIL_STATUS = frozenset({
-    "unhandled", "viewed", "exported", "paid", "handled",
+    "unhandled", "viewed", "exported", "paid", "expired", "handled",
 })
 
 
