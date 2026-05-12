@@ -400,6 +400,105 @@ def private_decline(payload: DeclineIn, session: Session = Depends(db)) -> dict:
     return {"ok": True, "application_id": app_row.id, "result": app_row.result}
 
 
+# ---------- Pending offers (Fas 2) ----------
+
+
+class PendingLoanOfferOut(BaseModel):
+    application_id: int
+    kind: str
+    requested_amount: float
+    requested_months: int
+    offered_rate: Optional[float] = None
+    offered_monthly_payment: Optional[float] = None
+    simulated_lender: Optional[str] = None
+    score_value: Optional[int] = None
+    created_at: str
+
+
+class PendingLoanOffersOut(BaseModel):
+    offers: list[PendingLoanOfferOut]
+
+
+@router.get("/pending-offers", response_model=PendingLoanOffersOut)
+def list_pending_offers(
+    session: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> PendingLoanOffersOut:
+    """Lista alla godkända men ännu inte accepterade låneerbjudanden
+    för inloggade eleven. Visas i /v2/lan + LanegivarenV2 så eleven
+    hittar tillbaka till accepterandet även efter att modal-flödet
+    stängdes.
+    """
+    rows = (
+        session.query(CreditApplication)
+        .filter(
+            CreditApplication.result == "approved",
+            CreditApplication.resulting_loan_id.is_(None),
+        )
+        .order_by(CreditApplication.created_at.desc())
+        .all()
+    )
+    return PendingLoanOffersOut(
+        offers=[
+            PendingLoanOfferOut(
+                application_id=r.id,
+                kind=r.kind,
+                requested_amount=float(r.requested_amount),
+                requested_months=r.requested_months,
+                offered_rate=(
+                    float(r.offered_rate) if r.offered_rate else None
+                ),
+                offered_monthly_payment=(
+                    float(r.offered_monthly_payment)
+                    if r.offered_monthly_payment else None
+                ),
+                simulated_lender=r.simulated_lender,
+                score_value=r.score_value,
+                created_at=r.created_at.isoformat(),
+            )
+            for r in rows
+        ],
+    )
+
+
+class PrivateLoanAcceptFromMailIn(BaseModel):
+    application_id: int
+
+
+@router.post("/private/accept-from-mail", response_model=PrivateLoanAcceptOut)
+def private_accept_from_mail(
+    payload: PrivateLoanAcceptFromMailIn,
+    session: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> PrivateLoanAcceptOut:
+    """Som /private/accept men slipper kräva deposit_account_id —
+    plockar elevens första checking-konto automatiskt.
+
+    Används från MailDetailV2 där eleven klickar "Acceptera lånet"
+    direkt i godkännandebrevet utan att behöva gå till Lånegivaren-
+    vyn och välja konto.
+    """
+    from ..db.models import Account
+    acc = (
+        session.query(Account)
+        .filter(Account.type == "checking")
+        .order_by(Account.id.asc())
+        .first()
+    )
+    if acc is None:
+        raise HTTPException(
+            400, "Inget lönekonto hittat — gå till Lånegivaren-vyn",
+        )
+    return private_accept(
+        PrivateLoanAcceptIn(
+            application_id=payload.application_id,
+            deposit_account_id=acc.id,
+        ),
+        session=session,
+        info=info,
+    )
+
+
 # ---------- SMS-lån (sista utväg) ----------
 #
 # SMS-lån är medvetet *enkelt att få* men *väldigt dyrt*. Pedagogiken

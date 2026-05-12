@@ -4160,6 +4160,44 @@ export const v2Api = {
       method: "POST",
       body: JSON.stringify(req),
     }),
+  /** Lista alla godkända men ej accepterade låneerbjudanden (Fas 2). */
+  creditPendingOffers: () =>
+    api<{
+      offers: Array<{
+        application_id: number;
+        kind: string;
+        requested_amount: number;
+        requested_months: number;
+        offered_rate: number | null;
+        offered_monthly_payment: number | null;
+        simulated_lender: string | null;
+        score_value: number | null;
+        created_at: string;
+      }>;
+    }>("/credit/pending-offers"),
+  /** Acceptera ett pending privatlån direkt från postlådan
+   * (auto-default till första checking-konto). */
+  creditAcceptFromMail: (applicationId: number) =>
+    api<{
+      loan_id: number;
+      transaction_id: number;
+      deposited_amount: number;
+      monthly_payment: number;
+      interest_rate: number;
+      months: number;
+      pedagogical_note: string;
+    }>("/credit/private/accept-from-mail", {
+      method: "POST",
+      body: JSON.stringify({ application_id: applicationId }),
+    }),
+  creditDecline: (applicationId: number) =>
+    api<{ ok: boolean; application_id: number; result: string }>(
+      "/credit/private/decline",
+      {
+        method: "POST",
+        body: JSON.stringify({ application_id: applicationId }),
+      },
+    ),
   /** Lärar-API · seedа default-katalog (5 produkter). */
   teacherSeedDefaultLoanProducts: (studentId: number) =>
     api<{ student_id: number; products_created: number }>(

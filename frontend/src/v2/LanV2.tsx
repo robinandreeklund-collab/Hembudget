@@ -211,6 +211,53 @@ export function LanV2() {
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
     v2Api.bank(0).then(setBank).catch(() => null);
+    v2Api.creditPendingOffers()
+      .then((d) => setPendingOffers(d.offers))
+      .catch(() => setPendingOffers([]));
+  }
+
+  const [pendingOffers, setPendingOffers] = useState<
+    Array<{
+      application_id: number;
+      kind: string;
+      requested_amount: number;
+      requested_months: number;
+      offered_rate: number | null;
+      offered_monthly_payment: number | null;
+      simulated_lender: string | null;
+      score_value: number | null;
+      created_at: string;
+    }>
+  >([]);
+  const [pendingMsg, setPendingMsg] = useState<string | null>(null);
+
+  async function acceptPendingOffer(applicationId: number) {
+    if (!confirm(
+      "Acceptera lånet?\n\n"
+        + "· Pengarna sätts in på ditt lönekonto direkt\n"
+        + "· Månadsbetalning dras varje månad framöver",
+    )) return;
+    setPendingMsg(null);
+    try {
+      const res = await v2Api.creditAcceptFromMail(applicationId);
+      setPendingMsg(
+        `✓ Lån accepterat · ${SEK(Math.round(res.deposited_amount))} kr insatt. ${res.pedagogical_note}`,
+      );
+      refresh();
+    } catch (e) {
+      setPendingMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    }
+  }
+
+  async function declinePendingOffer(applicationId: number) {
+    if (!confirm("Tacka nej till lånet?")) return;
+    try {
+      await v2Api.creditDecline(applicationId);
+      setPendingMsg("Du tackade nej till lånet.");
+      refresh();
+    } catch (e) {
+      setPendingMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    }
   }
 
   async function executeExtraAmort() {
@@ -581,6 +628,114 @@ export function LanV2() {
               </div>
             )}
           </div>
+        )}
+
+        {/* === PENDING LÅNEERBJUDANDEN (Fas 2) ===
+            Godkända men ej accepterade · syns när eleven har stängt
+            ansök-modalen utan att slutföra eller följt brev-länken
+            från postlådan. Här hittar de tillbaka. */}
+        {pendingOffers.length > 0 && (
+          <>
+            <div
+              className="section-eye"
+              style={{ marginTop: 32, color: "#a78bfa" }}
+            >
+              ● Godkända erbjudanden · väntar på din signering
+            </div>
+            <p
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 13.5,
+                color: "var(--text-mid)",
+                marginTop: 4,
+                marginBottom: 16,
+              }}
+            >
+              Du har {pendingOffers.length} pending lån-erbjudande{pendingOffers.length === 1 ? "" : "n"}.
+              Acceptera för att få pengarna utbetalade på lönekontot,
+              eller tacka nej.
+            </p>
+            <div style={{ display: "grid", gap: 12, marginBottom: 24 }}>
+              {pendingOffers.map((o) => (
+                <div
+                  key={o.application_id}
+                  style={{
+                    padding: 18,
+                    background:
+                      "linear-gradient(135deg, rgba(167,139,250,0.06), rgba(15,21,37,0.55))",
+                    border: "1px solid rgba(167,139,250,0.30)",
+                    borderRadius: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 14, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{
+                        fontFamily: "var(--serif)",
+                        fontSize: 17, fontWeight: 700, color: "#fff",
+                      }}>
+                        {o.simulated_lender || "Långivaren"}{" — "}
+                        <em style={{ color: "var(--warm)" }}>
+                          {SEK(o.requested_amount)} kr
+                        </em>
+                      </div>
+                      <div style={{
+                        fontFamily: "var(--mono)",
+                        fontSize: 11, color: "rgba(255,255,255,0.6)",
+                        marginTop: 6, letterSpacing: 0.5,
+                      }}>
+                        {o.requested_months} mån
+                        {o.offered_rate != null && (
+                          <> · ränta {(o.offered_rate * 100).toFixed(2)} %</>
+                        )}
+                        {o.offered_monthly_payment != null && (
+                          <> · {SEK(Math.round(o.offered_monthly_payment))} kr/mån</>
+                        )}
+                        {o.score_value != null && (
+                          <> · UC {o.score_value}</>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        className="cta-btn"
+                        onClick={() => acceptPendingOffer(o.application_id)}
+                        style={{ border: 0, cursor: "pointer" }}
+                      >
+                        ✓ Acceptera
+                      </button>
+                      <button
+                        type="button"
+                        className="cta-btn ghost"
+                        onClick={() => declinePendingOffer(o.application_id)}
+                        style={{ border: 0, cursor: "pointer" }}
+                      >
+                        ✗ Tacka nej
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {pendingMsg && (
+              <div style={{
+                padding: "10px 14px",
+                marginBottom: 20,
+                borderRadius: 6,
+                border: pendingMsg.startsWith("Fel")
+                  ? "1px solid rgba(252,165,165,0.4)"
+                  : "1px solid rgba(110,231,183,0.4)",
+                background: pendingMsg.startsWith("Fel")
+                  ? "rgba(252,165,165,0.06)"
+                  : "rgba(110,231,183,0.06)",
+                color: pendingMsg.startsWith("Fel") ? "#fca5a5" : "#6ee7b7",
+                fontFamily: "var(--mono)",
+                fontSize: 12,
+              }}>
+                {pendingMsg}
+              </div>
+            )}
+          </>
         )}
 
         {/* === ANSÖK OM NYTT LÅN === */}

@@ -283,9 +283,54 @@ export function MailDetailV2() {
   const employmentOfferId = employmentIdMatch
     ? parseInt(employmentIdMatch[1], 10)
     : null;
+  // Lånegodkännande · body innehåller "_loan_application_id=N"-marker.
+  const loanIdMatch = m.body?.match(/_loan_application_id=(\d+)/);
+  const loanApplicationId = loanIdMatch
+    ? parseInt(loanIdMatch[1], 10)
+    : null;
   const bodyClean = m.body
-    ? m.body.replace(/_employment_id=\d+\n?/g, "").trim()
+    ? m.body
+        .replace(/_employment_id=\d+\n?/g, "")
+        .replace(/_loan_application_id=\d+\n?/g, "")
+        .trim()
     : "";
+
+  async function respondToLoanOffer(accept: boolean) {
+    if (loanApplicationId == null) return;
+    if (accept) {
+      if (
+        !confirm(
+          "Acceptera lånet?\n\n"
+            + "· Lånebeloppet sätts in på ditt lönekonto direkt\n"
+            + "· Månadsbetalning dras varje månad\n"
+            + "· Säkerhetssignera kommer i nästa fas (BankID)\n\n"
+            + "Är du säker?",
+        )
+      ) return;
+    } else {
+      if (!confirm("Tacka nej till lånet?")) return;
+    }
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      if (accept) {
+        const res = await v2Api.creditAcceptFromMail(loanApplicationId);
+        setExportMsg(
+          `✓ Lån accepterat · ${Math.round(res.deposited_amount).toLocaleString("sv-SE")} kr insatt på lönekontot. ${res.pedagogical_note}`,
+        );
+      } else {
+        await v2Api.creditDecline(loanApplicationId);
+        setExportMsg("Du tackade nej till lånet.");
+      }
+      await v2Api.updateMailStatus(id, "handled");
+      const refreshed = await v2Api.mailDetail(id);
+      setData(refreshed);
+    } catch (e) {
+      setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function respondToOffer(accept: boolean) {
     if (employmentOfferId == null) return;
@@ -558,6 +603,31 @@ export function MailDetailV2() {
                     style={{ border: 0, cursor: "pointer" }}
                   >
                     ✗ Tacka nej
+                  </button>
+                </>
+              )}
+              {/* Lånegodkännande · accept / decline · samma mönster
+                  som employment, bara om status fortfarande unhandled
+                  OCH _loan_application_id finns i body. */}
+              {loanApplicationId != null && m.status === "unhandled" && (
+                <>
+                  <button
+                    type="button"
+                    className="cta-btn"
+                    disabled={exporting}
+                    onClick={() => respondToLoanOffer(true)}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    ✓ Acceptera lånet
+                  </button>
+                  <button
+                    type="button"
+                    className="cta-btn ghost"
+                    disabled={exporting}
+                    onClick={() => respondToLoanOffer(false)}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    ✗ Tacka nej till lånet
                   </button>
                 </>
               )}

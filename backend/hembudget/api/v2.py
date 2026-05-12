@@ -5660,9 +5660,13 @@ def _post_loan_decision_mail(
             )
         body_lines.append("")
         body_lines.append(
-            "Acceptera erbjudandet i Lånegivaren-vyn för att starta "
-            "utbetalningen."
+            "Klicka **Acceptera lånet** nedan för att starta "
+            "utbetalningen — eller öppna Lånegivaren-vyn för att se "
+            "alla pending erbjudanden."
         )
+        # Marker som MailDetailV2 parsa:r för att visa Accept/Decline-
+        # knappar direkt i brevet (samma mönster som _employment_id).
+        body_lines.append(f"_loan_application_id={application.id}")
         body_meta = (
             f"Godkänt · ränta {offered_rate * 100:.2f}%"
             if offered_rate is not None else "Godkänt"
