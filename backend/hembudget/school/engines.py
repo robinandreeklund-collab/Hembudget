@@ -181,6 +181,18 @@ def init_master_engine() -> Engine:
                     f"hembudget-master@"
                     f"{__import__('os').environ.get('K_REVISION', 'local')}"
                 ),
+                # Postgres-nivå-timeouts · vid deploy där revision-N och
+                # revision-N+1 överlappar kan startup-tasken
+                # (create_all + _run_master_migrations) fastna i en
+                # ACCESS-EXCLUSIVE-lock-wait på t.ex. students-tabellen
+                # när nya FK-constraints sätts. Utan dessa hänger uvicorn
+                # i 3+ min → TCP-probe DEADLINE_EXCEEDED → deploy fail.
+                # lock_timeout · max wait på ett lås
+                # statement_timeout · max wait på en enskild SQL-statement
+                "options": (
+                    "-c lock_timeout=30000 "
+                    "-c statement_timeout=120000"
+                ),
             },
         )
     engine = create_engine(url, **engine_kwargs)
