@@ -1041,12 +1041,20 @@ def _school_bootstrap() -> None:
                 ).start()
 
             # ===========================================================
-            # Periodisk kurs-poller · uppdaterar LatestStockQuote var 5 min
-            # under börstid. Utan denna stannar kurserna på det pris som
-            # bootstrap-pollen satte → eleven ser samma siffror oavsett
-            # hur länge appen körts. Cloud Scheduler kan också pinga
-            # /stocks/internal/poll-quotes men vi vill inte kräva extern
-            # konfig för att grunddata ska vara levande.
+            # Periodisk kurs-poller · uppdaterar LatestStockQuote var
+            # 90 sek med force=True. Utan denna stannar kurserna på
+            # det pris som bootstrap-pollen satte → eleven ser samma
+            # siffror oavsett hur länge appen körts.
+            #
+            # **force=True** behövs · is_market_open kollar mot vår
+            # MarketCalendar-seed som lätt blir stale (om servern
+            # körts utan restart i > seed-perioden). Utanför börstid
+            # ger yfinance senast-stängda pris vilket är BÄTTRE än
+            # 2 h gamla data.
+            #
+            # **90 sek** · balanserar färskhet vs yfinance-rate-limit.
+            # ~960 polls/dag × 30 tickers = 28 800 anrop/dag. yfinance
+            # tål 2000/h så vi har gott om marginal.
             #
             # daemon=True → tråden stoppar när containern stängs. Cloud
             # Run --max-instances=1 garanterar att bara EN tråd pollar.
@@ -1059,13 +1067,13 @@ def _school_bootstrap() -> None:
                 import logging as _log_p
                 import time as _time_p
                 from .school.engines import master_session as _ms_p
-                # Vänta 60 s första gången så bootstrap-pollen hinner
+                # Vänta 30 s första gången så bootstrap-pollen hinner
                 # klart innan vi börjar konkurrera om DB-locket.
-                _time_p.sleep(60)
+                _time_p.sleep(30)
                 while True:
                     try:
                         with _ms_p() as _s_p:
-                            res = _pq(_s_p, force=False)
+                            res = _pq(_s_p, force=True)
                         if res.get("fetched", 0) > 0:
                             _log_p.getLogger(__name__).info(
                                 "periodic-stock-poll: uppdaterade %d kurser",
@@ -1074,11 +1082,9 @@ def _school_bootstrap() -> None:
                     except Exception:
                         _log_p.getLogger(__name__).exception(
                             "periodic-stock-poll: pollning misslyckades "
-                            "— försöker igen om 5 min",
+                            "— försöker igen om 90 s",
                         )
-                    # 5 min mellan körningar · under börstid blir det
-                    # ~10 polls per dag, well within yfinance/finnhub limits.
-                    _time_p.sleep(300)
+                    _time_p.sleep(90)
 
             _threading_p.Thread(
                 target=_periodic_stock_poll,

@@ -9655,46 +9655,53 @@ def get_stock_market(
             for q in latest.values()
         )
 
-    # Defensiv auto-trigger · om senaste kurs är > 10 min gammal under
-    # börstid (eller > 6 h overall), trigga en bakgrunds-poll så datan
-    # uppdateras. Den periodiska schemaläggaren i main.py är primär
-    # källan, men om något fel ger gap → eleven får färsk data ändå.
+    # Defensiv auto-trigger · om senaste kurs är > 60 s gammal, trigga
+    # en bakgrunds-poll så datan uppdateras. Den periodiska
+    # schemaläggaren i main.py är primär källan (90 sek-intervall) —
+    # detta är en fallback för om tråden dött eller deploy precis
+    # gjorts utan restart.
+    #
+    # Globalt lock + min-30-sek-debounce så vi inte spammar yfinance
+    # när flera elever öppnar sidan samtidigt.
     try:
-        # Två cutoffs:
-        # · 10 min · normalt fönster, market-open gaten skyddar
-        # · 6 h · väldigt stale, force=True så vi får data oavsett
-        #   om is_market_open returnerar False (t.ex. om
-        #   MarketCalendar saknar dagen). yfinance ger senast-stängda
-        #   pris efter börstid, så det är OK att kalla med force.
-        stale_min = (
+        stale = (
             last_ts is None
-            or (now - last_ts) > _td_market(minutes=10)
+            or (now - last_ts) > _td_market(seconds=60)
         )
-        very_stale = (
-            last_ts is None
-            or (now - last_ts) > _td_market(hours=6)
-        )
-        if stale_min:
+        if stale:
             import threading as _t_refresh
+            import time as _time_refresh
             from ..stocks.poller import poll_quotes as _pq_refresh
 
-            def _bg_refresh() -> None:
-                try:
-                    with master_session() as _s_r:
-                        # force=True när data är riktigt gammal så vi
-                        # inte fastnar bakom is_market_open-gaten.
-                        # Annars normal poll som hoppar utanför börstid.
-                        _pq_refresh(_s_r, force=very_stale)
-                except Exception:
-                    import logging
-                    logging.getLogger(__name__).exception(
-                        "v2/aktier/market: bg refresh failed",
-                    )
-            _t_refresh.Thread(
-                target=_bg_refresh,
-                name="v2-market-refresh",
-                daemon=True,
-            ).start()
+            global _last_market_refresh_ts  # type: ignore[name-defined]
+            try:
+                _last_market_refresh_ts  # type: ignore[name-defined]
+            except NameError:
+                _last_market_refresh_ts = 0.0  # type: ignore[name-defined]
+
+            mono_now = _time_refresh.monotonic()
+            # Debounce 30 s · även om 100 elever träffar endpointen
+            # samtidigt körs bara EN poll per 30-sek-fönster.
+            if mono_now - _last_market_refresh_ts > 30:
+                _last_market_refresh_ts = mono_now  # type: ignore[name-defined]
+
+                def _bg_refresh() -> None:
+                    try:
+                        with master_session() as _s_r:
+                            # Alltid force=True · ger oss yfinance-data
+                            # även off-hours (senast-stängda). Bättre
+                            # än stale data.
+                            _pq_refresh(_s_r, force=True)
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "v2/aktier/market: bg refresh failed",
+                        )
+                _t_refresh.Thread(
+                    target=_bg_refresh,
+                    name="v2-market-refresh",
+                    daemon=True,
+                ).start()
     except Exception:
         pass
 
