@@ -25,7 +25,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from ...db.models import InsuranceClaim, InsurancePolicy, MailItem
+from ...db.models import InsuranceClaim, InsurancePolicy, MailItem, Transaction
 from ..difficulty import DifficultyProfile, get_difficulty
 from ..profile_generator.schema import GeneratedProfile
 from ..release_schedule import release_at_for_day
@@ -33,6 +33,74 @@ from .mitigation import MitigationResult, apply_mitigation
 from .templates import EVENT_BY_KEY, EVENT_TEMPLATES, EventTemplate
 
 log = logging.getLogger(__name__)
+
+
+def _add_bonus_to_salary_slip(
+    s: Session,
+    *,
+    year_month: str,
+    bonus_label: str,
+    bonus_amount: int,
+) -> bool:
+    """Lägg arbetsgivar-bonus (övertidsersättning/årsbonus etc) på
+    månadens lönespec istället för att skapa en separat MailItem.
+
+    Speglar verkligheten: arbetsgivare betalar bonus tillsammans med
+    lönen och redovisar det som rader på lönespec — inte som ett
+    separat brev. Samma mönster som health_engine använder för
+    sjukavdrag.
+
+    Returnerar True om lönen + lönespec uppdaterades, False om
+    lönespec/tx saknas (anropare gör då fallback till separat mail).
+    """
+    from sqlalchemy import not_
+    # Hitta huvudpersonens lön-tx för månaden (utan '(partner)'-mark)
+    salary_tx = (
+        s.query(Transaction)
+        .filter(Transaction.amount > 0)
+        .filter(
+            Transaction.raw_description.like(f"Lön {year_month}%")
+        )
+        .filter(
+            not_(Transaction.raw_description.contains("(partner)"))
+        )
+        .first()
+    )
+    slip = (
+        s.query(MailItem)
+        .filter(
+            MailItem.mail_type == "salary_slip",
+            MailItem.subject == f"Lönespec {year_month}",
+            MailItem.sender == "Arbetsgivaren",
+        )
+        .first()
+    )
+    if salary_tx is None or slip is None or not slip.body:
+        return False
+
+    # Justera bank-tx
+    salary_tx.amount = (salary_tx.amount or Decimal(0)) + Decimal(bonus_amount)
+
+    # Annotera lönespec-body
+    new_net = int(slip.amount or 0) + bonus_amount
+    extra_lines = [
+        "",
+        f"Tillägg · {bonus_label}",
+        (
+            f"{bonus_label:<31}"
+            f"{bonus_amount:>10,} kr"
+        ).replace(",", " "),
+        "",
+        (
+            f"Nettolön efter tillägg          "
+            f"{new_net:>10,} kr"
+        ).replace(",", " "),
+    ]
+    slip.body = (slip.body or "") + "\n" + "\n".join(extra_lines)
+    slip.amount = Decimal(new_net)
+    slip.body_meta = f"Nettolön {new_net:,} kr".replace(",", " ")
+    s.flush()
+    return True
 
 MAX_EVENTS_PER_MONTH = 3
 
@@ -298,6 +366,63 @@ def apply_event(
         if release_base is not None
         else None
     )
+
+    # Arbetsgivar-relaterade inkomster (övertidsersättning, årsskifte-
+    # bonus etc) ska INTE bli separata brev i postlådan — det är hur
+    # det faktiskt fungerar i Sverige · övertid + bonus utbetalas
+    # tillsammans med lönen och syns som rader på lönespecen.
+    # Vi följer samma mönster som health_engine för sjuk/VAB:
+    #  - lägg på Transaction.amount för månadens lön-tx
+    #  - annotera lönespec-mailets body + amount + body_meta
+    cost_value = mit.base_cost if mit.mitigation_used else mit.effective_cost
+    is_work_income = (
+        cost_value < 0
+        and template.sender_kind == "work"
+    )
+    if is_work_income:
+        bonus = -cost_value  # positivt belopp
+        bonus_added = _add_bonus_to_salary_slip(
+            s,
+            year_month=year_month,
+            bonus_label=template.display,
+            bonus_amount=bonus,
+        )
+        if bonus_added:
+            # Hoppar över separat mail · all info ligger nu på lönespec
+            from ..pentagon import apply_pentagon_delta
+            from ...school.engines import get_current_actor_student
+            actor = get_current_actor_student()
+            if actor is not None:
+                for axis, delta in (
+                    ("economy", template.pentagon_unmitigated.economy),
+                    ("safety", template.pentagon_unmitigated.safety),
+                    ("health", template.pentagon_unmitigated.health),
+                    ("social", template.pentagon_unmitigated.social),
+                    ("leisure", template.pentagon_unmitigated.leisure),
+                ):
+                    if delta == 0:
+                        continue
+                    try:
+                        apply_pentagon_delta(
+                            actor, axis=axis, requested_delta=delta,
+                            reason_kind="event",
+                            reason_table="mail_items",
+                            explanation=(
+                                f"{template.display} (på lönespec)"
+                            ),
+                        )
+                    except Exception:
+                        pass
+            return EventOccurrence(
+                template_key=template.key,
+                occurred_on=occurred,
+                mail_id=None,
+                claim_id=None,
+                mitigation_used=False,
+                base_cost=cost_value,
+                effective_cost=cost_value,
+            )
+
     mail = _build_mail(
         template=template,
         mit=mit,
