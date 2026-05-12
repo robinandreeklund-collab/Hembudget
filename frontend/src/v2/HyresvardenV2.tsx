@@ -132,7 +132,17 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
   async function terminateContract(id: number) {
     if (!confirm("Säg upp kontraktet?")) return;
     try {
-      await v2Api.rentalPatchContract(id, { status: "terminated" });
+      if (id === -1) {
+        // Virtuellt kontrakt från ActiveHome → använd
+        // boendemarknad-endpointen (samma som "Köpa eller sälja"-
+        // tabben kallar). 3 månaders uppsägning. Båda tabbarna
+        // synkas via ActiveHome som single-source.
+        const now = new Date();
+        const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        await v2Api.boendemarknadTerminate({ year_month: ym });
+      } else {
+        await v2Api.rentalPatchContract(id, { status: "terminated" });
+      }
       await refresh();
     } catch (e) {
       setError(String((e as Error)?.message || e));

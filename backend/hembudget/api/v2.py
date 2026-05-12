@@ -8837,6 +8837,26 @@ def get_rental(
             .order_by(RentalContract.id.desc())
             .first()
         )
+        # Fas 1 · sync ActiveHome ↔ RentalContract. Om eleven har en
+        # ActiveHome med home_type='hyresratt' men ingen RentalContract,
+        # bygg en virtuell contract-respons från ActiveHome-data så
+        # "Hyresavtal & värd"-tabben inte säger "Inget registrerat
+        # boende" när köp-tabben tydligt visar att eleven hyr.
+        active_home_fallback = None
+        if contract is None:
+            try:
+                from ..db.models import ActiveHome as _ActiveHome
+                active_home_fallback = (
+                    s.query(_ActiveHome)
+                    .filter(
+                        _ActiveHome.home_type == "hyresratt",
+                        _ActiveHome.status.in_(("active", "notice_given")),
+                    )
+                    .order_by(_ActiveHome.id.desc())
+                    .first()
+                )
+            except Exception:
+                active_home_fallback = None
         cutoff = _today_g() - _td_r(days=365)
         notices = (
             s.query(RentalNotice)
@@ -8877,6 +8897,50 @@ def get_rental(
                 rent_per_sqm_year = (rent * 12) / area
             if net_salary and net_salary > 0:
                 share_pct = round(rent / net_salary * 100, 1)
+        elif active_home_fallback is not None:
+            # Bygg virtuell contract-respons från ActiveHome-data.
+            # id=-1 signalerar "syntetisk · uppsägning sker via
+            # boendemarknad-endpointen, inte hyresvarden-patch".
+            ah = active_home_fallback
+            virt_status: Literal[
+                "active", "terminated", "considered",
+            ] = (
+                "terminated" if ah.status == "notice_given"
+                else "active"
+            )
+            contract_out = V2RentalContractOut(
+                id=-1,
+                landlord="Hyresvärd · ej registrerad",
+                address=ah.address or f"{ah.city_key}",
+                rooms_label=f"{ah.rooms} rok",
+                area_sqm=float(ah.size_kvm),
+                city=ah.city_key,
+                district=None,
+                contract_type="forsta_hand",
+                duration_type="tillsvidare",
+                monthly_rent=float(ah.monthly_cost or 0),
+                deposit=None,
+                ocr_reference=None,
+                autogiro=True,
+                notice_period_months=3,
+                started_on=ah.entered_on,
+                ended_on=ah.termination_date,
+                queue_years=None,
+                queue_priority=None,
+                market_price_per_sqm=None,
+                status=virt_status,
+                notes=(
+                    "Synkat från boendemarknaden (ActiveHome). "
+                    "Uppsägning sker via 'Säg upp hyreskontraktet'-"
+                    "knappen i 'Köpa eller sälja'-tabben."
+                ),
+            )
+            rent = float(ah.monthly_cost or 0)
+            area = float(ah.size_kvm or 0)
+            if area > 0:
+                rent_per_sqm_year = (rent * 12) / area
+            if net_salary and net_salary > 0:
+                share_pct = round(rent / net_salary * 100, 1)
             mps = (
                 float(contract.market_price_per_sqm)
                 if contract.market_price_per_sqm is not None else None
@@ -8895,7 +8959,10 @@ def get_rental(
         return V2RentalResponse(
             student_id=info.student_id,
             summary=V2RentalSummary(
-                has_active_contract=contract is not None,
+                has_active_contract=(
+                    contract is not None
+                    or active_home_fallback is not None
+                ),
                 monthly_rent=rent,
                 rent_per_sqm_yearly=round(rent_per_sqm_year, 0),
                 rent_share_of_net_pct=share_pct,
