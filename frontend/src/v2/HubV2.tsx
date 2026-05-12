@@ -146,10 +146,17 @@ export function HubV2() {
       ? "Balanserad"
       : "Slösa";
 
-  // Karaktärs-meta
+  // Karaktärs-meta · profession ersätts av status-beroende text
+  // när eleven sagt upp sig / är egenföretagare / arbetslös.
+  const employmentLabel = (() => {
+    const status = character.employment_status || "employed";
+    if (status === "unemployed") return "Söker jobb";
+    if (status === "self_employed") return "Egenföretagare";
+    return character.profession;  // 'employed' · vanlig titel
+  })();
   const metaParts = [
     character.age != null ? `${character.age} år` : null,
-    character.profession,
+    employmentLabel,
     character.city,
     character.family_status,
   ].filter(Boolean);
@@ -642,7 +649,11 @@ export function HubV2() {
               <div className="compass-node-eye">Aktör 02</div>
               <div className="compass-node-name">Arbetsgivaren</div>
               <div className="compass-node-val">
-                {character.employer || "Lön + samtal"}
+                {character.employment_status === "unemployed"
+                  ? "Söker jobb"
+                  : character.employment_status === "self_employed"
+                  ? "Egenföretagare"
+                  : character.employer || "Lön + samtal"}
               </div>
             </Link>
             <Link to="/v2/skatten" className="compass-node alert">

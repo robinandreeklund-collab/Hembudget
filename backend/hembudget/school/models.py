@@ -412,6 +412,28 @@ class StudentProfile(MasterBase):
     net_salary_monthly: Mapped[int] = mapped_column(Integer, nullable=False)
     tax_rate_effective: Mapped[float] = mapped_column(nullable=False)
 
+    # Anställningsstatus · styr om eleven får lön via salary_phase och
+    # hur HubV2/Arbetsgivaren-vyn renderas.
+    #   'employed'      · default · har anställning hos `employer`
+    #   'self_employed' · har sagt upp privat-jobbet, driver eget AB
+    #   'unemployed'    · har inget jobb (uppsagd, konkurs, eller mellan jobb)
+    #
+    # Sätts från startup (employed), uppdateras vid:
+    #   resign-flöde (→ self_employed om eget AB, annars unemployed)
+    #   bankruptcy (→ unemployed)
+    #   hire-classmate-accept (→ employed)
+    #   terminate-classmate (→ unemployed efter last_day)
+    employment_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="employed",
+        server_default="employed",
+    )
+    # När eleven sagt upp sig · sätter sista-dag för LAS-period.
+    # Lön genereras fortfarande fram till detta datum, sedan stoppas
+    # salary_phase. NULL = ingen pågående uppsägning.
+    employment_end_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+
     # Personlighet styr scenario-generatorn
     # "sparsam" | "slosaktig" | "blandad"
     personality: Mapped[str] = mapped_column(

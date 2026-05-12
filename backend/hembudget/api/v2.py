@@ -217,6 +217,11 @@ class HubCharacter(BaseModel):
     gross_salary_monthly: Optional[float] = None
     net_salary_monthly: Optional[float] = None
     personality: Optional[str] = None
+    # Anställnings-status · 'employed' / 'self_employed' / 'unemployed'
+    # Hub-frontend renderar olika beroende: 'Anställd · X', 'Egen
+    # företagare · {company}', 'Söker jobb'.
+    employment_status: str = "employed"
+    employment_end_on: Optional[_date] = None
 
 
 class HubPentagon(BaseModel):
@@ -609,6 +614,14 @@ def _build_hub_response(info: TokenInfo) -> HubResponse:
                 if profile and profile.net_salary_monthly else None
             ),
             personality=profile.personality if profile else None,
+            employment_status=(
+                getattr(profile, "employment_status", None) or "employed"
+                if profile else "employed"
+            ),
+            employment_end_on=(
+                getattr(profile, "employment_end_on", None)
+                if profile else None
+            ),
         )
         v2_level = getattr(student, "v2_level", None) or 1
         v2_spend = getattr(student, "v2_spend_profile", None) or "sparsam"

@@ -566,6 +566,17 @@ def _run_master_migrations(engine: Engine) -> None:
         if "character_last_name" not in sp_cols:
             _add("student_profiles", "character_last_name VARCHAR(60)")
 
+        # === Anställningsstatus (Fas A · uppsägning/konkurs/klasskompis-
+        # anställning) · styr salary_phase + HubV2-rendering ===
+        if "employment_status" not in sp_cols:
+            _add(
+                "student_profiles",
+                "employment_status VARCHAR(20) NOT NULL "
+                "DEFAULT 'employed'",
+            )
+        if "employment_end_on" not in sp_cols:
+            _add("student_profiles", "employment_end_on DATE")
+
         # === Bil + pendling (SKV-3) · 17 nya kolumner ===
         car_cols = [
             ("has_car", "has_car BOOLEAN NOT NULL DEFAULT 0"),

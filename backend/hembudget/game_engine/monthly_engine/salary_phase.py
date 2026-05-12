@@ -194,18 +194,65 @@ def generate_salary_phase(
     name = student_name or profile.name
     summaries = []
 
-    _mail, _tx, main_summary = _create_salary_for(
-        s,
-        person_name=name,
-        yrke_key=profile.yrke_key,
-        gross_monthly=profile.monthly_gross,
-        year_month=year_month,
-        salary_account=salary_account,
-        student_scope=student_scope,
-        is_partner=False,
-        release_base=release_base,
-    )
-    summaries.append(main_summary)
+    # Anställningsstatus-gate · skippa huvudpersonens lön om eleven
+    # sagt upp sig (status='self_employed'/'unemployed') OCH employment_
+    # end_on har passerats. Partner-lön påverkas EJ (partner har sin
+    # egen anställning som vi inte simulerar uppsägning för än).
+    main_employed = True
+    try:
+        from ...school.engines import (
+            master_session as _ms_emp,
+            get_current_actor_student as _gcas_emp,
+        )
+        from ...school.models import StudentProfile as _SP_emp
+        from datetime import date as _d_emp
+        _actor_emp = _gcas_emp()
+        if _actor_emp is not None:
+            with _ms_emp() as _msdb_emp:
+                _prof_emp = (
+                    _msdb_emp.query(_SP_emp)
+                    .filter(_SP_emp.student_id == _actor_emp)
+                    .first()
+                )
+                if _prof_emp is not None:
+                    status = (
+                        getattr(_prof_emp, "employment_status", None)
+                        or "employed"
+                    )
+                    end_on = getattr(_prof_emp, "employment_end_on", None)
+                    ym_y, ym_m = map(int, year_month.split("-"))
+                    ym_last_day = _d_emp(
+                        ym_y, ym_m,
+                        28,  # konservativt 28e så bara hela månader efter
+                        # uppsägningstidens slut räknas som "ingen lön"
+                    )
+                    if status != "employed":
+                        # Status redan annan än anställd
+                        if end_on is None or ym_last_day > end_on:
+                            main_employed = False
+    except Exception:
+        # Defensiv · vid fel · falla tillbaka till anställd så lön
+        # genereras (annars kraschar tick_month tyst för alla elever
+        # som har migrationsproblem).
+        import logging
+        logging.getLogger(__name__).exception(
+            "salary_phase: employment-status-check misslyckades · "
+            "behandlar som 'employed'",
+        )
+
+    if main_employed:
+        _mail, _tx, main_summary = _create_salary_for(
+            s,
+            person_name=name,
+            yrke_key=profile.yrke_key,
+            gross_monthly=profile.monthly_gross,
+            year_month=year_month,
+            salary_account=salary_account,
+            student_scope=student_scope,
+            is_partner=False,
+            release_base=release_base,
+        )
+        summaries.append(main_summary)
 
     if (
         profile.family.partner_yrke_key

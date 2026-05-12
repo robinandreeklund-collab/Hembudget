@@ -54,6 +54,13 @@ export type HubCharacter = {
   gross_salary_monthly: number | null;
   net_salary_monthly: number | null;
   personality: string | null;
+  /** 'employed' (default) | 'self_employed' | 'unemployed' · styr
+   * HubV2-rendering: 'Anställd · X' / 'Egenföretagare · {company}'
+   * / 'Söker jobb'. */
+  employment_status?: "employed" | "self_employed" | "unemployed";
+  /** Datum då pågående anställning upphör (LAS uppsägningstid).
+   * Lön genereras tills detta datum, sedan stoppas salary_phase. */
+  employment_end_on?: string | null;
 };
 
 export type HubPentagon = {
