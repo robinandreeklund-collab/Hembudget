@@ -131,3 +131,19 @@ def test_accept_nonexistent_offer_returns_404(fx):
         headers={"Authorization": f"Bearer {b_tok}"},
     )
     assert r.status_code == 404, r.text
+
+
+def test_payroll_run_without_company_returns_409(fx):
+    client, a_tok, *_ = fx
+    r = client.post(
+        "/v2/employment/payroll/run",
+        headers={"Authorization": f"Bearer {a_tok}"},
+    )
+    # Alice har inget bolag · 409 Conflict
+    assert r.status_code == 409, r.text
+
+
+def test_payroll_run_requires_auth(fx):
+    client, *_ = fx
+    r = client.post("/v2/employment/payroll/run")
+    assert r.status_code in (401, 403)

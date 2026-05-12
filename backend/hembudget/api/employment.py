@@ -26,10 +26,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+import hashlib
+from decimal import Decimal
+
 from ..business.game_clock import current_game_date
-from ..business.models import Company
+from ..business.models import Company, CompanyTransaction
+from ..business.service import EMPLOYER_FEE_DEFAULT
 from ..db.base import session_scope
-from ..db.models import MailItem
+from ..db.models import Account, MailItem, Transaction as PrivTransaction
 from ..school.activity import log_activity
 from ..school.employment_models import ClassmateEmployment
 from ..school.engines import (
@@ -639,3 +643,332 @@ def decline_offer(
     with master_session() as ms:
         emp = ms.get(ClassmateEmployment, employment_id)
         return _employment_to_out(emp)
+
+
+# ===========================================================
+# Endpoints · Payroll-run (Fas D)
+# ===========================================================
+
+
+def _employment_payroll_hash(employment_id: int, year_month: str) -> str:
+    raw = f"classmate_payroll|{employment_id}|{year_month}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _build_payslip_body(
+    *, employee_name: str, role: str, company_name: str,
+    gross: int, prel_tax: int, net: int,
+    employer_fee: int, year_month: str,
+) -> str:
+    return (
+        f"Lönespec {year_month}\n\n"
+        f"Anställd: {employee_name}\n"
+        f"Befattning: {role}\n"
+        f"Arbetsgivare: {company_name}\n\n"
+        f"Bruttolön                      {gross:>10,} kr\n".replace(",", " ")
+        + f"Prel. A-skatt (30 %)           {prel_tax:>10,} kr\n".replace(",", " ")
+        + f"------------------------------ -----------\n"
+        + f"Nettolön (utbetalas 25:e)      {net:>10,} kr\n".replace(",", " ")
+        + f"\n"
+        + f"(Arbetsgivaravgift {employer_fee:,} kr betalas av {company_name})"
+        .replace(",", " ")
+    )
+
+
+def _pay_one_employee_in_scope(
+    emp: ClassmateEmployment,
+    *,
+    year_month: str,
+    paid_on: date,
+) -> dict:
+    """Skapa lönespec + lön-in-tx i den ANSTÄLLDES scope-DB. Anropas
+    inom scope_context(employee_scope). Idempotent via hash."""
+    gross = emp.monthly_gross
+    prel_tax_d = (Decimal(gross) * Decimal("0.30")).quantize(Decimal("1"))
+    prel_tax = int(prel_tax_d)
+    net = gross - prel_tax
+    fee_d = (Decimal(gross) * EMPLOYER_FEE_DEFAULT).quantize(Decimal("1"))
+    employer_fee = int(fee_d)
+
+    tx_hash = _employment_payroll_hash(emp.id, year_month)
+
+    with session_scope() as scope_s:
+        existing_tx = (
+            scope_s.query(PrivTransaction)
+            .filter(PrivTransaction.hash == tx_hash)
+            .first()
+        )
+        if existing_tx is not None:
+            return {
+                "employment_id": emp.id,
+                "status": "already_paid",
+                "net": net,
+            }
+
+        acc = (
+            scope_s.query(Account)
+            .filter(Account.type == "checking")
+            .order_by(Account.id.asc())
+            .first()
+        )
+        if acc is None:
+            return {
+                "employment_id": emp.id,
+                "status": "skipped_no_account",
+                "net": net,
+            }
+
+        scope_s.add(PrivTransaction(
+            account_id=acc.id,
+            date=paid_on,
+            amount=Decimal(net),
+            currency="SEK",
+            raw_description=(
+                f"Lön {year_month} · {emp.role} · {emp.company_name}"
+            ),
+            normalized_merchant=emp.company_name,
+            hash=tx_hash,
+            user_verified=True,
+        ))
+
+        body = _build_payslip_body(
+            employee_name=f"#{emp.employee_student_id}",
+            role=emp.role,
+            company_name=emp.company_name,
+            gross=gross,
+            prel_tax=prel_tax,
+            net=net,
+            employer_fee=employer_fee,
+            year_month=year_month,
+        )
+        received_at = datetime.combine(
+            paid_on, datetime.min.time(),
+        ).replace(hour=9)
+        scope_s.add(MailItem(
+            sender=emp.company_name,
+            sender_short=emp.company_name[:4].upper(),
+            sender_kind="work",
+            sender_meta=f"lönespec · {year_month}",
+            mail_type="salary_slip",
+            subject=f"Lönespec {year_month} · {emp.company_name}",
+            body_meta=f"Nettolön {net:,} kr".replace(",", " "),
+            body=body,
+            amount=Decimal(net),
+            due_date=paid_on,
+            status="unhandled",
+            received_at=received_at,
+        ))
+
+    return {
+        "employment_id": emp.id,
+        "status": "paid",
+        "gross": gross,
+        "net": net,
+        "employer_fee": employer_fee,
+    }
+
+
+def _book_payroll_in_owner_scope(
+    *,
+    company_id: int,
+    paid_on: date,
+    total_cost: int,
+    n_employees: int,
+    year_month: str,
+) -> None:
+    """Bokför löneutbetalningen som CompanyTransaction (kind=salary)
+    i ägarens scope-DB. Idempotent via notes-marker."""
+    with session_scope() as s:
+        marker = f"classmate_payroll|{year_month}"
+        existing = (
+            s.query(CompanyTransaction)
+            .filter(
+                CompanyTransaction.company_id == company_id,
+                CompanyTransaction.kind == "salary",
+                CompanyTransaction.notes == marker,
+            )
+            .first()
+        )
+        if existing is not None:
+            return
+        s.add(CompanyTransaction(
+            company_id=company_id,
+            occurred_on=paid_on,
+            kind="salary",
+            category="Klasskompis-löner",
+            description=(
+                f"Löner {year_month} · {n_employees} anställda klasskompisar"
+            ),
+            amount_excl_vat=Decimal(total_cost),
+            vat_rate=Decimal("0.0"),
+            vat_amount=Decimal("0.0"),
+            notes=marker,
+        ))
+
+
+class PayrollRunOut(BaseModel):
+    year_month: str
+    paid_on: date
+    n_paid: int
+    n_skipped: int
+    total_gross: int
+    total_net: int
+    total_employer_fee: int
+    total_cost: int
+    details: list[dict]
+
+
+@router.post("/payroll/run", response_model=PayrollRunOut)
+def run_classmate_payroll(
+    year_month: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+):
+    """Kör månadens lön för alla aktiva klasskompis-anställningar.
+
+    Idempotent · samma year_month två gånger är no-op (markerar
+    redan-betalda som 'already_paid').
+
+    `year_month`: "YYYY-MM" — default nuvarande spel-månad.
+    """
+    owner_id = _require_student_id(info)
+    today_g = current_game_date()
+    if year_month is None:
+        ym = today_g.strftime("%Y-%m")
+    else:
+        ym = year_month
+    try:
+        y_s, m_s = ym.split("-")
+        paid_on = date(int(y_s), int(m_s), 25)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "year_month måste vara YYYY-MM")
+
+    co = _get_owner_active_company(owner_id)
+    if co is None:
+        raise HTTPException(409, "Du har inget aktivt bolag")
+    company_id = co.id
+    company_name = co.name
+
+    with master_session() as ms:
+        actives = (
+            ms.query(ClassmateEmployment)
+            .filter(
+                ClassmateEmployment.owner_student_id == owner_id,
+                ClassmateEmployment.status == "active",
+            )
+            .all()
+        )
+        snapshots = [
+            {
+                "id": e.id,
+                "employee_student_id": e.employee_student_id,
+                "role": e.role,
+                "monthly_gross": e.monthly_gross,
+                "company_name": e.company_name,
+            }
+            for e in actives
+        ]
+
+    details: list[dict] = []
+    total_gross = 0
+    total_net = 0
+    total_fee = 0
+    n_paid = 0
+    n_skipped = 0
+
+    for snap in snapshots:
+        proxy = ClassmateEmployment(
+            id=snap["id"],
+            owner_student_id=owner_id,
+            company_id=company_id,
+            company_name=snap["company_name"],
+            employee_student_id=snap["employee_student_id"],
+            role=snap["role"],
+            monthly_gross=snap["monthly_gross"],
+            status="active",
+        )
+        with master_session() as ms:
+            stu = ms.get(Student, snap["employee_student_id"])
+            if stu is None:
+                n_skipped += 1
+                details.append({
+                    "employment_id": snap["id"],
+                    "status": "skipped_student_missing",
+                })
+                continue
+            employee_scope = scope_for_student(stu)
+
+        try:
+            with scope_context(employee_scope):
+                result = _pay_one_employee_in_scope(
+                    proxy, year_month=ym, paid_on=paid_on,
+                )
+        except Exception:
+            log.exception(
+                "payroll: _pay_one_employee misslyckades · emp=%s",
+                snap["id"],
+            )
+            n_skipped += 1
+            details.append({"employment_id": snap["id"], "status": "error"})
+            continue
+
+        details.append(result)
+        if result["status"] == "paid":
+            n_paid += 1
+            total_gross += result["gross"]
+            total_net += result["net"]
+            total_fee += result["employer_fee"]
+        else:
+            n_skipped += 1
+
+    total_cost = total_gross + total_fee
+
+    if n_paid > 0:
+        try:
+            owner_scope = None
+            with master_session() as ms:
+                ostu = ms.get(Student, owner_id)
+                if ostu is not None:
+                    owner_scope = scope_for_student(ostu)
+            if owner_scope is not None:
+                with scope_context(owner_scope):
+                    _book_payroll_in_owner_scope(
+                        company_id=company_id,
+                        paid_on=paid_on,
+                        total_cost=total_cost,
+                        n_employees=n_paid,
+                        year_month=ym,
+                    )
+        except Exception:
+            log.exception(
+                "payroll: bokföring i ägar-scope misslyckades",
+            )
+
+    try:
+        log_activity(
+            kind="biz.payroll_run",
+            summary=(
+                f"Körde lön {ym} · {n_paid} klasskompisar · "
+                f"totalkost {total_cost} kr"
+            ),
+            payload={
+                "year_month": ym,
+                "n_paid": n_paid,
+                "total_cost": total_cost,
+                "company_name": company_name,
+            },
+            student_id=owner_id,
+        )
+    except Exception:
+        pass
+
+    return PayrollRunOut(
+        year_month=ym,
+        paid_on=paid_on,
+        n_paid=n_paid,
+        n_skipped=n_skipped,
+        total_gross=total_gross,
+        total_net=total_net,
+        total_employer_fee=total_fee,
+        total_cost=total_cost,
+        details=details,
+    )

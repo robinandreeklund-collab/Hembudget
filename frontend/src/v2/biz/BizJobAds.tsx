@@ -144,6 +144,9 @@ export function BizJobAds() {
         <button onClick={() => setShowDirectHire(true)} style={btnGhost}>
           ★ Direktanställ klasskompis
         </button>
+        {classmateEmployments.some((e) => e.status === "active") && (
+          <PayrollButton onDone={refresh} />
+        )}
       </div>
 
       {open.length > 0 && (
@@ -322,6 +325,63 @@ export function BizJobAds() {
         }} />
       )}
     </BizActorShell>
+  );
+}
+
+
+function PayrollButton({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run() {
+    if (
+      !confirm(
+        "Kör månadens lön för alla aktiva klasskompis-anställningar?\n\n"
+          + "· Pengarna dras från företagets kassa (lön + arbetsgivaravgift 31,42 %)\n"
+          + "· Lönespec landar i varje anställdas postlåda\n"
+          + "· Nettolönen sätts in på deras lönekonto den 25:e\n\n"
+          + "Idempotent — kan köras flera gånger samma månad utan dubbla utbetalningar.",
+      )
+    ) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await api<{
+        n_paid: number;
+        n_skipped: number;
+        total_cost: number;
+        year_month: string;
+      }>("/v2/employment/payroll/run", { method: "POST", body: "{}" });
+      setResult(
+        `✓ Lön ${r.year_month}: ${r.n_paid} utbetalda`
+          + (r.n_skipped > 0 ? ` (${r.n_skipped} skippade)` : "")
+          + ` · totalkost ${SEK(r.total_cost)} kr`,
+      );
+      onDone();
+    } catch (e) {
+      setResult(`Fel: ${(e as Error).message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button onClick={run} disabled={busy} style={btnGhost}>
+        {busy ? "Kör lön…" : "$ Kör månadens lön"}
+      </button>
+      {result && (
+        <span style={{
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 10,
+          color: result.startsWith("Fel") ? "#fda594" : "#6ee7b7",
+          alignSelf: "center",
+          marginLeft: 8,
+        }}>
+          {result}
+        </span>
+      )}
+    </>
   );
 }
 

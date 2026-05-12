@@ -4315,6 +4315,30 @@ export const v2Api = {
       method: "POST",
       body: JSON.stringify({ reason: reason ?? null }),
     }),
+  employmentPayrollRun: (yearMonth?: string) =>
+    api<PayrollRunOut>(
+      "/v2/employment/payroll/run"
+        + (yearMonth ? `?year_month=${yearMonth}` : ""),
+      { method: "POST", body: JSON.stringify({}) },
+    ),
+};
+
+export type PayrollRunOut = {
+  year_month: string;
+  paid_on: string;
+  n_paid: number;
+  n_skipped: number;
+  total_gross: number;
+  total_net: number;
+  total_employer_fee: number;
+  total_cost: number;
+  details: Array<{
+    employment_id: number;
+    status: string;
+    gross?: number;
+    net?: number;
+    employer_fee?: number;
+  }>;
 };
 
 export type EmploymentOut = {
