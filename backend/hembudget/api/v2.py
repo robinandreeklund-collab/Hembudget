@@ -5423,6 +5423,29 @@ def post_loan_apply(
 
             loan_id = loan.id
 
+        # Skapa formellt lånebesked-mail i postlådan · skickas av
+        # 'långivaren' med all relevant info (ränta, månadsbetalning,
+        # KALP-resultat, UC-score). Speglar verkligheten där UC/bank
+        # alltid skickar besked via brev/säkrade meddelanden.
+        try:
+            _post_loan_decision_mail(
+                s, application=application, spec=spec,
+                approved=approved,
+                reason=decline_reason,
+                score=score_result.score,
+                grade=score_result.grade,
+                offered_rate=offered_rate if approved else None,
+                monthly_payment=(
+                    monthly_payment if approved else None
+                ),
+                kalp_passed=kalp.passed,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "post_loan_apply: kunde inte skapa låne­besked-mail",
+            )
+
         s.commit()
 
     # === Wellbeing-deltas (master-DB) ===
@@ -5548,6 +5571,122 @@ def _map_kind_to_db(api_kind: str) -> str:
     }.get(api_kind, "other")
 
 
+def _post_loan_decision_mail(
+    scope_session: Session,
+    *,
+    application: "CreditApplication",
+    spec: dict,
+    approved: bool,
+    reason: Optional[str] = None,
+    score: Optional[int] = None,
+    grade: Optional[str] = None,
+    offered_rate: Optional[float] = None,
+    monthly_payment: Optional[Decimal] = None,
+    kalp_passed: Optional[bool] = None,
+) -> None:
+    """Skapa MailItem i postlådan med formellt besked om låneansökan.
+
+    Speglar verkligheten · UC/bank skickar alltid ett skriftligt besked
+    (avslag eller godkännande) som du kan referera till. Pedagogiskt:
+    eleven får 'pappret i handen' och kan jämföra olika ansökningar
+    över tid.
+    """
+    from ..db.models import MailItem as _MI_loan
+    lender = application.simulated_lender or "Långivaren"
+    today = _today_g()
+    amount = int(application.requested_amount or 0)
+    label = spec.get("label") if spec else application.kind
+
+    if approved:
+        subject = f"Lånebesked · {label} {amount:,} kr".replace(",", " ")
+        body_lines = [
+            f"Hej!",
+            "",
+            (
+                f"Din ansökan om {label} på {amount:,} kr "
+                f"har **godkänts**."
+            ).replace(",", " "),
+            "",
+            f"Långivare: {lender}",
+        ]
+        if offered_rate is not None:
+            body_lines.append(
+                f"Ränta: {offered_rate * 100:.2f} %"
+            )
+        if monthly_payment is not None:
+            body_lines.append(
+                f"Månadsbetalning: "
+                f"{int(monthly_payment):,} kr/mån".replace(",", " ")
+            )
+        body_lines.append(
+            f"Löptid: {application.requested_months} månader"
+        )
+        if score is not None:
+            body_lines.append("")
+            body_lines.append(
+                f"UC-score vid prövning: {score} ({grade or '—'})"
+            )
+        body_lines.append("")
+        body_lines.append(
+            "Acceptera erbjudandet i Lånegivaren-vyn för att starta "
+            "utbetalningen."
+        )
+        body_meta = (
+            f"Godkänt · ränta {offered_rate * 100:.2f}%"
+            if offered_rate is not None else "Godkänt"
+        )
+    else:
+        subject = f"Avslag · {label} {amount:,} kr".replace(",", " ")
+        body_lines = [
+            f"Hej!",
+            "",
+            (
+                f"Din ansökan om {label} på {amount:,} kr "
+                f"har tyvärr **avslagits**."
+            ).replace(",", " "),
+            "",
+            f"Långivare: {lender}",
+        ]
+        if reason:
+            body_lines.extend(["", f"Anledning: {reason}"])
+        if score is not None:
+            body_lines.extend([
+                "",
+                f"UC-score vid prövning: {score} ({grade or '—'})",
+            ])
+            if kalp_passed is False:
+                body_lines.append(
+                    "KALP-test (7 % stresstest): underkänd · "
+                    "månadskostnaden täcker inte boende + levnad."
+                )
+        body_lines.extend([
+            "",
+            "Avslaget påverkar din UC-score under 90 dagar. Vänta "
+            "med nya ansökningar tills din ekonomi förbättrats.",
+        ])
+        body_meta = f"Avslag · {reason[:40]}" if reason else "Avslag"
+
+    mail = _MI_loan(
+        sender=lender,
+        sender_short=(lender[:3] or "BNK").upper(),
+        sender_kind="agency",
+        sender_meta=f"låne­besked · {today.isoformat()}",
+        mail_type="authority",
+        subject=subject,
+        body_meta=body_meta,
+        body="\n".join(body_lines),
+        amount=None,
+        due_date=None,
+        status="unhandled",
+        received_at=datetime.combine(today, datetime.min.time()).replace(
+            hour=10,
+        ),
+        released_at=None,  # synlig direkt
+    )
+    scope_session.add(mail)
+    scope_session.flush()
+
+
 def _loan_apply_decline(
     student_id: int,
     body: V2LoanApplyRequest,
@@ -5568,6 +5707,18 @@ def _loan_apply_decline(
             decided_at=datetime.utcnow(),
         )
         s.add(application)
+        s.flush()
+        # Skicka avslagsbrev till postlådan · samma som UC i verkligheten.
+        try:
+            _post_loan_decision_mail(
+                s, application=application, spec=spec,
+                approved=False, reason=reason,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "_loan_apply_decline: kunde inte skapa avslagsbrev",
+            )
         s.commit()
         from ..school.activity import log_activity
         log_activity(
