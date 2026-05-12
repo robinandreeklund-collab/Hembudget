@@ -192,10 +192,10 @@ def init_master_engine() -> Engine:
             cur.execute("PRAGMA foreign_keys = ON")
             cur.close()
 
-    # Importera CompanyEmployment så create_all() ser tabellen ·
-    # MasterBase är delad och får inte tabeller registrerade utan
-    # import. (Game-event-models och bank-models följer samma mönster.)
-    from . import employment_models  # noqa: F401
+    # ClassmateEmployment registreras via .models (som re-importerar
+    # employment_models i slutet av filen, samma mönster som bank_models
+    # och game_engine_models). create_all() ser därför tabellen utan
+    # att vi behöver importera den här.
 
     # Bulletproof: även om create_all eller migrationerna failar
     # MÅSTE engine cachas så hela appen inte 500:ar varje request.
@@ -571,14 +571,11 @@ def _run_master_migrations(engine: Engine) -> None:
         if "character_last_name" not in sp_cols:
             _add("student_profiles", "character_last_name VARCHAR(60)")
 
-        # === Anställningsstatus (Fas A · uppsägning/konkurs/klasskompis-
-        # anställning) · styr salary_phase + HubV2-rendering ===
-        if "employment_status" not in sp_cols:
-            _add(
-                "student_profiles",
-                "employment_status VARCHAR(20) NOT NULL "
-                "DEFAULT 'employed'",
-            )
+        # === employment_end_on (Fas A) · employment_status migreras
+        # längre ned i Sprint 8-blocket (rad 688), behåll INTE en duplikat
+        # här eftersom dubbel-ALTER kan hänga en parallell Cloud SQL-
+        # session i transaktionen om revision-N och revision-N+1
+        # överlappar under deploy.
         if "employment_end_on" not in sp_cols:
             _add("student_profiles", "employment_end_on DATE")
 

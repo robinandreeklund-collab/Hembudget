@@ -1876,3 +1876,7 @@ from . import bank_models as _bank_models  # noqa: E402, F401
 # Spelmotor-tabeller (ClassCalendar driver Monthly Engine-tickarna).
 # Spec: dev/game-motor/12-data-modeller.md
 from . import game_engine_models as _game_engine_models  # noqa: E402, F401
+
+# Klasskompis-anställning (Fas C) · ClassmateEmployment binder ägare +
+# anställd i olika scope-DB:s via master-DB-tabellen classmate_employments.
+from . import employment_models as _employment_models  # noqa: E402, F401
