@@ -36,11 +36,39 @@ const TYPE_LABEL: Record<V2BoendemarknadListing["type"], string> = {
 
 type Tab = "hyra" | "hyrmarknad" | "kop";
 
-const CURRENT_YM = (() => {
-  // Default till nuvarande realmånad — eleven kan ändra.
+// Fallback om gameTime-API fail:ar · använder real-tid som
+// nödfallback. Riktiga värdet hämtas via useGameYearMonth() nedan.
+const REAL_YM_FALLBACK = (() => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 })();
+
+/**
+ * Hook som returnerar elevens nuvarande SPEL-månad ("YYYY-MM").
+ * Initialvärde = real-tids-månad (för att inte rendera tomt). Pollas
+ * mot /v2/game-time vid mount + var 60 sekund (spel-månaden tickar
+ * ungefär var 4.3 real-timme så 60s är gott och väl).
+ */
+function useGameYearMonth(): string {
+  const [ym, setYm] = useState(REAL_YM_FALLBACK);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchYm = () => {
+      v2Api.gameTime()
+        .then((g) => {
+          if (!cancelled && g && g.year_month) setYm(g.year_month);
+        })
+        .catch(() => null);
+    };
+    fetchYm();
+    const interval = setInterval(fetchYm, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+  return ym;
+}
 
 
 export function BoendemarknadV2() {
@@ -165,7 +193,15 @@ function HyresvardenInline() {
 
 
 function KopSaljPanel() {
-  const [ym, setYm] = useState(CURRENT_YM);
+  const gameYm = useGameYearMonth();
+  const [ym, setYm] = useState(gameYm);
+  // Synca om gameYm uppdateras (spel-tiden tickade förbi månadsskifte
+  // eller fetchades efter initial render). Eleven kan manuellt välja
+  // annan månad i dropdownen — då fryses den vid det valet.
+  const [userTouchedYm, setUserTouchedYm] = useState(false);
+  useEffect(() => {
+    if (!userTouchedYm) setYm(gameYm);
+  }, [gameYm, userTouchedYm]);
   const [listings, setListings] = useState<V2BoendemarknadListings | null>(null);
   const [valuation, setValuation] = useState<V2BoendemarknadValuation | null>(null);
   const [activeHome, setActiveHome] = useState<V2BoendemarknadActiveHome | null>(null);
@@ -264,7 +300,10 @@ function KopSaljPanel() {
           <input
             type="month"
             value={ym}
-            onChange={(e) => setYm(e.target.value || CURRENT_YM)}
+            onChange={(e) => {
+              setUserTouchedYm(true);
+              setYm(e.target.value || gameYm);
+            }}
           />
         </label>
         {listings && (
@@ -663,7 +702,15 @@ type RentalApplication = {
 };
 
 function HyrmarknadPanel() {
-  const [ym, setYm] = useState(CURRENT_YM);
+  const gameYm = useGameYearMonth();
+  const [ym, setYm] = useState(gameYm);
+  // Synca om gameYm uppdateras (spel-tiden tickade förbi månadsskifte
+  // eller fetchades efter initial render). Eleven kan manuellt välja
+  // annan månad i dropdownen — då fryses den vid det valet.
+  const [userTouchedYm, setUserTouchedYm] = useState(false);
+  useEffect(() => {
+    if (!userTouchedYm) setYm(gameYm);
+  }, [gameYm, userTouchedYm]);
   const [listings, setListings] = useState<RentalListing[] | null>(null);
   const [applications, setApplications] = useState<RentalApplication[]>([]);
   const [loading, setLoading] = useState(false);
@@ -766,7 +813,10 @@ function HyrmarknadPanel() {
           <input
             type="month"
             value={ym}
-            onChange={(e) => setYm(e.target.value || CURRENT_YM)}
+            onChange={(e) => {
+              setUserTouchedYm(true);
+              setYm(e.target.value || gameYm);
+            }}
           />
         </label>
       </header>
