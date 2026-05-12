@@ -6,30 +6,70 @@
  * mappar vi om de ljusa klasserna till V2 mörka motsvarigheter inom
  * .v2-module-skin-wrappern.
  *
- * Endast de klasser som används i ModuleView.tsx mappas — vi skannar inte
- * alla Tailwind-klasser. Det betyder att andra v1-komponenter som råkar
- * renderas inom denna wrapper också får dark-skin, vilket är önskvärt
- * (AskAI, CelebrationOverlay etc.).
+ * VIKTIGT: Tailwind har många klasser och tidigare skin täckte bara
+ * de mest använda. Resultat: text utan explicit color-klass renderades
+ * svart-på-mörkt eftersom v1 förutsatte ljust body-tema. Nya skin sätter
+ * en explicit default-color på alla element inom wrappern + täcker fler
+ * Tailwind-utility-klasser. Endast de som faktiskt används i v1's
+ * ModuleView mappas — vi skannar inte hela Tailwind-katalogen.
  */
 
-/* Yttre shell — där ModuleViewBody sätter min-h-screen + bg-slate-50 */
+/* ============================================================
+ * BASE · default text-color så svart-på-mörkt aldrig händer
+ * ============================================================ */
+
+.v2-module-skin,
+.v2-module-skin * {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.v2-module-skin {
+  font-family:
+    "Source Serif 4", "Source Serif Pro", Georgia, serif;
+}
+
+/* Knappar och inputs ärver inte font från v1's body · sätt explicit */
+.v2-module-skin button,
+.v2-module-skin input,
+.v2-module-skin textarea,
+.v2-module-skin select {
+  font-family: inherit;
+}
+
+
+/* ============================================================
+ * BACKGROUNDS · slate-tonerna → V2 mörk
+ * ============================================================ */
+
 .v2-module-skin .bg-slate-50,
 .v2-module-skin.bg-slate-50 {
   background: transparent !important;
 }
 
-/* Vita kort i sidebar och step-panel */
 .v2-module-skin .bg-white {
   background: rgba(15, 21, 37, 0.55) !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
-/* Rubriker och tung text */
-.v2-module-skin .text-slate-900 {
+.v2-module-skin .bg-slate-100,
+.v2-module-skin .bg-slate-200 {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.v2-module-skin .bg-slate-300 {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+
+/* ============================================================
+ * TEXT · alla slate-toner ner till V2-vita
+ * ============================================================ */
+
+.v2-module-skin .text-slate-900,
+.v2-module-skin .text-slate-800 {
   color: #fff !important;
 }
 
-/* Brödtext */
 .v2-module-skin .text-slate-700,
 .v2-module-skin .prose-slate .prose,
 .v2-module-skin .prose,
@@ -47,33 +87,68 @@
 
 .v2-module-skin .text-slate-400,
 .v2-module-skin .text-slate-300 {
-  color: rgba(255, 255, 255, 0.35) !important;
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
-/* Borders */
+
+/* ============================================================
+ * BORDERS
+ * ============================================================ */
+
 .v2-module-skin .border,
 .v2-module-skin .border-slate-200,
-.v2-module-skin .border-slate-300 {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+.v2-module-skin .border-slate-300,
+.v2-module-skin .border-slate-400 {
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
-/* Aktivt step i sidolista — använd indigo accent istället för brand-100 */
+
+/* ============================================================
+ * BRAND-FÄRGER · indigo i v1 → accent-orange + indigo i V2
+ * ============================================================
+ * V2 använder accent: #dc4c2b (orange) och säkundär: #c7d2fe (indigo).
+ * Vi mappar v1's brand-klasser till V2-accenten. */
+
+.v2-module-skin .bg-brand-50,
 .v2-module-skin .bg-brand-100 {
-  background: rgba(99, 102, 241, 0.18) !important;
-  border: 1px solid rgba(99, 102, 241, 0.35);
+  background: rgba(220, 76, 43, 0.15) !important;
+  border-color: rgba(220, 76, 43, 0.45) !important;
 }
+
+.v2-module-skin .border-brand-500,
+.v2-module-skin .border-brand-400 {
+  border-color: rgba(220, 76, 43, 0.7) !important;
+}
+
 .v2-module-skin .text-brand-800,
 .v2-module-skin .text-brand-700,
 .v2-module-skin .text-brand-600 {
-  color: #c7d2fe !important;
+  color: #ffb59a !important;
 }
 
-/* Hover-state i sidolista */
+.v2-module-skin a.text-brand-600 {
+  color: #ffb59a !important;
+  text-decoration: underline;
+}
+
+
+/* ============================================================
+ * HOVER-STATES
+ * ============================================================ */
+
 .v2-module-skin .hover\:bg-slate-100:hover {
-  background: rgba(255, 255, 255, 0.04) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* Inputs och textareas */
+.v2-module-skin .hover\:border-slate-300:hover {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+
+/* ============================================================
+ * INPUTS · explicit kontrast så placeholder/text syns
+ * ============================================================ */
+
 .v2-module-skin input[type="text"],
 .v2-module-skin input[type="email"],
 .v2-module-skin input[type="password"],
@@ -82,39 +157,120 @@
 .v2-module-skin textarea,
 .v2-module-skin select {
   background: rgba(15, 21, 37, 0.7) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   color: #fff !important;
 }
+
 .v2-module-skin input::placeholder,
 .v2-module-skin textarea::placeholder {
   color: rgba(255, 255, 255, 0.35) !important;
 }
 
-/* Knappar — ljus knapp med slate-text → indigo */
+.v2-module-skin input:focus,
+.v2-module-skin textarea:focus,
+.v2-module-skin select:focus {
+  outline: none;
+  border-color: rgba(220, 76, 43, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(220, 76, 43, 0.18);
+}
+
+
+/* ============================================================
+ * KNAPPAR · btn-dark = primär CTA i v1 · V2-accent-orange
+ * ============================================================ */
+
 .v2-module-skin .btn-dark,
 .v2-module-skin button.btn-dark {
-  background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+  background: linear-gradient(
+    135deg,
+    rgba(220, 76, 43, 1),
+    rgba(184, 60, 34, 1)
+  ) !important;
   color: #fff !important;
-  border: 1px solid rgba(99, 102, 241, 0.6) !important;
+  border: 1px solid rgba(220, 76, 43, 0.7) !important;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
+
+.v2-module-skin .btn-dark:hover,
+.v2-module-skin button.btn-dark:hover {
+  filter: brightness(1.1);
+}
+
 .v2-module-skin .btn-dark:disabled,
 .v2-module-skin button.btn-dark:disabled {
   background: rgba(255, 255, 255, 0.06) !important;
   color: rgba(255, 255, 255, 0.35) !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
-}
-.v2-module-skin .bg-slate-300 {
-  background: rgba(255, 255, 255, 0.08) !important;
+  filter: none;
+  cursor: not-allowed;
 }
 
-/* Feedback-paneler — sky/violet bakgrunder mappas till V2-tonade */
+
+/* ============================================================
+ * QUIZ-ALTERNATIV · vita-på-mörkt med tydlig selected/correct/wrong
+ * ============================================================
+ * Quiz-knapparna har Tailwind-klasserna:
+ *   default:  border-slate-200 bg-white
+ *   selected: border-brand-500 bg-brand-50
+ *   correct:  border-emerald-500 bg-emerald-50
+ *   wrong:    border-rose-500 bg-rose-50
+ * Vi behöver också tvinga explicit text-color så själva svarsalternativet
+ * inte renderas som svart-på-mörkt. */
+
+.v2-module-skin button[class*="bg-white"],
+.v2-module-skin button[class*="bg-brand-"],
+.v2-module-skin button[class*="bg-emerald-"],
+.v2-module-skin button[class*="bg-rose-"] {
+  color: #fff !important;
+}
+
+.v2-module-skin .border-emerald-500 {
+  border-color: rgba(110, 231, 183, 0.6) !important;
+}
+
+.v2-module-skin .bg-emerald-50,
+.v2-module-skin .bg-green-50 {
+  background: rgba(110, 231, 183, 0.12) !important;
+  border-color: rgba(110, 231, 183, 0.5) !important;
+}
+
+.v2-module-skin .text-emerald-900,
+.v2-module-skin .text-green-900,
+.v2-module-skin .text-emerald-600 {
+  color: #6ee7b7 !important;
+}
+
+.v2-module-skin .border-rose-500 {
+  border-color: rgba(220, 76, 43, 0.6) !important;
+}
+
+.v2-module-skin .bg-rose-50,
+.v2-module-skin .bg-red-50 {
+  background: rgba(220, 76, 43, 0.12) !important;
+  border-color: rgba(220, 76, 43, 0.5) !important;
+}
+
+.v2-module-skin .text-rose-900,
+.v2-module-skin .text-red-900,
+.v2-module-skin .text-rose-600 {
+  color: #fda594 !important;
+}
+
+
+/* ============================================================
+ * FEEDBACK-PANELER · sky/violet → V2 indigo/violet tonade
+ * ============================================================ */
+
 .v2-module-skin .bg-sky-50 {
   background: rgba(99, 102, 241, 0.10) !important;
   border-color: rgba(99, 102, 241, 0.45) !important;
 }
+
 .v2-module-skin .border-sky-400 {
   border-color: rgba(99, 102, 241, 0.55) !important;
 }
+
 .v2-module-skin .text-sky-900 {
   color: #c7d2fe !important;
 }
@@ -123,57 +279,59 @@
   background: rgba(167, 139, 250, 0.10) !important;
   border-color: rgba(167, 139, 250, 0.45) !important;
 }
+
 .v2-module-skin .border-violet-400 {
   border-color: rgba(167, 139, 250, 0.55) !important;
 }
+
 .v2-module-skin .text-violet-900 {
   color: rgba(196, 181, 253, 0.95) !important;
 }
 
-/* Quiz-alternativ-knappar (visar svar/rätt-status) */
-.v2-module-skin .bg-emerald-50,
-.v2-module-skin .bg-green-50 {
-  background: rgba(110, 231, 183, 0.10) !important;
-  border-color: rgba(110, 231, 183, 0.40) !important;
-}
-.v2-module-skin .text-emerald-900,
-.v2-module-skin .text-green-900 {
-  color: #6ee7b7 !important;
-}
-.v2-module-skin .bg-rose-50,
-.v2-module-skin .bg-red-50 {
-  background: rgba(220, 76, 43, 0.10) !important;
-  border-color: rgba(220, 76, 43, 0.40) !important;
-}
-.v2-module-skin .text-rose-900,
-.v2-module-skin .text-red-900 {
-  color: #fda594 !important;
-}
 
-/* Länkar i feedback */
-.v2-module-skin a.text-brand-600,
-.v2-module-skin .text-brand-600 {
-  color: #c7d2fe !important;
-}
+/* ============================================================
+ * RUBRIKER · serif som resten av V2
+ * ============================================================ */
 
-/* Step-card-rubrik */
 .v2-module-skin h1,
 .v2-module-skin h2,
 .v2-module-skin h3 {
   font-family: "Source Serif 4", Georgia, serif !important;
   color: #fff !important;
+  font-weight: 600;
 }
 
-/* Mono-eyebrow för Step kind-label */
+
+/* ============================================================
+ * STEP-EYE (kind-label) · monospace orange/indigo som andra "Aktör 0X"
+ * ============================================================ */
+
 .v2-module-skin .text-\[10px\].text-slate-500 {
   font-family: "JetBrains Mono", ui-monospace, monospace !important;
   letter-spacing: 1.2px !important;
   text-transform: uppercase !important;
-  color: rgba(199, 210, 254, 0.7) !important;
+  color: rgba(255, 181, 154, 0.8) !important;
+  font-size: 10px !important;
 }
 
-/* Ta bort den ljusa boxshadow + light shell på inner-divven · vi har
- * redan en V2 frame i ModuleViewV2.tsx */
+
+/* ============================================================
+ * Ta bort den ljusa shellen · V2 frame redan satt av ModuleViewV2.tsx
+ * ============================================================ */
+
 .v2-module-skin .min-h-screen {
   min-height: auto !important;
+}
+
+/* Cards/paneler får v2-stil med subtila skuggor */
+.v2-module-skin [class*="rounded-lg"],
+.v2-module-skin [class*="rounded-xl"] {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Aktivt step i sidebar — orange accent */
+.v2-module-skin button[class*="bg-brand-100"],
+.v2-module-skin [class*="bg-brand-100"] {
+  background: rgba(220, 76, 43, 0.15) !important;
+  border: 1px solid rgba(220, 76, 43, 0.5) !important;
 }
