@@ -233,6 +233,12 @@ class HubCharacter(BaseModel):
     family_status: Optional[str] = None
     housing_type: Optional[str] = None
     housing_monthly: Optional[float] = None
+    # Under övergångsperiod (3 mån efter uppsägning eller flytt) betalar
+    # eleven BÅDA: nya hyran (housing_monthly) PLUS gamla hyran via
+    # 3 separata avier. housing_legacy_monthly = gamla hyran, _until =
+    # sista uppsägningsdatum. Frontend visar tilläggsraden.
+    housing_legacy_monthly: Optional[float] = None
+    housing_legacy_until: Optional[_date] = None
     gross_salary_monthly: Optional[float] = None
     net_salary_monthly: Optional[float] = None
     personality: Optional[str] = None
@@ -670,6 +676,33 @@ def _build_hub_response(info: TokenInfo) -> HubResponse:
                 fritid=wb.leisure,
                 year_month=ym,
             )
+
+            # Legacy housing obligation · 3-mån uppsägningstid på
+            # gamla bostaden. Hittar ActiveHome med termination_date
+            # i framtiden = fortfarande betalas. Visas på dashboard
+            # som "+ X kr/mån i uppsägningstid".
+            try:
+                from ..db.models import ActiveHome as _AH_legacy
+                today_g_hub = _today_g()
+                legacy = (
+                    s.query(_AH_legacy)
+                    .filter(
+                        _AH_legacy.home_type == "hyresratt",
+                        _AH_legacy.status.in_(
+                            ("terminated", "notice_given"),
+                        ),
+                        _AH_legacy.termination_date.isnot(None),
+                        _AH_legacy.termination_date > today_g_hub,
+                    )
+                    .order_by(_AH_legacy.termination_date.desc())
+                    .first()
+                )
+                if legacy is not None and legacy.monthly_cost:
+                    char.housing_legacy_monthly = float(legacy.monthly_cost)
+                    char.housing_legacy_until = legacy.termination_date
+            except Exception:
+                # Defensiv · ska inte ta ner hub om legacy-query failar
+                pass
 
             # 3. Månads-summa från transactions
             # Använd senaste NON-TRANSFER tx-datum som anchor — annars

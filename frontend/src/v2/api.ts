@@ -57,6 +57,8 @@ export type HubCharacter = {
   /** 'employed' (default) | 'self_employed' | 'unemployed' · styr
    * HubV2-rendering: 'Anställd · X' / 'Egenföretagare · {company}'
    * / 'Söker jobb'. */
+  housing_legacy_monthly?: number | null;
+  housing_legacy_until?: string | null;
   employment_status?: "employed" | "self_employed" | "unemployed";
   /** Datum då pågående anställning upphör (LAS uppsägningstid).
    * Lön genereras tills detta datum, sedan stoppas salary_phase. */

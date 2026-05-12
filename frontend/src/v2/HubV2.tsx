@@ -263,11 +263,20 @@ export function HubV2() {
                   const label = isOwned
                     ? "Boendekostnaden (avgift/bolån/drift) på"
                     : "Hyran på";
+                  const legacy = character.housing_legacy_monthly || 0;
+                  const total = character.housing_monthly + legacy;
                   parts.push(
                     <span key="hyra">
                       {label}{" "}
                       <strong>{SEK(character.housing_monthly)} kr</strong>{" "}
                       dras varje månad.{" "}
+                      {legacy > 0 && (
+                        <em style={{ color: "#fbbf24" }}>
+                          + {SEK(legacy)} kr/mån i uppsägningstid till{" "}
+                          {character.housing_legacy_until} (totalt{" "}
+                          {SEK(total)} kr).{" "}
+                        </em>
+                      )}
                     </span>,
                   );
                 }

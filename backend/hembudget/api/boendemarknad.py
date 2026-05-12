@@ -244,6 +244,81 @@ def _checking_balance() -> int:
         return int(total)
 
 
+def _create_termination_notice(
+    s,
+    *,
+    home_address: Optional[str],
+    home_size_kvm: int,
+    home_monthly_cost: int,
+    termination_date: date,
+    today_g: date,
+    reason: str,
+    city_key: Optional[str] = None,
+) -> None:
+    """Skapa bekräftelsebrev (MailItem) + RentalNotice när hyresrätt
+    sägs upp. Pedagogiskt: ger eleven en formell handling med alla
+    villkor + lägger en rad i 'Hyresnotiser & brev från värden'-
+    sektionen i Boendemarknadens Hyresavtal-tab."""
+    from ..db.models import MailItem as _MI_t, RentalNotice as _RN_t
+    landlord = (
+        f"{city_key.title()} Bostäder"
+        if city_key else "Hyresvärden"
+    )
+    addr = home_address or "din bostad"
+    body = (
+        f"Uppsägning bekräftad\n\n"
+        f"Vi har tagit emot din uppsägning av hyreskontraktet för "
+        f"{addr} ({home_size_kvm} kvm).\n\n"
+        f"Anledning: {reason}\n\n"
+        f"Villkor enligt hyresavtalet:\n"
+        f"· Uppsägningstid: 3 månader\n"
+        f"· Sista anställningsdag: {termination_date.isoformat()}\n"
+        f"· Hyra ska betalas månadsvis under uppsägningstiden "
+        f"({home_monthly_cost:,} kr/mån)\n".replace(",", " ")
+        + f"· Avflyttningsbesiktning bokas inom 14 dagar före "
+        + f"avflyttning\n· Eventuell deposition återbetalas efter "
+        + f"slutbesiktning\n\n"
+        + f"Tre vanliga månadshyror (en per kvarvarande uppsägnings-"
+        + f"månad) kommer som separata avier i din postlåda.\n\n"
+        + f"Mvh, {landlord}"
+    )
+    s.add(_MI_t(
+        sender=landlord,
+        sender_short="HYR",
+        sender_kind="land",
+        sender_meta="uppsägning · bekräftelse",
+        mail_type="authority",
+        subject=(
+            f"Uppsägning bekräftad · sista dag {termination_date.isoformat()}"
+        ),
+        body_meta=(
+            f"3 mån uppsägningstid · {home_monthly_cost:,} kr/mån"
+            .replace(",", " ")
+        ),
+        body=body,
+        amount=None,
+        due_date=None,
+        status="unhandled",
+        received_at=datetime.combine(
+            today_g, datetime.min.time(),
+        ).replace(hour=10),
+    ))
+    # Synas i 'Hyresnotiser & brev från värden'-sektionen
+    s.add(_RN_t(
+        contract_id=None,  # virtuellt — ingen RentalContract-koppling
+        occurred_on=today_g,
+        notice_type="ovrig",
+        title=f"Uppsägning bekräftad · {addr}",
+        description=(
+            f"Uppsägning av {addr} bekräftad. Sista dag "
+            f"{termination_date.isoformat()}. Anledning: {reason}."
+        ),
+        amount=None,
+        change_pct=None,
+        status="acknowledged",
+    ))
+
+
 # === Elev-endpoints ===
 
 
@@ -521,6 +596,24 @@ def terminate_rental(
             )
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
+        # Bekräftelsebrev + RentalNotice för "Hyresnotiser"-sektionen
+        try:
+            from ..business.game_clock import current_game_date as _cgd_t
+            _create_termination_notice(
+                s,
+                home_address=home.address,
+                home_size_kvm=int(home.size_kvm),
+                home_monthly_cost=int(home.monthly_cost or 0),
+                termination_date=home.termination_date,
+                today_g=_cgd_t(),
+                reason="Egen uppsägning",
+                city_key=home.city_key,
+            )
+        except Exception:
+            log.exception(
+                "terminate_rental: kunde inte skapa bekräftelsebrev",
+            )
 
         # Räkna månader kvar grovt
         from datetime import date as _d
@@ -999,6 +1092,54 @@ def rental_move_in(
             )
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
+        # Sync · alla aktiva RentalContract-rader sätts till
+        # 'terminated' eftersom eleven har flyttat. Utan detta visar
+        # /v2/hyresvarden gamla kontraktet kvar (det query:as före
+        # ActiveHome-fallbacken). Ended_on = today_g + 3 mån
+        # (uppsägningstid).
+        from ..business.game_clock import current_game_date as _cgd_mvi
+        from datetime import timedelta as _td_mvi
+        today_g_mv = _cgd_mvi()
+        ended_on_mv = today_g_mv + _td_mvi(days=90)
+        try:
+            from ..db.models import RentalContract as _RC_mv
+            active_contracts = (
+                s.query(_RC_mv)
+                .filter(_RC_mv.status == "active")
+                .all()
+            )
+            for c in active_contracts:
+                c.status = "terminated"
+                if c.ended_on is None:
+                    c.ended_on = ended_on_mv
+            s.flush()
+        except Exception:
+            log.exception(
+                "rental_move_in: kunde inte synca RentalContract",
+            )
+
+        # Bekräftelsebrev + RentalNotice för auto-terminerade gamla
+        # lägenheten · syns i Hyresavtal-tabbens 'Hyresnotiser & brev
+        # från värden'-sektion.
+        if prev_rent > 0 and prev_home and prev_home.id != home.id:
+            try:
+                _create_termination_notice(
+                    s,
+                    home_address=prev_address,
+                    home_size_kvm=int(prev_home.size_kvm),
+                    home_monthly_cost=prev_rent,
+                    termination_date=ended_on_mv,
+                    today_g=today_g_mv,
+                    reason=(
+                        f"Flytt till nytt boende · {listing.address}"
+                    ),
+                    city_key=prev_home.city_key,
+                )
+            except Exception:
+                log.exception(
+                    "rental_move_in: kunde inte skapa bekräftelsebrev",
+                )
 
         # Generera 3 vanliga månadshyror för gamla bostaden under
         # uppsägningstiden. I Sverige fungerar det så att hyresgästen
