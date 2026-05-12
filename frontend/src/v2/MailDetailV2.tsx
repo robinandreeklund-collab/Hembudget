@@ -236,6 +236,56 @@ export function MailDetailV2() {
     refreshPendingLoanIds();
   }, [id]);
 
+  // Polla BankID-session-status så fort vi har en aktiv session.
+  // MÅSTE deklareras före conditional early-returns annars bryter
+  // vi Rules of Hooks och hela MailDetailV2 kraschar till vit skärm.
+  // Behöver inte loanApplicationId här (kan vara null) — pollingen
+  // räknar bara på bankIdSession och bankIdConfirmed.
+  useEffect(() => {
+    if (!bankIdSession || bankIdConfirmed) return;
+    const token = bankIdSession.token;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const status = await v2Api.bankSessionStatus(token);
+        if (cancelled) return;
+        if (status.confirmed_at) {
+          setBankIdConfirmed(true);
+          clearInterval(interval);
+          // Hitta loanApplicationId från sessionens purpose
+          // (private_loan_sign_<id>). Vi har inte loanApplicationId
+          // som dependency här eftersom det härleds från data.mail
+          // senare i komponenten · plocka från purpose istället.
+          const purpose = (status as { purpose?: string }).purpose || "";
+          const m = purpose.match(/private_loan_sign_(\d+)/);
+          if (!m) return;
+          const appId = parseInt(m[1], 10);
+          try {
+            const res = await v2Api.creditAcceptFromMail(appId, token);
+            await v2Api.updateMailStatus(id, "handled");
+            const refreshed = await v2Api.mailDetail(id);
+            setData(refreshed);
+            refreshPendingLoanIds();
+            setBankIdSession(null);
+            setExportMsg(
+              `✓ Lån signerat & accepterat · ${Math.round(res.deposited_amount).toLocaleString("sv-SE")} kr insatt. ${res.pedagogical_note}`,
+            );
+          } catch (e) {
+            setBankIdError(
+              `Lånet kunde inte slutföras: ${String((e as Error)?.message || e)}`,
+            );
+          }
+        }
+      } catch {
+        // Tyst — session kan ha löpt ut, polla igen
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [bankIdSession, bankIdConfirmed, id]);
+
   async function exportToBank() {
     if (!data) return;
     setExporting(true);
@@ -370,49 +420,6 @@ export function MailDetailV2() {
       setBankIdBusy(false);
     }
   }
-
-  // Polla session-status så fort vi har en aktiv session. Avbryts
-  // när modalen stängs eller sessionen bekräftas.
-  useEffect(() => {
-    if (!bankIdSession || bankIdConfirmed) return;
-    const token = bankIdSession.token;
-    let cancelled = false;
-    const interval = setInterval(async () => {
-      try {
-        const status = await v2Api.bankSessionStatus(token);
-        if (cancelled) return;
-        if (status.confirmed_at) {
-          setBankIdConfirmed(true);
-          clearInterval(interval);
-          // Auto-fortsätt med accept så fort signering bekräftats
-          if (loanApplicationId == null) return;
-          try {
-            const res = await v2Api.creditAcceptFromMail(
-              loanApplicationId, token,
-            );
-            await v2Api.updateMailStatus(id, "handled");
-            const refreshed = await v2Api.mailDetail(id);
-            setData(refreshed);
-            refreshPendingLoanIds();
-            setBankIdSession(null);
-            setExportMsg(
-              `✓ Lån signerat & accepterat · ${Math.round(res.deposited_amount).toLocaleString("sv-SE")} kr insatt. ${res.pedagogical_note}`,
-            );
-          } catch (e) {
-            setBankIdError(
-              `Lånet kunde inte slutföras: ${String((e as Error)?.message || e)}`,
-            );
-          }
-        }
-      } catch {
-        // Tyst — session kan ha löpt ut, polla igen
-      }
-    }, 1500);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [bankIdSession, bankIdConfirmed, loanApplicationId, id]);
 
   async function respondToOffer(accept: boolean) {
     if (employmentOfferId == null) return;
