@@ -1280,6 +1280,21 @@ def run_classmate_payroll(
             total_gross += result["gross"]
             total_net += result["net"]
             total_fee += result["employer_fee"]
+            # Pentagon · liten +economy för stadig inkomst-utbetalning
+            try:
+                from ..game_engine.pentagon import apply_pentagon_delta
+                apply_pentagon_delta(
+                    snap["employee_student_id"],
+                    axis="economy", requested_delta=+1,
+                    reason_kind="classmate_payroll",
+                    reason_id=snap["id"],
+                    reason_table="classmate_employments",
+                    explanation=(
+                        f"Lön {ym} · {snap['company_name']}"
+                    ),
+                )
+            except Exception:
+                pass
         else:
             n_skipped += 1
 
@@ -1323,6 +1338,26 @@ def run_classmate_payroll(
         )
     except Exception:
         pass
+
+    # Pentagon för företagaren · stor lönekostnad pressar ekonomin
+    # men +leadership / social när man stadigt betalar sitt team
+    if n_paid > 0:
+        try:
+            from ..game_engine.pentagon import apply_pentagon_delta
+            apply_pentagon_delta(
+                owner_id, axis="economy", requested_delta=-1,
+                reason_kind="biz.payroll_paid",
+                explanation=(
+                    f"Lönekostnad {total_cost} kr · {n_paid} anställda"
+                ),
+            )
+            apply_pentagon_delta(
+                owner_id, axis="social", requested_delta=+1,
+                reason_kind="biz.payroll_paid",
+                explanation="Betalade lön i tid · pålitlig arbetsgivare",
+            )
+        except Exception:
+            pass
 
     return PayrollRunOut(
         year_month=ym,
