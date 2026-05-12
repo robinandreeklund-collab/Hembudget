@@ -166,6 +166,9 @@ export function TeacherHubV2() {
               <Link to="/teacher/v2/roster" className="larare-tb-btn">
                 v2-roster
               </Link>
+              <Link to="/teacher/v2/employment-ecosystem" className="larare-tb-btn">
+                Ekosystem
+              </Link>
             </div>
           </div>
           <div className="larare-head-meta">

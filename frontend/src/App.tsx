@@ -48,6 +48,7 @@ import { LanV2 } from "./v2/LanV2";
 import { TeacherCreditOverviewPage } from "./v2/TeacherCreditOverviewPage";
 import { TeacherTaxOverviewPage } from "./v2/TeacherTaxOverviewPage";
 import { TeacherEmployerOverviewPage } from "./v2/TeacherEmployerOverviewPage";
+import { TeacherEmploymentEcosystem } from "./v2/TeacherEmploymentEcosystem";
 import { TeacherForetagOverviewPage } from "./v2/TeacherForetagOverviewPage";
 import { TeacherArbetsformedlingenOverviewPage } from "./v2/TeacherArbetsformedlingenOverviewPage";
 import { TeacherInsuranceOverviewPage } from "./v2/TeacherInsuranceOverviewPage";
@@ -496,6 +497,10 @@ export default function App() {
           <Route
             path="/teacher/v2/employer/:studentId"
             element={<TeacherEmployerOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/employment-ecosystem"
+            element={<TeacherEmploymentEcosystem />}
           />
           <Route
             path="/teacher/v2/insurance/:studentId"

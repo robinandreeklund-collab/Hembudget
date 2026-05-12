@@ -23,8 +23,8 @@ from .api import (
     game_engine, landing, leaderboard, ledger, loans, modules, reports,
     scenarios, school, settings_kv, shared_opportunities, smtp_admin,
     stock_trading, stocks, tax, events, teacher_ai_prompts, teacher_credit,
-    teacher_employer, teacher_stocks, teacher_wellbeing, transactions,
-    transfers, upcoming, upload, utility, v2, wellbeing,
+    teacher_employer, teacher_employment, teacher_stocks, teacher_wellbeing,
+    transactions, transfers, upcoming, upload, utility, v2, wellbeing,
 )
 from .config import settings
 
@@ -296,6 +296,8 @@ def build_app() -> FastAPI:
     # Klasskompis-anställning (Fas C-E): hire/accept/decline/terminate
     # cross-scope via CompanyEmployment-modellen i master-DB.
     app.include_router(employment.router)
+    # Lärar-vy · klassens anställnings-ekosystem (Fas H)
+    app.include_router(teacher_employment.router)
     app.include_router(bank.router)
 
     # === V2 (parallell migration · ny dashboard) ===
