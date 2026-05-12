@@ -3905,6 +3905,7 @@ export const v2Api = {
       }>;
       count: number;
       market_open: boolean;
+      last_updated_at: string | null;
     }>("/v2/aktier/market"),
   stocksBuy: (ticker: string, body: {
     account_id: number;

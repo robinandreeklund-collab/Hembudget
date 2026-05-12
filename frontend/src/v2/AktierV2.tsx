@@ -34,6 +34,8 @@ type MarketRow = {
 export function AktierV2() {
   const [market, setMarket] = useState<MarketRow[]>([]);
   const [marketOpen, setMarketOpen] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] =
+    useState<string | null>(null);
   const [avanza, setAvanza] = useState<V2AvanzaData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
@@ -52,6 +54,7 @@ export function AktierV2() {
       v2Api.stocksMarket().then((m) => {
         setMarket(m.stocks);
         setMarketOpen(m.market_open);
+        setLastUpdatedAt(m.last_updated_at);
       }),
       v2Api.avanza().then(setAvanza),
     ]).catch((e) => setError(String((e as Error)?.message || e)));
@@ -59,7 +62,29 @@ export function AktierV2() {
 
   useEffect(() => {
     refresh();
+    // Auto-refresha kurser var 30 sek så eleven ser levande priser
+    // utan att behöva uppdatera sidan. Backend pollar yfinance var 5
+    // min så ändringen syns kort efter att den landat i master-DB:n.
+    const interval = window.setInterval(() => {
+      refresh();
+    }, 30000);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function fmtUpdatedAt(iso: string | null): string {
+    if (!iso) return "—";
+    const t = new Date(iso).getTime();
+    const diff = Math.max(0, Date.now() - t);
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return "just nu";
+    if (min < 60) return `${min} min sedan`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `${h} h sedan`;
+    return new Date(iso).toLocaleString("sv-SE", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+    });
+  }
 
   const filtered = market.filter(
     (r) =>
@@ -152,6 +177,13 @@ export function AktierV2() {
                 : "○ Marknad stängd"}{" "}
               · OMXS30 + USA-large-caps · courtage 1 kr min, 0,25 % över
               400 kr.
+            </p>
+            <p
+              className="actor-sub"
+              style={{ marginTop: 4, opacity: 0.7, fontSize: 12 }}
+            >
+              Kurser uppdaterade <strong>{fmtUpdatedAt(lastUpdatedAt)}</strong>
+              {" "}· auto-refresh var 30 sek
             </p>
           </div>
           <div className="actor-meta">

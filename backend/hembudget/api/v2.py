@@ -9589,6 +9589,9 @@ class V2StockMarketResponse(BaseModel):
     stocks: list[V2StockMarketRow]
     count: int
     market_open: bool
+    # Tidsstämpel för senaste kursuppdatering · frontend visar
+    # "Uppdaterad för X min sedan" så eleven ser om datan är färsk.
+    last_updated_at: Optional[datetime] = None
 
 
 @router.get("/aktier/market", response_model=V2StockMarketResponse)
@@ -9599,6 +9602,7 @@ def get_stock_market(
     aktiehandel-vyn. Tillgängligt för alla autentiserade användare
     (även lärare) eftersom det är masterdata utan elev-koppling."""
     from ..school.stock_models import StockMaster, LatestStockQuote
+    from datetime import datetime as _dt_market, timedelta as _td_market
     with master_session() as msdb:
         masters = msdb.query(StockMaster).all()
         latest = {
@@ -9606,6 +9610,7 @@ def get_stock_market(
             for q in msdb.query(LatestStockQuote).all()
         }
         rows: list[V2StockMarketRow] = []
+        last_ts: Optional[datetime] = None
         for m in masters:
             q = latest.get(m.ticker)
             if q is None:
@@ -9620,16 +9625,49 @@ def get_stock_market(
                 bid=float(q.bid) if q.bid is not None else None,
                 ask=float(q.ask) if q.ask is not None else None,
             ))
+            if q.ts is not None and (last_ts is None or q.ts > last_ts):
+                last_ts = q.ts
         # Marknad öppen = senaste quote inom 30 min
-        from datetime import datetime as _dt_market, timedelta as _td_market
         now = _dt_market.utcnow()
         market_open = any(
             q.ts and (now - q.ts) < _td_market(minutes=30)
             for q in latest.values()
         )
-        return V2StockMarketResponse(
-            stocks=rows, count=len(rows), market_open=market_open,
+
+    # Defensiv auto-trigger · om senaste kurs är > 10 min gammal under
+    # börstid (eller > 6 h overall), trigga en bakgrunds-poll så datan
+    # uppdateras. Den periodiska schemaläggaren i main.py är primär
+    # källan, men om något fel ger gap → eleven får färsk data ändå.
+    try:
+        needs_refresh = (
+            last_ts is None
+            or (now - last_ts) > _td_market(minutes=10)
         )
+        if needs_refresh:
+            import threading as _t_refresh
+            from ..stocks.poller import poll_quotes as _pq_refresh
+
+            def _bg_refresh() -> None:
+                try:
+                    with master_session() as _s_r:
+                        _pq_refresh(_s_r, force=False)
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "v2/aktier/market: bg refresh failed",
+                    )
+            _t_refresh.Thread(
+                target=_bg_refresh,
+                name="v2-market-refresh",
+                daemon=True,
+            ).start()
+    except Exception:
+        pass
+
+    return V2StockMarketResponse(
+        stocks=rows, count=len(rows), market_open=market_open,
+        last_updated_at=last_ts,
+    )
 
 
 class V2TeacherAvanzaOverview(BaseModel):

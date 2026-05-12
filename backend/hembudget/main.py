@@ -1016,6 +1016,52 @@ def _school_bootstrap() -> None:
                     name="bootstrap-stock-poll",
                     daemon=True,
                 ).start()
+
+            # ===========================================================
+            # Periodisk kurs-poller · uppdaterar LatestStockQuote var 5 min
+            # under börstid. Utan denna stannar kurserna på det pris som
+            # bootstrap-pollen satte → eleven ser samma siffror oavsett
+            # hur länge appen körts. Cloud Scheduler kan också pinga
+            # /stocks/internal/poll-quotes men vi vill inte kräva extern
+            # konfig för att grunddata ska vara levande.
+            #
+            # daemon=True → tråden stoppar när containern stängs. Cloud
+            # Run --max-instances=1 garanterar att bara EN tråd pollar.
+            # ===========================================================
+            from .school.stock_models import LatestStockQuote as _LSQ_p
+            from .stocks.poller import poll_quotes as _pq
+            import threading as _threading_p
+
+            def _periodic_stock_poll() -> None:
+                import logging as _log_p
+                import time as _time_p
+                from .school.engines import master_session as _ms_p
+                # Vänta 60 s första gången så bootstrap-pollen hinner
+                # klart innan vi börjar konkurrera om DB-locket.
+                _time_p.sleep(60)
+                while True:
+                    try:
+                        with _ms_p() as _s_p:
+                            res = _pq(_s_p, force=False)
+                        if res.get("fetched", 0) > 0:
+                            _log_p.getLogger(__name__).info(
+                                "periodic-stock-poll: uppdaterade %d kurser",
+                                res["fetched"],
+                            )
+                    except Exception:
+                        _log_p.getLogger(__name__).exception(
+                            "periodic-stock-poll: pollning misslyckades "
+                            "— försöker igen om 5 min",
+                        )
+                    # 5 min mellan körningar · under börstid blir det
+                    # ~10 polls per dag, well within yfinance/finnhub limits.
+                    _time_p.sleep(300)
+
+            _threading_p.Thread(
+                target=_periodic_stock_poll,
+                name="periodic-stock-poll",
+                daemon=True,
+            ).start()
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")
 
