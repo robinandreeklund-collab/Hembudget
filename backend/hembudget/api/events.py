@@ -448,10 +448,47 @@ def accept_event(
     # event:ets proposed_date (= spel-tid när eleven blev erbjuden
     # händelsen) som datum, med fallback till current_game_date() om
     # något skulle saknas.
-    tx_date = ev.proposed_date
-    if tx_date is None:
-        from ..business.game_clock import current_game_date
-        tx_date = current_game_date()
+    from ..business.game_clock import current_game_date as _cgd_acc
+    today_game = _cgd_acc()
+    tx_date = ev.proposed_date or today_game
+
+    # FRAMTIDA event · om proposed_date ligger efter spel-idag (t.ex.
+    # eleven accepterar 1 jan ett event som händer 4 jan), sätt
+    # Transaction.released_at till den real-tidpunkt då spel-tiden når
+    # tx_date. Då gömmer _released_filter transaktionen från bank/
+    # kontoutdrag tills spel-tiden faktiskt passerat datumet. Tidigare
+    # visades framtida tx direkt på kontoutdraget → eleven såg pengar
+    # försvinna innan händelsen ens hunnit hända. Pedagogiskt fel:
+    # belöning/straff ska komma PÅ det datum då händelsen utspelar sig.
+    tx_released_at = None
+    if tx_date > today_game:
+        try:
+            from ..game_engine.release_schedule import (
+                game_to_real_datetime as _g2r_acc,
+            )
+            from ..school.engines import (
+                master_session as _ms_acc,
+                get_current_actor_student as _gcas_acc,
+            )
+            from ..school.models import Student as _Stu_acc
+            from datetime import datetime as _dt_acc
+            _actor = _gcas_acc()
+            if _actor is not None:
+                with _ms_acc() as _msdb_acc:
+                    _stu = _msdb_acc.get(_Stu_acc, _actor)
+                    if _stu is not None and _stu.created_at is not None:
+                        # Använd morgonen av tx_date (08:00) som
+                        # spel-tidpunkt → transaktionen släpps när
+                        # eleven "vaknar" den dagen.
+                        game_dt = _dt_acc.combine(
+                            tx_date, _dt_acc.min.time(),
+                        ).replace(hour=8)
+                        tx_released_at = _g2r_acc(
+                            _stu.created_at, game_dt,
+                        )
+        except Exception:
+            tx_released_at = None
+
     tx = None
     if signed_amount != 0:
         h = _hashlib.sha256(
@@ -465,6 +502,7 @@ def accept_event(
             raw_description=desc,
             is_transfer=False,
             hash=h,
+            released_at=tx_released_at,
         )
         scope.add(tx)
         scope.flush()
