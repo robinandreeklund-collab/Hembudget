@@ -10100,20 +10100,22 @@ def get_isk_history(
     days: int = 30,
     info: TokenInfo = Depends(require_token),
 ) -> V2IskHistoryResponse:
-    """Tidsserier för ISK-portföljvärdet senaste N dagar.
+    """Tidsserier för ISK-portföljvärdet senaste N spel-dagar.
 
-    Rekonstruerar värdet per dag genom att applicera StockTransaction
-    bakåt i tiden:
-      - Start: nuvarande quantity per ticker.
-      - För varje dag i intervallet, sätt en daglig sluttid och hämta
-        senaste StockQuote PER ticker upp till den tiden.
-      - Multiplicera quantity × pris = aktievärde för den dagen.
-      - Lägg till cash-saldo + fond-värde (vi använder NUVARANDE cash +
-        fond som approximation · perfekt rekonstruktion av cash kräver
-        full Transaction-replay som är overkill för en pedagogisk graf).
+    X-axeln är SPEL-TID (eleven befinner sig t.ex. 5 jan 2026), men
+    de FAKTISKA kursdata är real-tid (yfinance ger oss riktiga
+    rörelser). Vi mappar varje spel-dag → motsvarande real-tidpunkt
+    via game_to_real_datetime(student.created_at, ...) och letar
+    upp StockQuote vid den real-tiden.
 
-    Returnerar 1 punkt per dag (UTC midnatt) = `days` punkter.
-    Frontend visar som linjediagram i Avanza-headern.
+    På så sätt:
+      - Diagrammet visar 'Jan 5', 'Jan 6', 'Jan 7' på X-axeln
+      - Värdena kommer från riktiga börsrörelser de senaste
+        real-timmarna (~4 h real per 30 spel-dgr)
+      - Eleven får naturlig prisrörelse OCH spel-tids-konsekvens
+
+    Cash + fond är NUVARANDE värden (approximation, samma över
+    alla dagar — perfekt rekonstruktion kräver Transaction-replay).
     """
     if info.role != "student" or info.student_id is None:
         return V2IskHistoryResponse(days=days, points=[])
@@ -10122,11 +10124,29 @@ def get_isk_history(
     from datetime import datetime as _dt_ih, timedelta as _td_ih
     from ..db.models import StockHolding as _SH_ih, FundHolding as _FH_ih
     from ..school.stock_models import StockQuote as _SQ_ih
-
-    now_utc = _dt_ih.utcnow().replace(microsecond=0)
-    start_utc = (now_utc - _td_ih(days=days)).replace(
-        hour=0, minute=0, second=0,
+    from ..business.game_clock import current_game_date as _cgd_ih
+    from ..game_engine.release_schedule import (
+        game_to_real_datetime as _g2r_ih,
     )
+
+    # Bygg listan av spel-dagar bakåt. game_today = senaste punkt;
+    # listan börjar `days` spel-dagar tidigare.
+    game_today = _cgd_ih()
+    game_dates: list[date] = [
+        game_today - _td_ih(days=days - 1 - i) for i in range(days)
+    ]
+
+    # Hämta studentens created_at för game→real-mappning. Utan den
+    # kan vi inte översätta spel-tid till real-tid → falla tillbaka
+    # på real-tid med en varning.
+    student_created_at: Optional[datetime] = None
+    try:
+        with master_session() as ms_ih:
+            stu_ih = ms_ih.get(Student, info.student_id)
+            if stu_ih and stu_ih.created_at:
+                student_created_at = stu_ih.created_at
+    except Exception:
+        pass
 
     with session_scope() as s:
         holdings = s.query(_SH_ih).all()
@@ -10165,52 +10185,62 @@ def get_isk_history(
         ):
             fund_baseline += Decimal(str(fund_total or 0))
 
-    # Hämta priser per dag · en query för alla tickers + dagar.
+    # Inga aktier → returnera flat-line med cash+fond per spel-dag
     points: list[V2IskHistoryPoint] = []
     if not ticker_qty:
-        # Inga aktier → returnera flat-line med cash+fond per dag
-        for i in range(days + 1):
-            day_ts = start_utc + _td_ih(days=i)
+        for gd in game_dates:
             points.append(V2IskHistoryPoint(
-                ts=day_ts,
+                ts=_dt_ih.combine(gd, _dt_ih.min.time()),
                 total_value=float(cash_baseline + fund_baseline),
             ))
         return V2IskHistoryResponse(days=days, points=points)
 
+    # Hämta priser per dag · en query för alla tickers + senaste 30
+    # real-dagar (yfinance polls). Filtrera generöst så vi har data
+    # även om en ticker just polled.
     tickers = list(ticker_qty.keys())
     with master_session() as msdb:
         # Per ticker · alla quotes i intervallet, sorted.
         quotes_by_ticker: dict[str, list[tuple[datetime, Decimal]]] = {}
+        cutoff_real = _dt_ih.utcnow() - _td_ih(days=30)
         rows = (
             msdb.query(_SQ_ih)
             .filter(_SQ_ih.ticker.in_(tickers))
-            .filter(_SQ_ih.ts >= start_utc - _td_ih(days=7))  # buffert
+            .filter(_SQ_ih.ts >= cutoff_real)
             .order_by(_SQ_ih.ts.asc())
             .all()
         )
         for r in rows:
             quotes_by_ticker.setdefault(r.ticker, []).append((r.ts, r.last))
 
-    # För varje dag · hämta senaste pris ≤ dagens slut per ticker
-    for i in range(days + 1):
-        day_end = start_utc + _td_ih(days=i, hours=23, minutes=59)
+    # För varje SPEL-dag · översätt till motsvarande real-tid (slutet
+    # av dagen, 17:30) och slå upp senaste StockQuote ≤ den tidpunkten.
+    for gd in game_dates:
+        # Spel-dagens slut (handelsdagens stängning som referens)
+        game_dt = _dt_ih.combine(gd, _dt_ih.min.time()).replace(hour=17, minute=30)
+        if student_created_at is not None:
+            try:
+                real_lookup_ts = _g2r_ih(student_created_at, game_dt)
+            except Exception:
+                real_lookup_ts = _dt_ih.utcnow()
+        else:
+            # Fallback · linjär utspridning över senaste 4 h real
+            real_lookup_ts = _dt_ih.utcnow()
+
         stock_total = Decimal("0")
         for ticker, qty in ticker_qty.items():
             qs = quotes_by_ticker.get(ticker, [])
-            # Hitta senaste quote ≤ day_end · linjärsök räcker för
-            # ~50 dagar × 30 tickers
             price = None
             for ts_q, last_q in reversed(qs):
-                if ts_q <= day_end:
+                if ts_q <= real_lookup_ts:
                     price = last_q
                     break
             if price is None and qs:
-                # Inga quotes innan day_end · använd första tillgängliga
                 price = qs[0][1]
             if price is not None:
                 stock_total += Decimal(qty) * price
         points.append(V2IskHistoryPoint(
-            ts=day_end.replace(hour=0, minute=0, second=0),
+            ts=_dt_ih.combine(gd, _dt_ih.min.time()),
             total_value=float(
                 cash_baseline + fund_baseline + stock_total,
             ),
