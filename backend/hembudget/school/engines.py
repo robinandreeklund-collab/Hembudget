@@ -181,18 +181,20 @@ def init_master_engine() -> Engine:
                     f"hembudget-master@"
                     f"{__import__('os').environ.get('K_REVISION', 'local')}"
                 ),
-                # Postgres-nivå-timeouts · vid deploy där revision-N och
-                # revision-N+1 överlappar kan startup-tasken
-                # (create_all + _run_master_migrations) fastna i en
-                # ACCESS-EXCLUSIVE-lock-wait på t.ex. students-tabellen
-                # när nya FK-constraints sätts. Utan dessa hänger uvicorn
-                # i 3+ min → TCP-probe DEADLINE_EXCEEDED → deploy fail.
-                # lock_timeout · max wait på ett lås
-                # statement_timeout · max wait på en enskild SQL-statement
-                "options": (
-                    "-c lock_timeout=30000 "
-                    "-c statement_timeout=120000"
-                ),
+                # OBS: sätt INTE lock_timeout/statement_timeout via
+                # 'options' här. När appen pekas mot PgBouncer
+                # (HEMBUDGET_ENABLE_PGBOUNCER=1, listen_port 6432) i
+                # transaction pool_mode vägrar PgBouncer ALLA startup-
+                # parametrar utanför sin ignore-whitelist och svarar
+                # med 'FATAL: unsupported startup parameter in options:
+                # lock_timeout' → KAJ query 500:ar.
+                #
+                # Istället: sätt timeouts session-nivå via SQLAlchemy
+                # connect-event på Postgres ALTER ROLE i deploy.sh, eller
+                # pgbouncer-konfig 'server_reset_query'. För närvarande
+                # förlitar vi oss på att init_master_engine:s create_all
+                # + migrations är wrap:ade i try/except som tar lock-
+                # contention-fel som vanliga exceptions.
             },
         )
     engine = create_engine(url, **engine_kwargs)
