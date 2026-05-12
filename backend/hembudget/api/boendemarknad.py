@@ -648,6 +648,57 @@ class RentalMoveInOut(BaseModel):
     welcome_message: str
 
 
+class RentalApplicationOut(BaseModel):
+    id: int
+    listing_id: str
+    city_key: str
+    address: str
+    tier: int
+    tier_label: str
+    size_kvm: int
+    rooms: int
+    monthly_rent: int
+    deposit: int
+    quality_score: int
+    first_hand: bool
+    applied_on: str
+    ready_on: str
+    status: str
+    days_left: int  # Spel-dagar tills man kan flytta in (0 om ready)
+
+
+class RentalApplicationsOut(BaseModel):
+    applications: list[RentalApplicationOut]
+
+
+def _application_to_out(r) -> RentalApplicationOut:
+    from ..business.game_clock import current_game_date
+    today_g = current_game_date()
+    days_left = max(0, (r.ready_on - today_g).days)
+    # Auto-promote status om ready_on passerat
+    effective_status = r.status
+    if r.status == "queued" and days_left == 0:
+        effective_status = "ready"
+    return RentalApplicationOut(
+        id=r.id,
+        listing_id=r.listing_id,
+        city_key=r.city_key,
+        address=r.address,
+        tier=r.tier,
+        tier_label=r.tier_label,
+        size_kvm=r.size_kvm,
+        rooms=r.rooms,
+        monthly_rent=r.monthly_rent,
+        deposit=r.deposit,
+        quality_score=r.quality_score,
+        first_hand=r.first_hand,
+        applied_on=r.applied_on.isoformat(),
+        ready_on=r.ready_on.isoformat(),
+        status=effective_status,
+        days_left=days_left,
+    )
+
+
 @router.get("/rentals", response_model=RentalsListOut)
 def list_rentals(
     ym: str = "2026-01",
@@ -692,6 +743,141 @@ def list_rentals(
     )
 
 
+@router.get("/rentals/applications", response_model=RentalApplicationsOut)
+def list_rental_applications(
+    info: TokenInfo = Depends(require_token),
+):
+    """Lista alla pending rental-applications (kö-ansökningar) för
+    inloggade eleven. Frontend visar dessa som "Du står i kö" tills
+    days_left = 0, då knappen blir "Flytta in nu"."""
+    from ..db.models import RentalApplication
+    sid = _require_student(info)
+    _ = sid
+    with session_scope() as s:
+        rows = (
+            s.query(RentalApplication)
+            .filter(RentalApplication.status.in_(("queued", "ready")))
+            .order_by(RentalApplication.ready_on.asc())
+            .all()
+        )
+        return RentalApplicationsOut(
+            applications=[_application_to_out(r) for r in rows],
+        )
+
+
+@router.post(
+    "/rentals/{listing_id}/apply",
+    response_model=RentalApplicationOut,
+)
+def rental_apply(
+    listing_id: str,
+    ym: str = "2026-01",
+    info: TokenInfo = Depends(require_token),
+):
+    """Ställ dig i kö för en hyresrätt. Skapar en RentalApplication-
+    rad som blir 'ready' när queue_months passerat i spel-tid.
+
+    Om listing.queue_months == 0 kan eleven hoppa kön och direkt
+    anropa /move-in istället för att applicera först.
+    """
+    from ..db.models import RentalApplication
+    from ..game_engine.housing_market.rentals import find_rental
+    from ..business.game_clock import current_game_date
+    from datetime import timedelta as _td_app
+
+    sid = _require_student(info)
+    _ = sid
+    listing = find_rental(listing_id)
+    if listing is None:
+        raise HTTPException(404, "Listing hittades inte")
+
+    today_g = current_game_date()
+    # Spel-tid: 1 spel-månad = ~4.3 real-timmar. För kö-systemet
+    # räknar vi 30 spel-dagar per månad.
+    ready_on = today_g + _td_app(days=30 * listing.queue_months)
+
+    with session_scope() as s:
+        # Kolla om eleven redan har en pending ansökan för samma listing
+        existing = (
+            s.query(RentalApplication)
+            .filter(
+                RentalApplication.listing_id == listing_id,
+                RentalApplication.status.in_(("queued", "ready")),
+            )
+            .first()
+        )
+        if existing is not None:
+            raise HTTPException(
+                409, "Du står redan i kö för denna lägenhet",
+            )
+
+        app = RentalApplication(
+            listing_id=listing.listing_id,
+            city_key=listing.city_key,
+            address=listing.address,
+            tier=listing.tier,
+            tier_label=listing.tier_label,
+            size_kvm=listing.size_kvm,
+            rooms=listing.rooms,
+            monthly_rent=listing.monthly_rent,
+            deposit=listing.deposit,
+            quality_score=listing.quality_score,
+            first_hand=listing.first_hand,
+            applied_on=today_g,
+            ready_on=ready_on,
+            status="ready" if listing.queue_months == 0 else "queued",
+        )
+        s.add(app)
+        s.flush()
+
+        # Aktivitetslog
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="private.rental_applied",
+                summary=(
+                    f"Ställde mig i kö för {listing.address} · "
+                    f"{listing.queue_months} mån kö"
+                ),
+                payload={
+                    "listing_id": listing.listing_id,
+                    "tier": listing.tier,
+                    "queue_months": listing.queue_months,
+                    "monthly_rent": listing.monthly_rent,
+                },
+                student_id=sid,
+            )
+        except Exception:
+            pass
+
+        return _application_to_out(app)
+
+
+@router.delete(
+    "/rentals/applications/{application_id}",
+    status_code=204,
+)
+def cancel_rental_application(
+    application_id: int,
+    info: TokenInfo = Depends(require_token),
+):
+    """Avbryt en pending kö-ansökan."""
+    from ..db.models import RentalApplication
+    sid = _require_student(info)
+    _ = sid
+    with session_scope() as s:
+        row = s.get(RentalApplication, application_id)
+        if row is None:
+            raise HTTPException(404, "Ansökan hittades inte")
+        if row.status not in ("queued", "ready"):
+            raise HTTPException(
+                400, f"Ansökan har redan status '{row.status}'",
+            )
+        row.status = "cancelled"
+        s.flush()
+    return None
+
+
 @router.post(
     "/rentals/{listing_id}/move-in",
     response_model=RentalMoveInOut,
@@ -712,10 +898,46 @@ def rental_move_in(
     from ..game_engine.housing_market.rentals import (
         find_rental, tier_pentagon_deltas,
     )
+    from ..db.models import RentalApplication
+    from ..business.game_clock import current_game_date as _cgd_mv
     sid = _require_student(info)
     listing = find_rental(listing_id)
     if listing is None:
         raise HTTPException(404, "Listing hittades inte")
+
+    # Kö-gate: om listing.queue_months > 0 krävs en READY (ej queued)
+    # RentalApplication för denna listing. Eleven måste först
+    # /apply och vänta tills ready_on passerat. queue_months=0
+    # tillåter direkt inflytt utan ansökan.
+    pending_app = None
+    if listing.queue_months > 0:
+        with session_scope() as s_chk:
+            today_g = _cgd_mv()
+            pending_app = (
+                s_chk.query(RentalApplication)
+                .filter(
+                    RentalApplication.listing_id == listing_id,
+                    RentalApplication.status.in_(("queued", "ready")),
+                )
+                .first()
+            )
+            if pending_app is None:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    (
+                        f"Denna lägenhet har {listing.queue_months} mån "
+                        "kö. Ställ dig i kön först via /apply."
+                    ),
+                )
+            if pending_app.ready_on > today_g:
+                days_left = (pending_app.ready_on - today_g).days
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    (
+                        f"Du står i kö men har {days_left} spel-dagar kvar. "
+                        f"Kom tillbaka när köandet är klart."
+                    ),
+                )
 
     with master_session() as ms:
         sp = (
@@ -759,6 +981,14 @@ def rental_move_in(
 
     with session_scope() as s:
         ensure_active_home(s, profile=profile, year_month=ym)
+        # Snapshot:a gamla hyran INNAN move_to_rental ändrar status →
+        # vi behöver beloppet till uppsägnings-slutfakturan.
+        from ..game_engine.housing_market.active_home import (
+            get_active_home as _get_active_home,
+        )
+        prev_home = _get_active_home(s)
+        prev_rent = int(prev_home.monthly_cost) if prev_home else 0
+        prev_address = prev_home.address if prev_home else None
         try:
             home = move_to_rental(
                 s,
@@ -769,6 +999,74 @@ def rental_move_in(
             )
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
+        # Skapa uppsägnings-slutfaktura för 3 mån av gamla hyran så
+        # eleven ser kostnaden av att flytta innan kontraktet löper ut.
+        # Pedagogiskt: man slipper inte hyran bara för att man flyttat.
+        if prev_rent > 0 and prev_home and prev_home.id != home.id:
+            try:
+                from ..db.models import MailItem as _MI_slut
+                from ..business.game_clock import current_game_date
+                slut_amount = prev_rent * 3
+                today_g = current_game_date()
+                from datetime import timedelta as _td_slut
+                due_date = today_g + _td_slut(days=30)
+                slut_body = (
+                    f"Slutfaktura · uppsägningstid 3 månader\n\n"
+                    f"Du har sagt upp ditt kontrakt på "
+                    f"{prev_address or 'din gamla bostad'}. "
+                    f"Enligt avtalet har du 3 månaders uppsägningstid "
+                    f"som måste betalas även om du flyttat.\n\n"
+                    f"Månadshyra: {prev_rent:,} kr\n".replace(",", " ")
+                    + f"× 3 månader = {slut_amount:,} kr\n\n".replace(",", " ")
+                    + "Förfaller om 30 dagar. Sätt upp autogiro "
+                    "eller markera som betald via banken."
+                )
+                s.add(_MI_slut(
+                    sender=(
+                        f"{profile.city_key.title()} Bostäder"
+                        if profile.city_key else "Hyresvärden"
+                    ),
+                    sender_short="HYR",
+                    sender_kind="land",
+                    sender_meta="slutfaktura",
+                    mail_type="invoice",
+                    subject=(
+                        f"Slutfaktura · uppsägningstid {slut_amount:,} kr"
+                    ).replace(",", " "),
+                    body_meta=f"Förfaller {due_date.isoformat()}",
+                    body=slut_body,
+                    amount=Decimal(-slut_amount),
+                    due_date=due_date,
+                    status="unhandled",
+                    received_at=datetime.combine(
+                        today_g, datetime.min.time(),
+                    ).replace(hour=10),
+                ))
+            except Exception:
+                log.exception(
+                    "rental_move_in: kunde inte skapa slutfaktura",
+                )
+
+        # Sync StudentProfile (master-DB) så HubV2 + dashboard visar
+        # rätt hyra direkt efter inflyttning. Annars säger banner-
+        # texten kvar "Hyran på 6 975 kr dras varje månad" trots att
+        # eleven har flyttat till en 16 338 kr/mån-lägenhet.
+        try:
+            with master_session() as ms:
+                sp_master = (
+                    ms.query(StudentProfile)
+                    .filter(StudentProfile.student_id == sid)
+                    .first()
+                )
+                if sp_master is not None:
+                    sp_master.housing_type = "hyresratt"
+                    sp_master.housing_monthly = listing.monthly_rent
+                    ms.commit()
+        except Exception:
+            log.exception(
+                "rental_move_in: kunde inte synca StudentProfile.housing",
+            )
 
         # Dra deposition · Transaction på lönekontot
         acc = (
@@ -871,6 +1169,19 @@ def rental_move_in(
         f"{listing.size_kvm} kvm · {listing.rooms} rok · "
         f"{listing.monthly_rent:,} kr/mån".replace(",", " ")
     )
+
+    # Markera rental-application som moved_in (om kö användes)
+    if pending_app is not None:
+        try:
+            with session_scope() as s_done:
+                app_row = s_done.get(RentalApplication, pending_app.id)
+                if app_row is not None and app_row.status in ("queued", "ready"):
+                    app_row.status = "moved_in"
+                    s_done.flush()
+        except Exception:
+            log.exception(
+                "rental_move_in: kunde inte uppdatera applikationsstatus",
+            )
 
     return RentalMoveInOut(
         home=home_out,

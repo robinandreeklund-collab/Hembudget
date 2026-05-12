@@ -3065,6 +3065,54 @@ export const v2Api = {
       + (minTier ? `&min_tier=${minTier}` : "")
       + (maxTier ? `&max_tier=${maxTier}` : ""),
     ),
+  boendemarknadRentalApply: (listingId: string, ym: string) =>
+    api<{
+      id: number;
+      listing_id: string;
+      city_key: string;
+      address: string;
+      tier: number;
+      tier_label: string;
+      size_kvm: number;
+      rooms: number;
+      monthly_rent: number;
+      deposit: number;
+      quality_score: number;
+      first_hand: boolean;
+      applied_on: string;
+      ready_on: string;
+      status: string;
+      days_left: number;
+    }>(
+      `/v2/boendemarknad/rentals/${encodeURIComponent(listingId)}/apply?ym=${encodeURIComponent(ym)}`,
+      { method: "POST", body: "{}" },
+    ),
+  boendemarknadRentalApplications: () =>
+    api<{
+      applications: Array<{
+        id: number;
+        listing_id: string;
+        city_key: string;
+        address: string;
+        tier: number;
+        tier_label: string;
+        size_kvm: number;
+        rooms: number;
+        monthly_rent: number;
+        deposit: number;
+        quality_score: number;
+        first_hand: boolean;
+        applied_on: string;
+        ready_on: string;
+        status: string;
+        days_left: number;
+      }>;
+    }>("/v2/boendemarknad/rentals/applications"),
+  boendemarknadRentalApplicationCancel: (id: number) =>
+    api<void>(
+      `/v2/boendemarknad/rentals/applications/${id}`,
+      { method: "DELETE" },
+    ),
   boendemarknadRentalMoveIn: (listingId: string, ym: string) =>
     api<{
       home: {

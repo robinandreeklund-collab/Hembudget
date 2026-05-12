@@ -8901,6 +8901,20 @@ def get_rental(
                 rent_per_sqm_year = (rent * 12) / area
             if net_salary and net_salary > 0:
                 share_pct = round(rent / net_salary * 100, 1)
+            mps = (
+                float(contract.market_price_per_sqm)
+                if contract.market_price_per_sqm is not None else None
+            )
+            if mps and area > 0:
+                market_buy_estimate = round(area * mps, 0)
+                # Jämför hyran/m² med Sthlm-snitt 2026
+                # ≈ 1900 kr/m²/år för förstahand i ytterstad.
+                sthlm_avg = 1900.0
+                if rent_per_sqm_year > 0:
+                    market_diff_pct = round(
+                        (rent_per_sqm_year - sthlm_avg) / sthlm_avg * 100,
+                        1,
+                    )
         elif active_home_fallback is not None:
             # Bygg virtuell contract-respons från ActiveHome-data.
             # id=-1 signalerar "syntetisk · uppsägning sker via
@@ -8945,20 +8959,8 @@ def get_rental(
                 rent_per_sqm_year = (rent * 12) / area
             if net_salary and net_salary > 0:
                 share_pct = round(rent / net_salary * 100, 1)
-            mps = (
-                float(contract.market_price_per_sqm)
-                if contract.market_price_per_sqm is not None else None
-            )
-            if mps and area > 0:
-                market_buy_estimate = round(area * mps, 0)
-                # Jämför hyran/m² med Sthlm-snitt 2026
-                # ≈ 1900 kr/m²/år för förstahand i ytterstad.
-                sthlm_avg = 1900.0
-                if rent_per_sqm_year > 0:
-                    market_diff_pct = round(
-                        (rent_per_sqm_year - sthlm_avg) / sthlm_avg * 100,
-                        1,
-                    )
+            # Vi har ingen market_price_per_sqm på ActiveHome-fallback
+            # → market_buy_estimate + market_diff_pct stannar None.
 
         return V2RentalResponse(
             student_id=info.student_id,

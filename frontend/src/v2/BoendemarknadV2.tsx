@@ -614,6 +614,31 @@ const TIER_HEADER: Record<number, string> = {
   3: "Familjelägenhet",
   4: "Lyx-lägenhet",
 };
+function queueButtonStyle(
+  kind: "queued" | "apply" | "ready",
+): React.CSSProperties {
+  const palette = {
+    queued: { bg: "rgba(167,139,250,0.18)", color: "#c4b5fd", border: "rgba(167,139,250,0.4)" },
+    apply: { bg: "rgba(167,139,250,0.10)", color: "#a78bfa", border: "rgba(167,139,250,0.3)" },
+    ready: { bg: "#6ee7b7", color: "#0f1525", border: "transparent" },
+  }[kind];
+  return {
+    width: "100%",
+    padding: "9px 14px",
+    background: palette.bg,
+    color: palette.color,
+    border: `1px solid ${palette.border}`,
+    borderRadius: 100,
+    cursor: "pointer",
+    fontFamily: "var(--mono)",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "1.2px",
+    textTransform: "uppercase" as const,
+  };
+}
+
+
 const TIER_WELLBEING: Record<number, string> = {
   1: "⚠ -2 safety/mån · trångt och instabilt",
   2: "Baseline · 0 safety-drift",
@@ -621,19 +646,42 @@ const TIER_WELLBEING: Record<number, string> = {
   4: "+2 safety/mån · lyx (kostar i ekonomi)",
 };
 
+type RentalApplication = {
+  id: number;
+  listing_id: string;
+  address: string;
+  tier: number;
+  tier_label: string;
+  size_kvm: number;
+  rooms: number;
+  monthly_rent: number;
+  deposit: number;
+  applied_on: string;
+  ready_on: string;
+  status: string;
+  days_left: number;
+};
+
 function HyrmarknadPanel() {
   const [ym, setYm] = useState(CURRENT_YM);
   const [listings, setListings] = useState<RentalListing[] | null>(null);
+  const [applications, setApplications] = useState<RentalApplication[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [movingIn, setMovingIn] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   function refresh(targetYm: string) {
     setLoading(true);
     setError(null);
-    v2Api.boendemarknadListRentals(targetYm)
-      .then((d) => setListings(d.listings))
+    Promise.all([
+      v2Api.boendemarknadListRentals(targetYm),
+      v2Api.boendemarknadRentalApplications(),
+    ])
+      .then(([listed, apps]) => {
+        setListings(listed.listings);
+        setApplications(apps.applications);
+      })
       .catch((e) => setError(String((e as Error)?.message || e)))
       .finally(() => setLoading(false));
   }
@@ -643,6 +691,45 @@ function HyrmarknadPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ym]);
 
+  // Slå upp pending app för en listing
+  function appFor(listingId: string): RentalApplication | undefined {
+    return applications.find(
+      (a) => a.listing_id === listingId
+        && (a.status === "queued" || a.status === "ready"),
+    );
+  }
+
+  async function applyForListing(listing: RentalListing) {
+    if (!confirm(
+      `Ställ dig i kö för ${listing.address}?\n\n`
+        + `· ${listing.queue_months} spel-månader kö-tid\n`
+        + `· När kön är klar kan du klicka "Flytta in nu"\n`
+        + `· Kostar inget att ställa sig i kö`,
+    )) return;
+    setBusy(listing.listing_id);
+    setMsg(null);
+    try {
+      await v2Api.boendemarknadRentalApply(listing.listing_id, ym);
+      setMsg(`✓ Du står nu i kö för ${listing.address}`);
+      refresh(ym);
+    } catch (e) {
+      setMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function cancelApplication(appId: number, address: string) {
+    if (!confirm(`Avbryta köandet för ${address}?`)) return;
+    try {
+      await v2Api.boendemarknadRentalApplicationCancel(appId);
+      setMsg(`Du står inte längre i kö för ${address}.`);
+      refresh(ym);
+    } catch (e) {
+      setMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    }
+  }
+
   async function moveIn(listing: RentalListing) {
     if (!confirm(
       `Flytta in i ${listing.address}?\n\n`
@@ -651,9 +738,10 @@ function HyrmarknadPanel() {
         + `· Deposition ${listing.deposit.toLocaleString("sv-SE")} kr (dras direkt)\n`
         + `· ${listing.first_hand ? "Förstahandskontrakt" : "Andrahandskontrakt"}\n\n`
         + `Wellbeing-effekt: ${TIER_WELLBEING[listing.tier]}\n\n`
-        + "OBS: din nuvarande bostad sägs upp automatiskt.",
+        + "OBS: din nuvarande bostad sägs upp · slutfaktura på 3 mån "
+        + "av gamla hyran läggs i postlådan.",
     )) return;
-    setMovingIn(listing.listing_id);
+    setBusy(listing.listing_id);
     setMsg(null);
     try {
       const r = await v2Api.boendemarknadRentalMoveIn(listing.listing_id, ym);
@@ -666,7 +754,7 @@ function HyrmarknadPanel() {
     } catch (e) {
       setMsg(`Fel: ${String((e as Error)?.message || e)}`);
     } finally {
-      setMovingIn(null);
+      setBusy(null);
     }
   }
 
@@ -702,6 +790,74 @@ function HyrmarknadPanel() {
 
       {loading && <div>Laddar lediga lägenheter…</div>}
       {error && <div style={{ color: "var(--danger)" }}>Fel: {error}</div>}
+
+      {/* Mina pending ansökningar */}
+      {applications.length > 0 && (
+        <section style={{ marginBottom: 28 }}>
+          <h3 style={{
+            fontFamily: "var(--serif)",
+            fontSize: 17,
+            color: "#fff",
+            marginBottom: 6,
+          }}>
+            Mina pending ansökningar · <em>{applications.length}</em>
+          </h3>
+          <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+            {applications.map((app) => (
+              <div key={app.id} style={{
+                padding: 12,
+                background: app.status === "ready"
+                  ? "rgba(110,231,183,0.08)"
+                  : "rgba(167,139,250,0.06)",
+                border: `1px solid ${app.status === "ready"
+                  ? "rgba(110,231,183,0.30)"
+                  : "rgba(167,139,250,0.25)"}`,
+                borderRadius: 8,
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{
+                    fontFamily: "var(--serif)",
+                    fontSize: 15, fontWeight: 700, color: "#fff",
+                  }}>
+                    {app.address}
+                  </div>
+                  <div style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 10, color: "var(--text-mid)",
+                    letterSpacing: 0.5, marginTop: 4,
+                  }}>
+                    Tier {app.tier} · {app.size_kvm} kvm · {app.rooms} rok
+                    · {SEK(app.monthly_rent)} kr/mån
+                    {app.status === "ready"
+                      ? " · KLAR ATT FLYTTA IN"
+                      : ` · ${app.days_left} dgr kvar`}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => cancelApplication(app.id, app.address)}
+                  style={{
+                    padding: "6px 12px",
+                    background: "transparent",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    borderRadius: 100,
+                    color: "rgba(255,255,255,0.7)",
+                    fontFamily: "var(--mono)",
+                    fontSize: 10, letterSpacing: 1, cursor: "pointer",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Avbryt
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {[4, 3, 2, 1].map((tier) => {
         const tierListings = (listings || []).filter((l) => l.tier === tier);
@@ -773,27 +929,68 @@ function HyrmarknadPanel() {
                   <p style={{ fontFamily: "var(--serif)", fontSize: 13, color: "var(--text)", margin: "10px 0 12px" }}>
                     {l.description}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => moveIn(l)}
-                    disabled={movingIn === l.listing_id}
-                    style={{
-                      width: "100%",
-                      padding: "9px 14px",
-                      background: "var(--accent)",
-                      color: "#fff",
-                      border: 0,
-                      borderRadius: 100,
-                      cursor: movingIn === l.listing_id ? "wait" : "pointer",
-                      fontFamily: "var(--mono)",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: "1.2px",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {movingIn === l.listing_id ? "Flyttar in…" : "Flytta in →"}
-                  </button>
+                  {(() => {
+                    const app = appFor(l.listing_id);
+                    // Tre states:
+                    //  - I kö (queued) · väntar
+                    //  - Klar (ready)  · kan flytta in
+                    //  - Ingen app + queue=0 · direkt flytt-in
+                    //  - Ingen app + queue>0 · måste applicera först
+                    if (app && app.status === "queued") {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => cancelApplication(app.id, l.address)}
+                          style={queueButtonStyle("queued")}
+                        >
+                          {`★ I kö · ${app.days_left} dgr kvar (avbryt)`}
+                        </button>
+                      );
+                    }
+                    const isReady = (app && app.status === "ready")
+                      || l.queue_months === 0;
+                    const needsQueue = !app && l.queue_months > 0;
+                    if (needsQueue) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => applyForListing(l)}
+                          disabled={busy === l.listing_id}
+                          style={queueButtonStyle("apply")}
+                        >
+                          {busy === l.listing_id
+                            ? "Ställer i kö…"
+                            : `Ställ dig i kö · ${l.queue_months} mån →`}
+                        </button>
+                      );
+                    }
+                    // Direkt flytt-in (queue=0 eller ready app)
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => moveIn(l)}
+                        disabled={busy === l.listing_id}
+                        style={{
+                          width: "100%",
+                          padding: "9px 14px",
+                          background: isReady && app ? "#6ee7b7" : "var(--accent)",
+                          color: isReady && app ? "#0f1525" : "#fff",
+                          border: 0,
+                          borderRadius: 100,
+                          cursor: busy === l.listing_id ? "wait" : "pointer",
+                          fontFamily: "var(--mono)",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: "1.2px",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {busy === l.listing_id
+                          ? "Flyttar in…"
+                          : (isReady && app ? "Flytta in nu →" : "Flytta in →")}
+                      </button>
+                    );
+                  })()}
                 </article>
               ))}
             </div>

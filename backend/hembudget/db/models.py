@@ -1928,6 +1928,47 @@ class ActiveHome(TenantMixin, Base):
     )
 
 
+class RentalApplication(TenantMixin, Base):
+    """Pending kö-ansökan till en hyresrätt-listing.
+
+    När eleven klickar "Ställ mig i kö" skapas en rad här. När
+    `ready_on` passerat i spel-tid kan eleven klicka "Flytta in nu"
+    från sin lista över pending ansökningar.
+
+    Snapshot:ar listing-data eftersom listings genereras determinis-
+    tiskt per (city, year_month). Vid flytt-in-tid kan year_month
+    ha tickat förbi och poolen visar andra listings.
+    """
+    __tablename__ = "rental_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    city_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    address: Mapped[str] = mapped_column(String(200), nullable=False)
+    tier: Mapped[int] = mapped_column(Integer, nullable=False)
+    tier_label: Mapped[str] = mapped_column(String(20), nullable=False)
+    size_kvm: Mapped[int] = mapped_column(Integer, nullable=False)
+    rooms: Mapped[int] = mapped_column(Integer, nullable=False)
+    monthly_rent: Mapped[int] = mapped_column(Integer, nullable=False)
+    deposit: Mapped[int] = mapped_column(Integer, nullable=False)
+    quality_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    first_hand: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    applied_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ready_on: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True,
+    )
+    # queued · väntar i kö  (applied_on < ready_on)
+    # ready   · redo att flytta in (today_g >= ready_on)
+    # moved_in · eleven har flyttat in (terminal)
+    # cancelled · eleven avbröt köandet (terminal)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="queued", index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 # Bug #7-utbyggnad · Företagsläget (scope-DB)
 # Importerad här så Base.metadata.create_all hittar tabellerna.
 from ..business import models as _business_models  # noqa: E402, F401

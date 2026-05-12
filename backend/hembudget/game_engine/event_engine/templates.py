@@ -245,7 +245,11 @@ EVENT_TEMPLATES: list[EventTemplate] = [
     EventTemplate(
         key="cykel_stulen",
         display="Cykeln stulen utanför arbetet",
-        description="Cykeln stals trots att du låste den. Polisanmälan inlämnad.",
+        description=(
+            "Cykeln stals trots att du låste den. Polisanmälan inlämnad. "
+            "Du behöver köpa en ny cykel — fakturan kommer från "
+            "cykelaffären, inte från Polisen."
+        ),
         kind="unexpected",
         frequency_per_year=0.15,
         cost_range=(4000, 12000),
@@ -254,8 +258,11 @@ EVENT_TEMPLATES: list[EventTemplate] = [
         mitigations=(
             Mitigation("hem", 0.15, "Hemförsäkring drulle · självrisk 1 500"),
         ),
-        sender="Polisen",
-        sender_short="POL",
+        # Faktura-avsändare är cykelaffären där eleven köper ny cykel,
+        # INTE Polisen. Polisen registrerar bara anmälan (informationsbrev
+        # som event_engine.roller kan skicka separat — TODO).
+        sender="Cykelpartner Norden",
+        sender_short="CYK",
         sender_kind="other",
     ),
     EventTemplate(
