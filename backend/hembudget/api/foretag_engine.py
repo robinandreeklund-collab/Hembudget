@@ -541,6 +541,57 @@ def deliver(
                 400, f"Jobbet har status '{job.status}'",
             )
 
+        # Blockera leverans innan jobbet hunnit klart i spel-tid.
+        # Eleven måste vänta tills planerad tid (deadline) passerats —
+        # annars kan hen klicka leverera direkt efter start och sedan
+        # ta nästa jobb · TIDS-KAPACITET blir meningslöst och eleven
+        # kan fuska sig till oändlig inkomst.
+        #
+        # Beräkning matchar _to_job_out:s progress_pct (spel-tid mellan
+        # started_on och expected_complete_on). 95 % tolerans så
+        # eleven inte fastnar exakt på 99,8 % pga UTC-rundningar.
+        try:
+            from ..business.game_clock import (
+                current_game_date as _cgd_deliver,
+            )
+            today_g = _cgd_deliver()
+            if (
+                job.started_on is not None
+                and job.expected_complete_on is not None
+            ):
+                total_days = max(
+                    1,
+                    (job.expected_complete_on - job.started_on).days,
+                )
+                elapsed_days = (today_g - job.started_on).days
+                progress_pct = max(
+                    0.0, min(100.0, (elapsed_days / total_days) * 100.0),
+                )
+                if progress_pct < 95.0:
+                    days_left = max(
+                        0,
+                        (job.expected_complete_on - today_g).days,
+                    )
+                    raise HTTPException(
+                        400,
+                        (
+                            f"Jobbet är inte färdigt än "
+                            f"({int(progress_pct)} % klart). "
+                            f"Deadline {job.expected_complete_on} · "
+                            f"~{days_left} spel-dgr kvar. "
+                            f"Du kan inte leverera tidigare än planerat — "
+                            f"TIDS-KAPACITET måste konsumeras."
+                        ),
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "/jobs/deliver: kunde inte verifiera progress_pct · "
+                "släpper igenom som defensiv fallback",
+            )
+
         delivered_job, invoice = deliver_job(
             s,
             company=co,
@@ -697,6 +748,45 @@ def submit_delivery_quiz(
             raise HTTPException(
                 400, f"Jobbet har status '{job.status}'",
             )
+
+        # Same gate som /jobs/{id}/deliver · blockera early-delivery
+        # via quiz-vägen så ingen kan fuska genom att skip:a vanliga
+        # deliver-endpointen.
+        try:
+            from ..business.game_clock import (
+                current_game_date as _cgd_quiz,
+            )
+            today_g = _cgd_quiz()
+            if (
+                job.started_on is not None
+                and job.expected_complete_on is not None
+            ):
+                total_days = max(
+                    1,
+                    (job.expected_complete_on - job.started_on).days,
+                )
+                elapsed_days = (today_g - job.started_on).days
+                progress_pct = max(
+                    0.0, min(100.0, (elapsed_days / total_days) * 100.0),
+                )
+                if progress_pct < 95.0:
+                    days_left = max(
+                        0,
+                        (job.expected_complete_on - today_g).days,
+                    )
+                    raise HTTPException(
+                        400,
+                        (
+                            f"Jobbet är inte färdigt än "
+                            f"({int(progress_pct)} % klart). "
+                            f"Deadline {job.expected_complete_on} · "
+                            f"~{days_left} spel-dgr kvar."
+                        ),
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
 
         # Återgenerera SAMMA frågor som vi gav i GET (samma seed)
         rng = _rnd_q2.Random(f"quiz-{job.id}-{co.id}")

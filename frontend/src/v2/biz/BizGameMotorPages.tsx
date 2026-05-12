@@ -1420,11 +1420,68 @@ function JobCard({
               transition: "width 0.5s",
             }} />
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-            <button onClick={onDeliver} style={btnPrimary}>
-              Leverera + skapa kund + faktura →
-            </button>
-          </div>
+          {/* Leverera-knappen aktiveras BARA när jobbet är klart i
+              spel-tid (≥ 95 %). Annars kan eleven klicka direkt efter
+              start och fuska sig till oändlig inkomst utan att
+              TIDS-KAPACITET konsumeras. Backend gör samma kontroll. */}
+          {(() => {
+            const canDeliver = livePct >= 95;
+            const daysLeft = (() => {
+              if (canDeliver || !job.expected_complete_on) return null;
+              const todayParts = (
+                job.started_on || new Date().toISOString().slice(0, 10)
+              ).split("-").map(Number);
+              const dueParts = job.expected_complete_on
+                .split("-").map(Number);
+              const today = new Date(
+                todayParts[0], todayParts[1] - 1, todayParts[2],
+              );
+              const due = new Date(
+                dueParts[0], dueParts[1] - 1, dueParts[2],
+              );
+              const totalMs = due.getTime() - today.getTime();
+              const remainingMs = totalMs * (1 - livePct / 100);
+              return Math.max(
+                0, Math.ceil(remainingMs / (24 * 3600 * 1000)),
+              );
+            })();
+            return (
+              <div style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                gap: 12,
+                marginTop: 12,
+              }}>
+                {!canDeliver && (
+                  <span style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.55)",
+                    letterSpacing: 0.6,
+                  }}>
+                    ⏱ jobbet pågår
+                    {daysLeft !== null && daysLeft > 0
+                      && ` · ~${daysLeft} spel-dgr kvar`}
+                  </span>
+                )}
+                <button
+                  onClick={canDeliver ? onDeliver : undefined}
+                  disabled={!canDeliver}
+                  title={canDeliver
+                    ? "Leverera och skapa faktura"
+                    : "Du kan inte leverera förrän jobbet är klart i spel-tid"}
+                  style={{
+                    ...btnPrimary,
+                    opacity: canDeliver ? 1 : 0.4,
+                    cursor: canDeliver ? "pointer" : "not-allowed",
+                  }}
+                >
+                  Leverera + skapa kund + faktura →
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
 
