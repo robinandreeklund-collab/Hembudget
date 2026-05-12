@@ -213,6 +213,103 @@ class CareerTimelineOut(BaseModel):
     items: list[CareerTimelineRow]
 
 
+# ===========================================================
+# Stats-trend (Fas J) · veckovis aggregering över klassen
+# ===========================================================
+
+
+class StatsTrendBucket(BaseModel):
+    week_start: str  # "2026-05-04"
+    n_hire_offered: int = 0
+    n_accepted: int = 0
+    n_declined: int = 0
+    n_terminated: int = 0
+    n_bankrupted: int = 0
+    payroll_paid: int = 0
+
+
+class StatsTrendOut(BaseModel):
+    weeks: list[StatsTrendBucket]
+
+
+@router.get("/stats-trend", response_model=StatsTrendOut)
+def employment_stats_trend(
+    weeks: int = 12,
+    class_label: Optional[str] = None,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Veckovis aggregering av employment-händelser för klassen.
+
+    Returnerar `weeks` (max 52) buckets med antal hire/accept/decline/
+    terminate/bankruptcy + total payroll-volym per vecka.
+    """
+    from datetime import date as _date
+
+    weeks = max(1, min(weeks, 52))
+    teacher_id = info.teacher_id
+    if teacher_id is None:
+        raise HTTPException(403, "Lärar-token utan teacher_id")
+
+    today_utc = datetime.utcnow()
+    cutoff = today_utc - timedelta(days=weeks * 7)
+
+    with master_session() as s:
+        q = s.query(Student).filter(Student.teacher_id == teacher_id)
+        if class_label:
+            q = q.filter(Student.class_label == class_label)
+        student_ids = [r.id for r in q.all()]
+
+        rows = (
+            s.query(StudentActivity)
+            .filter(
+                StudentActivity.student_id.in_(student_ids),
+                StudentActivity.kind.in_(CAREER_TIMELINE_KINDS),
+                StudentActivity.created_at >= cutoff,
+            )
+            .all()
+        )
+
+    # Bygg buckets · monday som vecko-start
+    def week_start_for(dt: datetime) -> _date:
+        d = dt.date()
+        # ISO weekday: Mon=1..Sun=7. Offset till måndag.
+        return d - timedelta(days=d.weekday())
+
+    buckets: dict[_date, StatsTrendBucket] = {}
+    # Förallokera buckets · annars saknas tomma veckor
+    earliest_week = week_start_for(cutoff)
+    for i in range(weeks + 1):
+        w = earliest_week + timedelta(days=7 * i)
+        buckets[w] = StatsTrendBucket(week_start=w.isoformat())
+
+    for act in rows:
+        w = week_start_for(act.created_at)
+        b = buckets.get(w)
+        if b is None:
+            b = StatsTrendBucket(week_start=w.isoformat())
+            buckets[w] = b
+        k = act.kind
+        if k == "biz.employee_hire_offered":
+            b.n_hire_offered += 1
+        elif k == "private.employment_accepted":
+            b.n_accepted += 1
+        elif k == "private.employment_declined":
+            b.n_declined += 1
+        elif k in (
+            "private.terminated_by_employer",
+            "biz.employee_terminated",
+        ):
+            b.n_terminated += 1
+        elif k == "private.terminated_by_bankruptcy":
+            b.n_bankrupted += 1
+        elif k == "biz.payroll_run":
+            payload = act.payload or {}
+            b.payroll_paid += int(payload.get("total_cost") or 0)
+
+    sorted_weeks = sorted(buckets.values(), key=lambda b: b.week_start)
+    return StatsTrendOut(weeks=sorted_weeks)
+
+
 @router.get(
     "/career-timeline/{student_id}",
     response_model=CareerTimelineOut,

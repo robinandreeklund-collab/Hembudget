@@ -49,12 +49,24 @@ type EcosystemData = {
 };
 
 
+type StatsBucket = {
+  week_start: string;
+  n_hire_offered: number;
+  n_accepted: number;
+  n_declined: number;
+  n_terminated: number;
+  n_bankrupted: number;
+  payroll_paid: number;
+};
+
+
 const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
 
 
 export function TeacherEmploymentEcosystem() {
   const [data, setData] = useState<EcosystemData | null>(null);
+  const [trend, setTrend] = useState<StatsBucket[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [classLabel] = useState<string>("");
 
@@ -66,6 +78,9 @@ export function TeacherEmploymentEcosystem() {
     )
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
+    api<{ weeks: StatsBucket[] }>("/v2/teacher/employment/stats-trend?weeks=12")
+      .then((d) => setTrend(d.weeks))
+      .catch(() => setTrend([]));
   }
 
   useEffect(() => {
@@ -154,6 +169,16 @@ export function TeacherEmploymentEcosystem() {
             accent="#fbbf24"
           />
         </div>
+
+        {/* Trend-graf · 12 veckor (Fas J) */}
+        {trend && trend.length > 0 && (
+          <section style={{ marginBottom: 32 }}>
+            <h2 style={sectionHeaderStyle}>
+              ● TREND · senaste 12 veckor
+            </h2>
+            <TrendChart trend={trend} />
+          </section>
+        )}
 
         {/* Företagare-grupper */}
         <section style={{ marginBottom: 32 }}>
@@ -298,6 +323,110 @@ export function TeacherEmploymentEcosystem() {
         )}
       </div>
     </div>
+  );
+}
+
+
+function TrendChart({ trend }: { trend: StatsBucket[] }) {
+  const maxEvents = Math.max(
+    1,
+    ...trend.map((b) =>
+      b.n_hire_offered + b.n_accepted + b.n_declined
+        + b.n_terminated + b.n_bankrupted
+    ),
+  );
+  const maxPayroll = Math.max(1, ...trend.map((b) => b.payroll_paid));
+
+  return (
+    <div style={{
+      padding: 18,
+      background: "rgba(15,21,37,0.55)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 10,
+    }}>
+      <div style={{ display: "flex", gap: 4, alignItems: "flex-end", height: 140 }}>
+        {trend.map((b) => {
+          const totalEvents = b.n_hire_offered + b.n_accepted
+            + b.n_declined + b.n_terminated + b.n_bankrupted;
+          const h = (totalEvents / maxEvents) * 100;
+          const payH = (b.payroll_paid / maxPayroll) * 100;
+          return (
+            <div key={b.week_start} style={{
+              flex: 1, display: "flex", flexDirection: "column",
+              gap: 2, height: "100%", justifyContent: "flex-end",
+            }}>
+              {/* Events bar (staplad) */}
+              <div title={`Vecka ${b.week_start} · ${totalEvents} händelser`} style={{
+                height: `${h}%`,
+                display: "flex", flexDirection: "column",
+                background: "rgba(255,255,255,0.05)",
+                borderRadius: 3, overflow: "hidden",
+                minHeight: totalEvents > 0 ? 2 : 0,
+              }}>
+                {b.n_bankrupted > 0 && (
+                  <div style={{ flex: b.n_bankrupted, background: "#dc4c2b" }} />
+                )}
+                {b.n_terminated > 0 && (
+                  <div style={{ flex: b.n_terminated, background: "#fda594" }} />
+                )}
+                {b.n_declined > 0 && (
+                  <div style={{ flex: b.n_declined, background: "rgba(255,255,255,0.3)" }} />
+                )}
+                {b.n_accepted > 0 && (
+                  <div style={{ flex: b.n_accepted, background: "#6ee7b7" }} />
+                )}
+                {b.n_hire_offered > 0 && (
+                  <div style={{ flex: b.n_hire_offered, background: "#a78bfa" }} />
+                )}
+              </div>
+              {/* Payroll-spår · liten gul markör */}
+              <div title={`Payroll ${b.payroll_paid} kr`} style={{
+                height: 6,
+                width: "100%",
+                background: b.payroll_paid > 0
+                  ? `linear-gradient(to top, #fbbf24 ${payH}%, transparent ${payH}%)`
+                  : "transparent",
+                borderRadius: 2,
+              }} />
+            </div>
+          );
+        })}
+      </div>
+      {/* Legend */}
+      <div style={{
+        display: "flex", gap: 14, flexWrap: "wrap",
+        marginTop: 14, fontFamily: "JetBrains Mono, monospace",
+        fontSize: 10, color: "rgba(255,255,255,0.7)",
+      }}>
+        <Legend color="#a78bfa" label="Erbjudande skickat" />
+        <Legend color="#6ee7b7" label="Accepterat" />
+        <Legend color="rgba(255,255,255,0.3)" label="Nekat" />
+        <Legend color="#fda594" label="Uppsagd" />
+        <Legend color="#dc4c2b" label="Konkurs" />
+        <Legend color="#fbbf24" label="Payroll-volym (proportionellt)" />
+      </div>
+      <div style={{
+        display: "flex", justifyContent: "space-between",
+        marginTop: 6, fontFamily: "JetBrains Mono, monospace",
+        fontSize: 9, color: "rgba(255,255,255,0.45)",
+      }}>
+        <span>{trend[0]?.week_start}</span>
+        <span>{trend[trend.length - 1]?.week_start}</span>
+      </div>
+    </div>
+  );
+}
+
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span style={{
+        width: 10, height: 10, background: color,
+        borderRadius: 2, display: "inline-block",
+      }} />
+      {label}
+    </span>
   );
 }
 
