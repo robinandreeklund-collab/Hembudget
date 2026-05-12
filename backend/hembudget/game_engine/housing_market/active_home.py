@@ -137,6 +137,12 @@ def give_notice_on_rental(
     """Säg upp aktiv hyresrätt med 3 månaders uppsägning.
 
     Returnerar uppdaterad ActiveHome.
+
+    OBS: year_month är en advisory hint — vi använder ALLTID
+    current_game_date() som bas för termination_date eftersom
+    frontend ibland skickar real-tid YYYY-MM istället för spel-tid.
+    Tidigare fick eleven termination_date = real-tid + 3 mån vilket
+    landade i framtiden av spel-tid.
     """
     home = get_active_home(s)
     if home is None:
@@ -149,7 +155,12 @@ def give_notice_on_rental(
     if home.status == "notice_given":
         return home  # Idempotent
 
-    notice_start = _ym_first_day(year_month)
+    # Använd spel-tid · year_month-hint ignoreras
+    try:
+        from ...business.game_clock import current_game_date as _cgd_gn
+        notice_start = _cgd_gn()
+    except Exception:
+        notice_start = _ym_first_day(year_month)
     home.status = "notice_given"
     home.termination_date = _add_months(notice_start, RENTAL_NOTICE_MONTHS)
     s.flush()
@@ -200,10 +211,18 @@ def move_to_rental(
             "Sälj BR/villa via /sell först.",
         )
 
-    # Markera gamla som terminerad direkt vid flytt (ingen 3-mån-väntan
-    # eftersom man flyttar in i nytt direkt — uppsägning ses som klar)
-    old.status = "terminated"
-    old.termination_date = _ym_first_day(year_month)
+    # 3 månaders uppsägningstid räknat från SPEL-tid — eleven är
+    # skyldig att betala hyran på gamla bostaden under övergångs-
+    # perioden även om man flyttat in i ny lägenhet. termination_date
+    # = spel-tid + 90 dgr så HubV2-bannerns 'uppsägningstid till X'
+    # och hyresavi-serien stämmer.
+    try:
+        from ...business.game_clock import current_game_date as _cgd_mvr
+        notice_start = _cgd_mvr()
+    except Exception:
+        notice_start = _ym_first_day(year_month)
+    old.status = "notice_given"
+    old.termination_date = _add_months(notice_start, RENTAL_NOTICE_MONTHS)
 
     # Skapa ny rental ActiveHome från listing.
     # Listing är tekniskt "till salu" men vi behandlar hyresrätt-listings

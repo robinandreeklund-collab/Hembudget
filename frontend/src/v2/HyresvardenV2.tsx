@@ -137,8 +137,14 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
         // boendemarknad-endpointen (samma som "Köpa eller sälja"-
         // tabben kallar). 3 månaders uppsägning. Båda tabbarna
         // synkas via ActiveHome som single-source.
+        //
+        // year_month MÅSTE vara spel-tid · annars beräknar backend
+        // termination_date från real-tid (idag) istället för spel-tid
+        // → uppsägningstid landar månader i framtiden av spel-tid.
+        const gt = await v2Api.gameTime().catch(() => null);
         const now = new Date();
-        const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const fallbackYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const ym = gt?.year_month || fallbackYm;
         await v2Api.boendemarknadTerminate({ year_month: ym });
       } else {
         await v2Api.rentalPatchContract(id, { status: "terminated" });
