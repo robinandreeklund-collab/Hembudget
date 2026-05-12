@@ -18,6 +18,7 @@ import {
   type V2MailDetailData,
 } from "./api";
 import { V2Banner } from "./V2Banner";
+import { BankIdSignModal } from "./BankIdSignModal";
 import "./lan.css";
 import "./faktura-shell.css";
 
@@ -202,12 +203,29 @@ export function MailDetailV2() {
   // (React kastar och hela vyn blir vitskärm).
   const [bankIdSession, setBankIdSession] = useState<{
     token: string;
+    qr_url: string;
     expires_at: string;
   } | null>(null);
-  const [bankIdPin, setBankIdPin] = useState("");
-  const [bankIdBusy, setBankIdBusy] = useState(false);
+  const [, setBankIdBusy] = useState(false);
   const [bankIdError, setBankIdError] = useState<string | null>(null);
+  const [bankIdConfirmed, setBankIdConfirmed] = useState(false);
+  // IDs av lån-erbjudanden som FORTFARANDE är pending (godkända men
+  // ej accepterade). Vi visar "Acceptera lånet"-knappen bara om
+  // brevets _loan_application_id-marker finns i denna mängd. Om
+  // eleven redan accepterat via /v2/lan eller via tidigare brev-
+  // klick gömmer vi knappen för att undvika dubbla accepter.
+  const [pendingLoanIds, setPendingLoanIds] = useState<Set<number>>(
+    new Set(),
+  );
   const navigate = useNavigate();
+
+  function refreshPendingLoanIds() {
+    v2Api.creditPendingOffers()
+      .then((d) =>
+        setPendingLoanIds(new Set(d.offers.map((o) => o.application_id))),
+      )
+      .catch(() => null);
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -215,6 +233,7 @@ export function MailDetailV2() {
       .mailDetail(id)
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
+    refreshPendingLoanIds();
   }, [id]);
 
   async function exportToBank() {
@@ -324,14 +343,20 @@ export function MailDetailV2() {
       }
       return;
     }
-    // Accept-flow · initiera BankID-session och visa PIN-modal
+    // Accept-flow · initiera BankID-session, visa QR-kod, polla
+    // tills mobilen bekräftar (matchar /v2/bank-id-flödet).
     setBankIdBusy(true);
     setBankIdError(null);
+    setBankIdConfirmed(false);
     try {
       const s = await v2Api.bankSessionInit(
         `private_loan_sign_${loanApplicationId}`,
       );
-      setBankIdSession({ token: s.token, expires_at: s.expires_at });
+      setBankIdSession({
+        token: s.token,
+        qr_url: s.qr_url,
+        expires_at: s.expires_at,
+      });
     } catch (e) {
       const msg = String((e as Error)?.message || e);
       if (msg.includes("PIN saknas") || msg.includes("set-pin")) {
@@ -346,35 +371,48 @@ export function MailDetailV2() {
     }
   }
 
-  async function confirmBankIdAndAccept() {
-    if (!bankIdSession || !loanApplicationId) return;
-    setBankIdBusy(true);
-    setBankIdError(null);
-    try {
-      await v2Api.bankSessionConfirm(bankIdSession.token, bankIdPin);
-      const res = await v2Api.creditAcceptFromMail(
-        loanApplicationId,
-        bankIdSession.token,
-      );
-      await v2Api.updateMailStatus(id, "handled");
-      const refreshed = await v2Api.mailDetail(id);
-      setData(refreshed);
-      setBankIdSession(null);
-      setBankIdPin("");
-      setExportMsg(
-        `✓ Lån signerat & accepterat · ${Math.round(res.deposited_amount).toLocaleString("sv-SE")} kr insatt. ${res.pedagogical_note}`,
-      );
-    } catch (e) {
-      const msg = String((e as Error)?.message || e);
-      if (msg.includes("Fel PIN") || msg.includes("401")) {
-        setBankIdError("Fel PIN — prova igen.");
-      } else {
-        setBankIdError(`Fel: ${msg}`);
+  // Polla session-status så fort vi har en aktiv session. Avbryts
+  // när modalen stängs eller sessionen bekräftas.
+  useEffect(() => {
+    if (!bankIdSession || bankIdConfirmed) return;
+    const token = bankIdSession.token;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const status = await v2Api.bankSessionStatus(token);
+        if (cancelled) return;
+        if (status.confirmed_at) {
+          setBankIdConfirmed(true);
+          clearInterval(interval);
+          // Auto-fortsätt med accept så fort signering bekräftats
+          if (loanApplicationId == null) return;
+          try {
+            const res = await v2Api.creditAcceptFromMail(
+              loanApplicationId, token,
+            );
+            await v2Api.updateMailStatus(id, "handled");
+            const refreshed = await v2Api.mailDetail(id);
+            setData(refreshed);
+            refreshPendingLoanIds();
+            setBankIdSession(null);
+            setExportMsg(
+              `✓ Lån signerat & accepterat · ${Math.round(res.deposited_amount).toLocaleString("sv-SE")} kr insatt. ${res.pedagogical_note}`,
+            );
+          } catch (e) {
+            setBankIdError(
+              `Lånet kunde inte slutföras: ${String((e as Error)?.message || e)}`,
+            );
+          }
+        }
+      } catch {
+        // Tyst — session kan ha löpt ut, polla igen
       }
-    } finally {
-      setBankIdBusy(false);
-    }
-  }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [bankIdSession, bankIdConfirmed, loanApplicationId, id]);
 
   async function respondToOffer(accept: boolean) {
     if (employmentOfferId == null) return;
@@ -652,8 +690,12 @@ export function MailDetailV2() {
               )}
               {/* Lånegodkännande · accept / decline · samma mönster
                   som employment, bara om status fortfarande unhandled
-                  OCH _loan_application_id finns i body. */}
-              {loanApplicationId != null && m.status === "unhandled" && (
+                  OCH _loan_application_id finns i body OCH application
+                  fortfarande är pending (har inte redan accepterats
+                  via /v2/lan-vyn). */}
+              {loanApplicationId != null
+                && m.status === "unhandled"
+                && pendingLoanIds.has(loanApplicationId) && (
                 <>
                   <button
                     type="button"
@@ -841,125 +883,21 @@ export function MailDetailV2() {
         {isCcInvoice && <CcPedaBlock />}
         {isSalarySlip && <SalaryPedaBlock />}
 
-        {/* BankID-modal för lån-signering (Fas 4) */}
+        {/* BankID-modal · QR-kod-flöde (Fas 4 · v2) · matchar
+            /v2/bank-id-flödet. Eleven scannar QR med mobilen, går
+            till /bank/sign?token=…, anger PIN. Web pollar var 1.5s
+            och fortsätter accept automatiskt vid bekräftelse. */}
         {bankIdSession && (
-          <div
-            onClick={() => {
-              if (!bankIdBusy) setBankIdSession(null);
+          <BankIdSignModal
+            session={bankIdSession}
+            confirmed={bankIdConfirmed}
+            error={bankIdError}
+            onClose={() => {
+              setBankIdSession(null);
+              setBankIdError(null);
+              setBankIdConfirmed(false);
             }}
-            style={{
-              position: "fixed", inset: 0,
-              background: "rgba(0,0,0,0.75)", zIndex: 200,
-              display: "flex", alignItems: "center",
-              justifyContent: "center", padding: 20,
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                background: "#0f1525",
-                border: "1px solid rgba(99,102,241,0.4)",
-                borderRadius: 12,
-                padding: 28,
-                maxWidth: 460,
-                width: "100%",
-              }}
-            >
-              <div style={{
-                fontFamily: "var(--mono)",
-                fontSize: 10, letterSpacing: 1.4,
-                color: "#a5b4fc",
-              }}>
-                ● BANKID · SIGNERA LÅN
-              </div>
-              <h2 style={{
-                fontFamily: "var(--serif)",
-                color: "#fff",
-                marginTop: 12,
-                marginBottom: 8,
-              }}>
-                Bekräfta med BankID
-              </h2>
-              <p style={{
-                fontFamily: "var(--serif)",
-                fontSize: 13.5,
-                color: "rgba(255,255,255,0.7)",
-                lineHeight: 1.5,
-                marginBottom: 20,
-              }}>
-                Du signerar att acceptera lånet. Lånebeloppet sätts
-                in på lönekontot direkt efter signering. Skriv din
-                BankID-PIN för att bekräfta.
-              </p>
-              <input
-                type="password"
-                inputMode="numeric"
-                autoFocus
-                value={bankIdPin}
-                onChange={(e) => setBankIdPin(e.target.value)}
-                placeholder="BankID-PIN"
-                style={{
-                  width: "100%",
-                  padding: "12px 14px",
-                  background: "rgba(0,0,0,0.4)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  borderRadius: 8,
-                  color: "#fff",
-                  fontFamily: "var(--mono)",
-                  fontSize: 16,
-                  letterSpacing: "0.5em",
-                  textAlign: "center",
-                }}
-              />
-              {bankIdError && (
-                <div style={{
-                  marginTop: 10,
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  background: "rgba(252,165,165,0.08)",
-                  border: "1px solid rgba(252,165,165,0.35)",
-                  color: "#fca5a5",
-                  fontFamily: "var(--mono)",
-                  fontSize: 11,
-                }}>
-                  {bankIdError}
-                </div>
-              )}
-              <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-                <button
-                  type="button"
-                  className="cta-btn"
-                  disabled={bankIdBusy || bankIdPin.length < 4}
-                  onClick={confirmBankIdAndAccept}
-                  style={{ flex: 1, border: 0, cursor: "pointer" }}
-                >
-                  {bankIdBusy ? "Signerar…" : "Signera & acceptera"}
-                </button>
-                <button
-                  type="button"
-                  className="cta-btn ghost"
-                  disabled={bankIdBusy}
-                  onClick={() => {
-                    setBankIdSession(null);
-                    setBankIdPin("");
-                    setBankIdError(null);
-                  }}
-                  style={{ border: 0, cursor: "pointer" }}
-                >
-                  Avbryt
-                </button>
-              </div>
-              <p style={{
-                fontFamily: "var(--mono)",
-                fontSize: 10,
-                color: "rgba(255,255,255,0.4)",
-                marginTop: 14,
-                textAlign: "center",
-              }}>
-                Session löper ut {new Date(bankIdSession.expires_at).toLocaleTimeString("sv-SE")}
-              </p>
-            </div>
-          </div>
+          />
         )}
 
       </div>

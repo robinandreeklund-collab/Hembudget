@@ -14,6 +14,29 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
+
+def _mark_loan_mail_handled(session: Session, application_id: int) -> None:
+    """Markera godkännandebrevet för en accepterad CreditApplication
+    som 'handled' så eleven inte ser dubbla "Acceptera lånet"-knappar
+    i postlådan efter accept. Hittar brevet via _loan_application_id-
+    markern i body. Defensiv · sväljer fel."""
+    try:
+        from ..db.models import MailItem as _MI_ml
+        marker = f"_loan_application_id={application_id}"
+        unhandled = (
+            session.query(_MI_ml)
+            .filter(
+                _MI_ml.status == "unhandled",
+                _MI_ml.body.contains(marker),
+            )
+            .all()
+        )
+        for mi in unhandled:
+            mi.status = "handled"
+        session.flush()
+    except Exception:
+        pass
+
 from ..credit.affordability import check_affordability
 from ..credit.scoring import (
     annuity_monthly_payment,
@@ -354,6 +377,8 @@ def private_accept(
     app_row.result = "accepted"
     app_row.resulting_loan_id = loan.id
     session.flush()
+
+    _mark_loan_mail_handled(session, app_row.id)
 
     _pentagon_log_loan(
         info.student_id,
@@ -722,6 +747,8 @@ def sms_accept(
     app_row.result = "accepted"
     app_row.resulting_loan_id = loan.id
     session.flush()
+
+    _mark_loan_mail_handled(session, app_row.id)
 
     _pentagon_log_loan(
         info.student_id,
