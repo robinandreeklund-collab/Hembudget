@@ -252,6 +252,28 @@ export function LanV2() {
   const [bankConfirmed, setBankConfirmed] = useState(false);
   const [bankErr, setBankErr] = useState<string | null>(null);
 
+  async function finalizePendingOffer(applicationId: number) {
+    // Slutför signering · för fall där polling-flödet brutits efter
+    // att eleven signerat (stängd flik, krasch). Backend hittar
+    // bekräftad BankID-session och accepterar.
+    setPendingMsg(null);
+    try {
+      const res = await v2Api.creditFinalize(applicationId);
+      setPendingMsg(
+        `✓ Lån slutfört · ${SEK(Math.round(res.deposited_amount))} kr `
+        + `insatt. ${res.pedagogical_note}`,
+      );
+      refresh();
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      // 400 = ingen bekräftad session · fall tillbaka till BankID-flöde
+      if (msg.includes("400") || msg.includes("Ingen bekräftad")) {
+        return acceptPendingOffer(applicationId);
+      }
+      setPendingMsg(`Fel: ${msg}`);
+    }
+  }
+
   async function acceptPendingOffer(applicationId: number) {
     // BankID-modalen är i sig en bekräftelse — eleven måste signera
     // med PIN på mobilen för att lånet ska genomföras. En extra
@@ -392,6 +414,33 @@ export function LanV2() {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-finalize: efter att pending-offers laddats, försök slutföra
+  // varje pending offer som har en bekräftad BankID-session (eleven
+  // signerade men polling missade slutfasen). Backend returnerar 400
+  // om ingen confirmed session finns — då gör vi inget.
+  useEffect(() => {
+    if (pendingOffers.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const o of pendingOffers) {
+        if (cancelled) break;
+        try {
+          await v2Api.creditFinalize(o.application_id);
+          if (cancelled) break;
+          setPendingMsg(
+            `✓ Lån slutfört automatiskt (BankID-signering hittad)`,
+          );
+          refresh();
+          break;  // En åt gången · sedan ny refresh
+        } catch {
+          // Ingen confirmed session · normalt · tyst
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOffers.length]);
 
   if (error) {
     return (
@@ -770,7 +819,7 @@ export function LanV2() {
                         )}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         type="button"
                         className="cta-btn"
@@ -778,6 +827,19 @@ export function LanV2() {
                         style={{ border: 0, cursor: "pointer" }}
                       >
                         ✓ Acceptera
+                      </button>
+                      <button
+                        type="button"
+                        className="cta-btn ghost"
+                        onClick={() => finalizePendingOffer(o.application_id)}
+                        style={{
+                          border: "1px solid rgba(110,231,183,0.3)",
+                          cursor: "pointer",
+                          color: "#6ee7b7",
+                        }}
+                        title="Om du redan signerat med BankID men inte fick pengarna · klicka för att slutföra"
+                      >
+                        Slutför signering
                       </button>
                       <button
                         type="button"

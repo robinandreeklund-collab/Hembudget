@@ -504,6 +504,78 @@ class PrivateLoanAcceptFromMailIn(BaseModel):
     bank_session_token: Optional[str] = None
 
 
+class PrivateLoanFinalizeIn(BaseModel):
+    application_id: int
+
+
+@router.post(
+    "/private/finalize",
+    response_model=PrivateLoanAcceptOut,
+)
+def private_finalize(
+    payload: PrivateLoanFinalizeIn,
+    session: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> PrivateLoanAcceptOut:
+    """Slutför ett lån som redan har en bekräftad BankID-session.
+
+    Användas när polling-flödet i frontend brutits (eleven stängde
+    tabben efter signering, mm.) men sessionen är bekräftad i DB.
+    Hittar elevens senaste bekräftade BankID-session med rätt
+    purpose-prefix och accepterar lånet utan att kräva ny signering.
+    """
+    from ..db.models import Account
+    from ..school.engines import master_session as _ms_fin
+    from ..school.models import BankSession as _BS_fin
+
+    if info.student_id is None:
+        raise HTTPException(403, "Endast elever kan slutföra lån")
+
+    purpose_prefix = f"private_loan_sign_{payload.application_id}"
+    with _ms_fin() as ms:
+        sess = (
+            ms.query(_BS_fin)
+            .filter(
+                _BS_fin.student_id == info.student_id,
+                _BS_fin.confirmed_at.isnot(None),
+                _BS_fin.purpose == purpose_prefix,
+            )
+            .order_by(_BS_fin.confirmed_at.desc())
+            .first()
+        )
+        if sess is None:
+            raise HTTPException(
+                400,
+                "Ingen bekräftad BankID-signering hittad för detta lån. "
+                "Klicka 'Acceptera' för att starta signeringen.",
+            )
+        if sess.expires_at < datetime.utcnow():
+            raise HTTPException(
+                410,
+                "Signeringen har löpt ut. Klicka 'Acceptera' för att "
+                "starta ny signering.",
+            )
+
+    acc = (
+        session.query(Account)
+        .filter(Account.type == "checking")
+        .order_by(Account.id.asc())
+        .first()
+    )
+    if acc is None:
+        raise HTTPException(
+            400, "Inget lönekonto hittat — gå till Lånegivaren-vyn",
+        )
+    return private_accept(
+        PrivateLoanAcceptIn(
+            application_id=payload.application_id,
+            deposit_account_id=acc.id,
+        ),
+        session=session,
+        info=info,
+    )
+
+
 @router.post("/private/accept-from-mail", response_model=PrivateLoanAcceptOut)
 def private_accept_from_mail(
     payload: PrivateLoanAcceptFromMailIn,

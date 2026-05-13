@@ -4323,6 +4323,21 @@ export const v2Api = {
         body: JSON.stringify({ pin }),
       },
     ),
+  /** Slutför ett pending lån som redan har en bekräftad BankID-
+   * signering (för fall där polling-flödet i frontend brutits). */
+  creditFinalize: (applicationId: number) =>
+    api<{
+      loan_id: number;
+      transaction_id: number;
+      deposited_amount: number;
+      monthly_payment: number;
+      interest_rate: number;
+      months: number;
+      pedagogical_note: string;
+    }>("/credit/private/finalize", {
+      method: "POST",
+      body: JSON.stringify({ application_id: applicationId }),
+    }),
   creditDecline: (applicationId: number) =>
     api<{ ok: boolean; application_id: number; result: string }>(
       "/credit/private/decline",
