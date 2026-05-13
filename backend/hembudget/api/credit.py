@@ -526,7 +526,7 @@ def private_finalize(
     """
     from ..db.models import Account
     from ..school.engines import master_session as _ms_fin
-    from ..school.models import BankSession as _BS_fin
+    from ..school.bank_models import BankSession as _BS_fin
 
     if info.student_id is None:
         raise HTTPException(403, "Endast elever kan slutföra lån")
