@@ -111,6 +111,24 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
 
   const [housingType, setHousingType] = useState<string | null>(null);
   const [housingMonthly, setHousingMonthly] = useState<number | null>(null);
+  const [pendingApplications, setPendingApplications] = useState<Array<{
+    id: number;
+    listing_id: string;
+    city_key: string;
+    address: string;
+    tier: number;
+    tier_label: string;
+    size_kvm: number;
+    rooms: number;
+    monthly_rent: number;
+    deposit: number;
+    quality_score: number;
+    first_hand: boolean;
+    applied_on: string;
+    ready_on: string;
+    status: string;
+    days_left: number;
+  }>>([]);
 
   useEffect(() => {
     refresh();
@@ -124,7 +142,20 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
         setHousingMonthly(h.character.housing_monthly || null);
       })
       .catch(() => null);
+    // Hämta pending RentalApplications · synkar Bostadssökande-kortet
+    // mellan denna flik och "Hyr en lägenhet"-fliken.
+    v2Api.boendemarknadRentalApplications()
+      .then((r) => {
+        setPendingApplications(
+          (r.applications || []).filter(
+            (a) => a.status === "queued" || a.status === "ready",
+          ),
+        );
+      })
+      .catch(() => null);
   }, []);
+
+  const activeApplication = pendingApplications[0] || null;
 
   const ownsHome = housingType === "bostadsratt"
     || housingType === "villa"
@@ -326,6 +357,52 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
           </div>
         </header>
 
+        {/* Pending-kö-kort när eleven INTE har kontrakt men står i kö
+           för hyreslägenhet (synkar med "Hyr en lägenhet"-fliken). */}
+        {!contract && pendingApplications.length > 0 && (
+          <div
+            className="acct-grid"
+            style={{ gridTemplateColumns: "1fr" }}
+          >
+            <div className="acct">
+              <div>
+                <div className="acct-eye">
+                  Bostadssökande · {pendingApplications.length} ansökning
+                  {pendingApplications.length === 1 ? "" : "ar"}
+                </div>
+                <div className="acct-name">
+                  {pendingApplications[0].address}
+                </div>
+                <div className="acct-num">
+                  {pendingApplications[0].tier_label}
+                  {" · "}
+                  {pendingApplications[0].size_kvm} m²
+                  {" · "}
+                  {SEK(pendingApplications[0].monthly_rent)} kr/mån
+                </div>
+              </div>
+              <div>
+                <div
+                  className="acct-bal"
+                  style={{
+                    color:
+                      pendingApplications[0].status === "ready"
+                        ? "#6ee7b7"
+                        : "var(--warm, #dc4c2b)",
+                  }}
+                >
+                  {pendingApplications[0].status === "ready"
+                    ? "klar"
+                    : `${pendingApplications[0].days_left} dgr`}
+                </div>
+                <div className="acct-bal-meta">
+                  se Hyr en lägenhet för att flytta in
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 3-KORTS ACCT-GRID (matchar prototyp) */}
         {contract && (
           <div
@@ -362,12 +439,16 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
               <div>
                 <div className="acct-eye">Bostadssökande</div>
                 <div className="acct-name">
-                  {contract.queue_priority
+                  {activeApplication
+                    ? activeApplication.address
+                    : contract.queue_priority
                     ? "Stockholm bostadsförmedling"
                     : "Eget kontrakt"}
                 </div>
                 <div className="acct-num">
-                  {contract.queue_years
+                  {activeApplication
+                    ? `${activeApplication.tier_label} · ${activeApplication.size_kvm} m² · ${SEK(activeApplication.monthly_rent)} kr/mån`
+                    : contract.queue_years
                     ? `${contract.queue_years} år i kö`
                     : "ingen aktiv kö"}
                 </div>
@@ -375,12 +456,29 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
               <div>
                 <div
                   className="acct-bal"
-                  style={{ color: "var(--text-dim)" }}
+                  style={
+                    activeApplication
+                      ? {
+                          color: activeApplication.status === "ready"
+                            ? "#6ee7b7"
+                            : "var(--warm, #dc4c2b)",
+                          fontSize: 18,
+                        }
+                      : { color: "var(--text-dim)" }
+                  }
                 >
-                  — kö
+                  {activeApplication
+                    ? activeApplication.status === "ready"
+                      ? "klar"
+                      : `${activeApplication.days_left} dgr`
+                    : "— kö"}
                 </div>
                 <div className="acct-bal-meta">
-                  {contract.queue_priority || "—"}
+                  {activeApplication
+                    ? pendingApplications.length > 1
+                      ? `+${pendingApplications.length - 1} till · se Hyr en lägenhet`
+                      : "se Hyr en lägenhet"
+                    : contract.queue_priority || "—"}
                 </div>
               </div>
             </div>
