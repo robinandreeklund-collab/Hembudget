@@ -14,6 +14,29 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
+
+def _mark_loan_mail_handled(session: Session, application_id: int) -> None:
+    """Markera godkännandebrevet för en accepterad CreditApplication
+    som 'handled' så eleven inte ser dubbla "Acceptera lånet"-knappar
+    i postlådan efter accept. Hittar brevet via _loan_application_id-
+    markern i body. Defensiv · sväljer fel."""
+    try:
+        from ..db.models import MailItem as _MI_ml
+        marker = f"_loan_application_id={application_id}"
+        unhandled = (
+            session.query(_MI_ml)
+            .filter(
+                _MI_ml.status == "unhandled",
+                _MI_ml.body.contains(marker),
+            )
+            .all()
+        )
+        for mi in unhandled:
+            mi.status = "handled"
+        session.flush()
+    except Exception:
+        pass
+
 from ..credit.affordability import check_affordability
 from ..credit.scoring import (
     annuity_monthly_payment,
@@ -304,8 +327,16 @@ def private_accept(
     app_row = session.get(CreditApplication, payload.application_id)
     if app_row is None:
         raise HTTPException(404, "Ansökan saknas")
-    if app_row.kind != "private":
-        raise HTTPException(400, "Fel ansökningstyp")
+    # v2.py-flödet sparar kind som body.loan_kind ('privatlan',
+    # 'billan', 'bolan', 'smslan'). Credit.py-flödet sparar 'private'.
+    # Acceptera båda naming-konventioner så fix:en inte bryter
+    # legacy-data eller v2-flödet.
+    if app_row.kind not in ("private", "privatlan"):
+        raise HTTPException(
+            400,
+            f"Fel ansökningstyp ({app_row.kind}) · denna endpoint "
+            f"hanterar bara privatlån",
+        )
     if app_row.result != "approved":
         raise HTTPException(400, "Ansökan är inte godkänd")
     if app_row.resulting_loan_id is not None:
@@ -355,6 +386,8 @@ def private_accept(
     app_row.resulting_loan_id = loan.id
     session.flush()
 
+    _mark_loan_mail_handled(session, app_row.id)
+
     _pentagon_log_loan(
         info.student_id,
         loan_id=loan.id,
@@ -398,6 +431,192 @@ def private_decline(payload: DeclineIn, session: Session = Depends(db)) -> dict:
         app_row.decided_at = datetime.utcnow()
         session.flush()
     return {"ok": True, "application_id": app_row.id, "result": app_row.result}
+
+
+# ---------- Pending offers (Fas 2) ----------
+
+
+class PendingLoanOfferOut(BaseModel):
+    application_id: int
+    kind: str
+    requested_amount: float
+    requested_months: int
+    offered_rate: Optional[float] = None
+    offered_monthly_payment: Optional[float] = None
+    simulated_lender: Optional[str] = None
+    score_value: Optional[int] = None
+    created_at: str
+
+
+class PendingLoanOffersOut(BaseModel):
+    offers: list[PendingLoanOfferOut]
+
+
+@router.get("/pending-offers", response_model=PendingLoanOffersOut)
+def list_pending_offers(
+    session: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> PendingLoanOffersOut:
+    """Lista alla godkända men ännu inte accepterade låneerbjudanden
+    för inloggade eleven. Visas i /v2/lan + LanegivarenV2 så eleven
+    hittar tillbaka till accepterandet även efter att modal-flödet
+    stängdes.
+    """
+    rows = (
+        session.query(CreditApplication)
+        .filter(
+            CreditApplication.result == "approved",
+            CreditApplication.resulting_loan_id.is_(None),
+        )
+        .order_by(CreditApplication.created_at.desc())
+        .all()
+    )
+    return PendingLoanOffersOut(
+        offers=[
+            PendingLoanOfferOut(
+                application_id=r.id,
+                kind=r.kind,
+                requested_amount=float(r.requested_amount),
+                requested_months=r.requested_months,
+                offered_rate=(
+                    float(r.offered_rate) if r.offered_rate else None
+                ),
+                offered_monthly_payment=(
+                    float(r.offered_monthly_payment)
+                    if r.offered_monthly_payment else None
+                ),
+                simulated_lender=r.simulated_lender,
+                score_value=r.score_value,
+                created_at=r.created_at.isoformat(),
+            )
+            for r in rows
+        ],
+    )
+
+
+class PrivateLoanAcceptFromMailIn(BaseModel):
+    application_id: int
+    # Fas 4 · valfri BankID-session-token för signering. När angiven
+    # validerar vi att eleven nyligen genomfört BankID med syfte
+    # 'private_loan_sign_{app_id}'. Backend accepterar lånet ENDAST om
+    # token är giltig (eller saknas = legacy fallback för bakåtkompat
+    # i embedded-tester). Frontend skickar alltid in en token.
+    bank_session_token: Optional[str] = None
+
+
+class PrivateLoanFinalizeIn(BaseModel):
+    application_id: int
+
+
+@router.post(
+    "/private/finalize",
+    response_model=PrivateLoanAcceptOut,
+)
+def private_finalize(
+    payload: PrivateLoanFinalizeIn,
+    session: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> PrivateLoanAcceptOut:
+    """Slutför ett lån som redan har en bekräftad BankID-session.
+
+    Användas när polling-flödet i frontend brutits (eleven stängde
+    tabben efter signering, mm.) men sessionen är bekräftad i DB.
+    Hittar elevens senaste bekräftade BankID-session med rätt
+    purpose-prefix och accepterar lånet utan att kräva ny signering.
+    """
+    from ..db.models import Account
+    from ..school.engines import master_session as _ms_fin
+    from ..school.bank_models import BankSession as _BS_fin
+
+    if info.student_id is None:
+        raise HTTPException(403, "Endast elever kan slutföra lån")
+
+    purpose_prefix = f"private_loan_sign_{payload.application_id}"
+    with _ms_fin() as ms:
+        sess = (
+            ms.query(_BS_fin)
+            .filter(
+                _BS_fin.student_id == info.student_id,
+                _BS_fin.confirmed_at.isnot(None),
+                _BS_fin.purpose == purpose_prefix,
+            )
+            .order_by(_BS_fin.confirmed_at.desc())
+            .first()
+        )
+        if sess is None:
+            raise HTTPException(
+                400,
+                "Ingen bekräftad BankID-signering hittad för detta lån. "
+                "Klicka 'Acceptera' för att starta signeringen.",
+            )
+        if sess.expires_at < datetime.utcnow():
+            raise HTTPException(
+                410,
+                "Signeringen har löpt ut. Klicka 'Acceptera' för att "
+                "starta ny signering.",
+            )
+
+    acc = (
+        session.query(Account)
+        .filter(Account.type == "checking")
+        .order_by(Account.id.asc())
+        .first()
+    )
+    if acc is None:
+        raise HTTPException(
+            400, "Inget lönekonto hittat — gå till Lånegivaren-vyn",
+        )
+    return private_accept(
+        PrivateLoanAcceptIn(
+            application_id=payload.application_id,
+            deposit_account_id=acc.id,
+        ),
+        session=session,
+        info=info,
+    )
+
+
+@router.post("/private/accept-from-mail", response_model=PrivateLoanAcceptOut)
+def private_accept_from_mail(
+    payload: PrivateLoanAcceptFromMailIn,
+    session: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> PrivateLoanAcceptOut:
+    """Som /private/accept men slipper kräva deposit_account_id —
+    plockar elevens första checking-konto automatiskt.
+
+    Används från MailDetailV2 där eleven klickar "Acceptera lånet"
+    direkt i godkännandebrevet utan att behöva gå till Lånegivaren-
+    vyn och välja konto. Stödjer BankID-signering (Fas 4) via
+    bank_session_token-parametern.
+    """
+    from ..db.models import Account
+    # Validera BankID-session om token angiven (rekommenderat flöde).
+    if payload.bank_session_token:
+        from .bank import _verify_bank_session
+        _verify_bank_session(
+            info,
+            payload.bank_session_token,
+            required_purpose_prefix=f"private_loan_sign_{payload.application_id}",
+        )
+    acc = (
+        session.query(Account)
+        .filter(Account.type == "checking")
+        .order_by(Account.id.asc())
+        .first()
+    )
+    if acc is None:
+        raise HTTPException(
+            400, "Inget lönekonto hittat — gå till Lånegivaren-vyn",
+        )
+    return private_accept(
+        PrivateLoanAcceptIn(
+            application_id=payload.application_id,
+            deposit_account_id=acc.id,
+        ),
+        session=session,
+        info=info,
+    )
 
 
 # ---------- SMS-lån (sista utväg) ----------
@@ -608,6 +827,8 @@ def sms_accept(
     app_row.result = "accepted"
     app_row.resulting_loan_id = loan.id
     session.flush()
+
+    _mark_loan_mail_handled(session, app_row.id)
 
     _pentagon_log_loan(
         info.student_id,

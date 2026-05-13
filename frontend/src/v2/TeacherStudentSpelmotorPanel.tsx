@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from "react";
 import { v2Api } from "./api";
+import { getToken } from "@/api/client";
 
 const SHORT_DATE = (iso: string | null): string => {
   if (!iso) return "—";
@@ -38,6 +39,8 @@ type TickRun = {
 type PentagonEvent = {
   id: number;
   occurred_at: string;
+  occurred_at_game: string | null;  // spel-tid ISO
+  occurred_at_label: string | null;  // "14 jan 09:30"
   axis: string;
   requested_delta: number;
   applied_delta: number;
@@ -78,15 +81,12 @@ export function TeacherStudentSpelmotorPanel({ studentId }: { studentId: number 
   const [bizEnabled, setBizEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetch(`/v2/teacher/foretag/toggle/${studentId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`,
-      },
-      body: JSON.stringify({ enabled: false }),  // dry-read first
-    }).catch(() => undefined);
-    // Direkt-fetch student-data via existerande endpoint
+    // KRITISKT: tidigare körde detta useEffect ett POST /toggle med
+    // `enabled: false` som "dry-read" — vilket faktiskt skrev över
+    // flaggan till FALSE varje gång läraren laddade dashboarden. Det
+    // var DÄRFÖR business_mode_enabled "försvann" vid varje reload.
+    // Nu läser vi bara student-detalj-endpointen som redan returnerar
+    // business_mode_enabled i sin payload.
     fetch(`/v2/teacher/students/${studentId}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     }).then(r => r.json()).then((d) => {
@@ -472,7 +472,9 @@ export function TeacherStudentSpelmotorPanel({ studentId }: { studentId: number 
                   >
                     {REASON_LABEL[p.reason_kind] || p.reason_kind}
                     {p.explanation && ` · ${p.explanation}`}
-                    <span style={{ marginLeft: 6 }}>{SHORT_DATE(p.occurred_at)}</span>
+                    <span style={{ marginLeft: 6 }}>
+                      {p.occurred_at_label || SHORT_DATE(p.occurred_at)}
+                    </span>
                   </div>
                 </div>
               );
@@ -521,11 +523,9 @@ async function advanceMonth(
   return r.json();
 }
 
-function getToken(): string {
-  // Auth-flödet sparar i sessionStorage("hembudget_token") · samma helper
-  // som @/api/client.ts. localStorage("hb_token") är legacy-bug.
-  return sessionStorage.getItem("hembudget_token") || "";
-}
+// getToken importeras från @/api/client (lokal version som läste
+// sessionStorage borttagen — token migrerades till localStorage och
+// den lokala kopian läste fel källa = "Missing bearer token"-fel).
 
 
 /** Knapp · trigga reseed för stuck failed runs.

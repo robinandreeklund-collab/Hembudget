@@ -169,8 +169,13 @@ def verify_turnstile(request: Request, *, required: bool = True) -> None:
 # ---------- Vanliga rule-presets ----------
 
 RULES_LOGIN = [
-    Rule(limit=5, window_sec=60, name="login-1min"),
-    Rule(limit=20, window_sec=900, name="login-15min"),
+    # Tidigare 5/min + 20/15min triggades vid normal testning
+    # ("Rate exceeded" på legitima inloggningar). Brute-force-skydd
+    # vill man ändå ha → 30/min är tillräckligt strikt för att stoppa
+    # automatiserade attacker men släpper igenom människor som
+    # testar/skrivit fel lösen ett par gånger.
+    Rule(limit=30, window_sec=60, name="login-1min"),
+    Rule(limit=200, window_sec=900, name="login-15min"),
 ]
 
 RULES_BOOTSTRAP = [

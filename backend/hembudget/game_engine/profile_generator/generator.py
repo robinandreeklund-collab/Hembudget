@@ -119,6 +119,21 @@ def generate_profile(
     # 6. Profil-fakta
     age = _age_for_level(rng, starting_level, yrke.education_level)
     commute = _commute_minutes(rng, city.job_density)
+
+    # 6b. Bil + pendling-data (efter ålder + stad är klart, innan
+    # facts byggs). Slumpar med samma rng så seeden är deterministisk.
+    from .car_picker import pick_car
+    # Spend-profile är inte direkt tillgänglig i generate_profile —
+    # backend cachar det i student.v2_spend_profile. För profil-
+    # generatorns preview-anrop använder vi "balanserad" som default.
+    # När tick_month kallar generate_profile vid skapande sätts spend_
+    # profile separat via _auto_tick_private_months_if_due.
+    car = pick_car(
+        rng,
+        city_key=city.key,
+        age=age,
+        spend_profile="balanserad",  # justeras post-hoc om behövs
+    )
     p_csn = P_STUDENT_LOAN_BY_EDU.get(yrke.education_level, 0.0)
     has_csn = rng.random() < p_csn
     has_credit = rng.random() < P_HIGH_COST_CREDIT
@@ -173,6 +188,7 @@ def generate_profile(
         city_display=city.display,
         region=city.region,
         housing=housing,
+        car=car,
         family=family,
         household_gross_monthly=household_gross,
         household_net_monthly=household_net,

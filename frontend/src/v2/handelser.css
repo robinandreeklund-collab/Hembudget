@@ -1,0 +1,336 @@
+/* V2 Händelser-vy · använder gemensamma v2-lan-root klasser från
+ * lan.css (CSS-vars, .shell, .pill, .actor-head, .actor-back,
+ * .actor-name, .actor-sub, .actor-meta). Endast .hand-*-klasser
+ * och den händelse-specifika modalen behöver definieras här.
+ *
+ * Tidigare deklarerade vi egna CSS-vars (--bg, --serif: Spectral,
+ * --line, --text-mid) som divergerade från resten av v2 → vyn
+ * såg ut som en separat dashboard. Fixat genom att ärva från
+ * v2-lan-root-blocket i lan.css. */
+
+/* .pill, .actor-back, .actor-head, .actor-name, .actor-sub, .actor-meta
+ * och .shell ärvs från lan.css · ta inte duplicera dem här (tidigare
+ * deklarerade vi egna varianter med Spectral-font och mindre rubriker
+ * som inte matchade resten av v2). */
+
+.v2-lan-root .hand-error,
+.v2-lan-root .hand-feedback {
+  margin: 16px 0;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.v2-lan-root .hand-error,
+.v2-lan-root .hand-feedback.fail {
+  background: rgba(220, 38, 38, 0.08);
+  color: #fca5a5;
+  border-left: 3px solid #dc2626;
+}
+.v2-lan-root .hand-feedback.ok {
+  background: rgba(34, 197, 94, 0.08);
+  color: #6ee7b7;
+  border-left: 3px solid #22c55e;
+}
+
+.v2-lan-root .hand-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 24px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.v2-lan-root .hand-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.v2-lan-root .hand-tab em {
+  font-style: normal;
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-weight: 600;
+}
+.v2-lan-root .hand-tab:hover {
+  color: var(--text-mid);
+}
+.v2-lan-root .hand-tab.active {
+  color: var(--warm);
+  border-bottom-color: var(--warm);
+}
+
+.v2-lan-root .hand-list {
+  display: grid;
+  gap: 12px;
+}
+.v2-lan-root .hand-empty {
+  padding: 32px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  text-align: center;
+  color: var(--text-dim);
+  font-family: var(--serif);
+  font-size: 14px;
+}
+
+/* === Card === */
+.v2-lan-root .hand-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 3px solid var(--line-strong);
+}
+.v2-lan-root .hand-card.cat-social { border-left-color: #8b5cf6; }
+.v2-lan-root .hand-card.cat-family { border-left-color: #fb923c; }
+.v2-lan-root .hand-card.cat-culture { border-left-color: #ec4899; }
+.v2-lan-root .hand-card.cat-sport { border-left-color: #22c55e; }
+.v2-lan-root .hand-card.cat-mat { border-left-color: #eab308; }
+.v2-lan-root .hand-card.cat-lifestyle { border-left-color: #06b6d4; }
+.v2-lan-root .hand-card.cat-opportunity { border-left-color: #f59e0b; }
+.v2-lan-root .hand-card.cat-unexpected { border-left-color: #dc2626; }
+.v2-lan-root .hand-card.invite {
+  background: rgba(139, 92, 246, 0.04);
+}
+.v2-lan-root .hand-card.status-declined {
+  opacity: 0.6;
+}
+
+.v2-lan-root .hand-card-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+.v2-lan-root .hand-card-icon {
+  font-size: 20px;
+  line-height: 1;
+  padding-top: 4px;
+  color: var(--warm);
+}
+.v2-lan-root .hand-card-cat {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+.v2-lan-root .hand-card-title {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+}
+.v2-lan-root .hand-card-cost {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+.v2-lan-root .hand-card-status {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.v2-lan-root .hand-card-status.accepted {
+  background: rgba(34, 197, 94, 0.15);
+  color: #6ee7b7;
+}
+.v2-lan-root .hand-card-status.declined {
+  background: rgba(107, 114, 128, 0.2);
+  color: var(--text-dim);
+}
+.v2-lan-root .hand-card-status.expired {
+  background: rgba(220, 38, 38, 0.15);
+  color: #fca5a5;
+}
+
+.v2-lan-root .hand-card-body {
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-mid);
+  margin-bottom: 10px;
+}
+.v2-lan-root .hand-card-body.invite-msg {
+  font-style: italic;
+  border-left: 2px solid var(--line-strong);
+  padding-left: 10px;
+}
+
+.v2-lan-root .hand-card-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.v2-lan-root .hand-card-meta em {
+  color: var(--warm);
+  font-style: normal;
+  font-weight: 500;
+}
+.v2-lan-root .hand-card-meta .warn {
+  color: #fca5a5;
+}
+
+.v2-lan-root .hand-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.v2-lan-root .cta-btn {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  padding: 8px 14px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.v2-lan-root .cta-btn:hover:not(:disabled) {
+  background: #b03e21;
+}
+.v2-lan-root .cta-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.v2-lan-root .cta-btn.ghost {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text-mid);
+}
+.v2-lan-root .cta-btn.ghost:hover:not(:disabled) {
+  border-color: var(--warm);
+  color: var(--warm);
+  background: transparent;
+}
+
+/* === Modal === */
+.v2-lan-root .hand-modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.v2-lan-root .hand-modal {
+  background: #14131a;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  max-width: 540px;
+  width: 100%;
+  padding: 24px 28px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.v2-lan-root .hand-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 14px;
+}
+.v2-lan-root .hand-modal-head h2 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 400;
+  margin: 0;
+}
+.v2-lan-root .hand-modal-help {
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--text-mid);
+  margin-bottom: 16px;
+}
+.v2-lan-root .hand-classmate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.v2-lan-root .hand-classmate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--serif);
+  font-size: 14px;
+}
+.v2-lan-root .hand-classmate-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.v2-lan-root .hand-classmate-row input {
+  accent-color: var(--accent);
+}
+.v2-lan-root .hand-classmate-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-dim);
+  font-style: normal;
+  margin-left: auto;
+}
+.v2-lan-root .hand-form-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  margin-bottom: 4px;
+}
+.v2-lan-root .hand-textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-strong);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.v2-lan-root .hand-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.v2-lan-root .hand-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}

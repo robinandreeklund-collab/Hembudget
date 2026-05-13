@@ -380,6 +380,15 @@ class TaxYearReturn(TenantMixin, Base):
     inbetald, slutlig skatt, diff, och tidpunkt. Året låses sedan
     så fler ändringar kräver att eleven öppnar deklarationen igen
     (TaxYearReturn.locked = False vid omöppning).
+
+    Status state-machine (Skatteverket-tidsfönster · feature SKV-2):
+        submitted (eleven har skickat in, granskning pågår)
+          ↓ 3 spel-dagar senare
+        besked_klar (Rudolf-verdict + slutskattebesked-mail går ut)
+          ↓
+        ┌─ verdict=godkand → vantar_utbetalning → klar (vid våg)
+        ├─ verdict=avslag → eleven måste omarbeta → status=submitted igen
+        └─ verdict=kontroll → eleven får kompletteringsbegäran → submitted igen
     """
     __tablename__ = "tax_year_returns"
     __table_args__ = (
@@ -392,6 +401,11 @@ class TaxYearReturn(TenantMixin, Base):
     year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
+    )
+    # Spel-tids-stämpel · när eleven faktiskt klickade lämna in
+    # (real-tid är submitted_at; spel-tid är submitted_on).
+    submitted_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
     )
     locked: Mapped[bool] = mapped_column(Boolean, default=True)
     gross_income: Mapped[Decimal] = mapped_column(
@@ -409,6 +423,33 @@ class TaxYearReturn(TenantMixin, Base):
     diff: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), nullable=False,
     )  # positiv = återbäring, negativ = kvarskatt
+
+    # State-machine för fördröjd verdict + utbetalningsvågor
+    # submitted | besked_klar | vantar_utbetalning | klar
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="submitted",
+    )
+    # Rudolf-AI-verdict när status flippar till besked_klar
+    # godkand | avslag | kontroll | None (innan besked)
+    verdict: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # När slutskattebeskedet är klart (3 spel-dagar efter submit)
+    besked_due_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    # När pengarna betalas (våg 1 = 7 april, våg 2 = 9 juni) eller
+    # när kvarskatten förfaller (12 mars Y+2).
+    payout_due_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    # Vilken våg eleven hamnade i (1 = april, 2 = juni, 0 = kvarskatt
+    # eller None innan besked klart)
+    payout_wave: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    # Förseningsavgift om submit efter 4 maj (1 250 kr första gången)
+    late_fee: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0"),
+    )
 
 
 # === V2 Försäkringar (Fas 2D) ===
@@ -1742,6 +1783,20 @@ class MailItem(TenantMixin, Base):
         JSON, nullable=True,
     )
 
+    # Dunning · påminnelse-flödet (auto-eskalering av obetalda fakturor).
+    # När en faktura passerar förfallodag + 5/14/30/60 dagar skapar
+    # _run_dunning_for_student() en NY MailItem(mail_type='reminder')
+    # som pekar tillbaka på originalfakturan via parent_mail_id.
+    # reminder_level: 1=Påminnelse, 2=Sista påminnelsen, 3=Inkasso,
+    # 4=Kronofogden. Idempotens: en (parent_mail_id, reminder_level)
+    # finns max en gång.
+    parent_mail_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("mail_items.id"), nullable=True, index=True,
+    )
+    reminder_level: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+
 
 class JobApplication(TenantMixin, Base):
     """Spelmotor · Sprint 6 · pågående/avslutad jobbansökan.
@@ -1787,6 +1842,27 @@ class JobApplication(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
+    # Förbättrat 5-rond-flöde · Sprint 7
+    # Personligt brev som eleven skriver i rond 1 (ersätter
+    # cover_letter_hours-slider). Sonnet bedömer kvalitet + ger
+    # feedback som visas i ai_feedback_md.
+    cover_letter_text: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    # Case-svar i rond 3 som lagras separat så lärare kan se
+    # elevens resonemang i lärar-overview (inte bara final score).
+    case_answer_text: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    # Aggregerad AI-feedback från Sonnet om brevet + intervjusvar.
+    # Visar sig som "Mats coach"-text i UI:t.
+    ai_feedback_md: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    # Lagrat full annons-data så lärar-vy kan visa exakt vad eleven
+    # såg när hen sökte (annonser regenereras varje månad och eleven
+    # skulle annars inte kunna spåra tillbaka).
+    job_ad_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
 
 class ActiveHome(TenantMixin, Base):
@@ -1847,6 +1923,47 @@ class ActiveHome(TenantMixin, Base):
         Integer, default=1,
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class RentalApplication(TenantMixin, Base):
+    """Pending kö-ansökan till en hyresrätt-listing.
+
+    När eleven klickar "Ställ mig i kö" skapas en rad här. När
+    `ready_on` passerat i spel-tid kan eleven klicka "Flytta in nu"
+    från sin lista över pending ansökningar.
+
+    Snapshot:ar listing-data eftersom listings genereras determinis-
+    tiskt per (city, year_month). Vid flytt-in-tid kan year_month
+    ha tickat förbi och poolen visar andra listings.
+    """
+    __tablename__ = "rental_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    city_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    address: Mapped[str] = mapped_column(String(200), nullable=False)
+    tier: Mapped[int] = mapped_column(Integer, nullable=False)
+    tier_label: Mapped[str] = mapped_column(String(20), nullable=False)
+    size_kvm: Mapped[int] = mapped_column(Integer, nullable=False)
+    rooms: Mapped[int] = mapped_column(Integer, nullable=False)
+    monthly_rent: Mapped[int] = mapped_column(Integer, nullable=False)
+    deposit: Mapped[int] = mapped_column(Integer, nullable=False)
+    quality_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    first_hand: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    applied_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ready_on: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True,
+    )
+    # queued · väntar i kö  (applied_on < ready_on)
+    # ready   · redo att flytta in (today_g >= ready_on)
+    # moved_in · eleven har flyttat in (terminal)
+    # cancelled · eleven avbröt köandet (terminal)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="queued", index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

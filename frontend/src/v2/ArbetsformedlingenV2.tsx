@@ -58,13 +58,18 @@ const STATUS_COLOR: Record<V2ArbetsformedlingenApplication["status"], string> = 
 
 
 export function ArbetsformedlingenV2() {
-  const [ym, setYm] = useState(CURRENT_YM);
+  // SPEL-TID: starta med tom ym så backend bestämmer default till
+  // innevarande spel-månad. När jobsData laddas synkar vi ym till
+  // response.year_month så pickern visar rätt månad.
+  const [ym, setYm] = useState<string>("");
   const [jobsData, setJobsData] = useState<V2ArbetsformedlingenJobsResponse | null>(null);
   const [apps, setApps] = useState<V2ArbetsformedlingenApplication[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
+  const [detailJob, setDetailJob] = useState<V2ArbetsformedlingenJob | null>(null);
+  const [applyBusy, setApplyBusy] = useState(false);
 
   const refresh = (targetYm: string) => {
     setLoading(true);
@@ -75,6 +80,11 @@ export function ArbetsformedlingenV2() {
       .then(([j, a]) => {
         setJobsData(j);
         setApps(a);
+        // Synka pickern till spel-månaden om vi inte har en explicit
+        // user-val ännu
+        if (!ym && j.year_month) {
+          setYm(j.year_month);
+        }
       })
       .catch((e) => setError(String(e?.message || e)))
       .finally(() => setLoading(false));
@@ -86,13 +96,17 @@ export function ArbetsformedlingenV2() {
   }, [ym]);
 
   const handleApply = async (job: V2ArbetsformedlingenJob) => {
+    setApplyBusy(true);
     try {
       const app = await v2Api.arbetsformedlingenApply(job);
       setConfirmMsg(`Ansökan startad till ${job.employer_name}!`);
       setSelectedAppId(app.id);
+      setDetailJob(null);
       refresh(ym);
     } catch (e) {
       setConfirmMsg(`Fel: ${String((e as Error).message || e)}`);
+    } finally {
+      setApplyBusy(false);
     }
   };
 
@@ -118,6 +132,25 @@ export function ArbetsformedlingenV2() {
               {jobsData?.mats_message ||
                 "Mats hjälper dig hitta nytt jobb genom 5 ronder."}
             </p>
+            <Link
+              to="/v2/arbetsformedlingen/klass-jobb"
+              style={{
+                display: "inline-block",
+                marginTop: 12,
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: 1.2,
+                color: "#c7d2fe",
+                textDecoration: "none",
+                background: "rgba(99,102,241,0.12)",
+                border: "1px solid rgba(99,102,241,0.35)",
+                padding: "6px 12px",
+                borderRadius: 6,
+              }}
+            >
+              ● JOBB HOS KLASSKOMPISARS BOLAG →
+            </Link>
           </div>
         </header>
 
@@ -198,114 +231,105 @@ export function ArbetsformedlingenV2() {
             </h2>
             {loading && <div>Laddar jobb…</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {jobsData?.jobs.map((j) => (
-                <article
-                  key={j.listing_id}
-                  style={{
-                    border: "1px solid var(--line)",
-                    borderRadius: 8,
-                    padding: 18,
-                    background: "rgba(15,21,37,0.7)",
-                    color: "var(--text)",
-                  }}
-                >
-                  <div
+              {jobsData?.jobs.map((j) => {
+                const tier = j.match_score >= 80 ? "good"
+                          : j.match_score >= 60 ? "ok" : "low";
+                const tierColor = tier === "good" ? "#34d399"
+                                : tier === "ok" ? "#fbbf24" : "#f87171";
+                return (
+                  <article
+                    key={j.listing_id}
+                    onClick={() => setDetailJob(j)}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      gap: 12,
+                      border: "1px solid var(--line)",
+                      borderLeft: `3px solid ${tierColor}`,
+                      borderRadius: 8,
+                      padding: "16px 20px",
+                      background: "rgba(15,21,37,0.6)",
+                      color: "var(--text)",
+                      cursor: "pointer",
+                      transition: "background 0.15s, border-color 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = "rgba(15,21,37,0.85)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = "rgba(15,21,37,0.6)";
                     }}
                   >
-                    <div>
-                      <div
-                        style={{
-                          fontFamily: "var(--serif)",
-                          fontSize: 16,
-                          fontWeight: 700,
-                          color: "#fff",
-                        }}
-                      >
-                        {j.yrke_display}
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: "var(--mono)",
-                          fontSize: 10.5,
-                          color: "var(--text-mid)",
-                          marginTop: 4,
-                          letterSpacing: "0.4px",
-                        }}
-                      >
-                        {j.employer_name} · {j.city_display}
-                      </div>
-                    </div>
-                    <MatchPill score={j.match_score} />
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 12,
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 8,
-                      fontFamily: "var(--mono)",
-                      fontSize: 11,
-                      color: "var(--text-mid)",
-                    }}
-                  >
-                    <div>
-                      Median:{" "}
-                      <strong style={{ color: "#fff" }}>
-                        {SEK(j.monthly_gross_median)} kr
-                      </strong>
-                    </div>
-                    <div>
-                      Utbildning:{" "}
-                      <strong style={{ color: "#fff" }}>
-                        {j.education_level}
-                      </strong>
-                    </div>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      Spann: {SEK(j.monthly_gross_min)}–
-                      {SEK(j.monthly_gross_max)} kr/mån brutto
-                    </div>
-                  </div>
-                  {j.description && (
-                    <p
+                    <div
                       style={{
-                        marginTop: 12,
-                        fontFamily: "var(--serif)",
-                        fontSize: 13.5,
-                        lineHeight: 1.5,
-                        color: "var(--text)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: 12,
                       }}
                     >
-                      {j.description}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleApply(j)}
-                    style={{
-                      marginTop: 14,
-                      width: "100%",
-                      padding: "10px",
-                      background: "var(--accent)",
-                      color: "#fff",
-                      border: 0,
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      fontFamily: "var(--mono)",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "1.2px",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Sök jobbet →
-                  </button>
-                </article>
-              ))}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            fontFamily: "var(--mono)",
+                            fontSize: 9,
+                            letterSpacing: "1.4px",
+                            textTransform: "uppercase",
+                            color: tierColor,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {j.employer_name}
+                        </div>
+                        <div
+                          style={{
+                            fontFamily: "var(--serif)",
+                            fontSize: 18,
+                            fontWeight: 700,
+                            color: "#fff",
+                            letterSpacing: "-0.2px",
+                          }}
+                        >
+                          {j.yrke_display}
+                        </div>
+                        <div
+                          style={{
+                            fontFamily: "var(--mono)",
+                            fontSize: 10,
+                            color: "var(--text-mid)",
+                            marginTop: 6,
+                            letterSpacing: "0.3px",
+                          }}
+                        >
+                          {j.city_display} · {j.employment_type}
+                        </div>
+                      </div>
+                      <MatchPill score={j.match_score} />
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 14,
+                        paddingTop: 12,
+                        borderTop: "1px solid var(--line)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 10,
+                        fontFamily: "var(--mono)",
+                        fontSize: 11,
+                      }}
+                    >
+                      <div style={{ color: "var(--text-mid)" }}>
+                        <strong style={{ color: "#fff" }}>
+                          {SEK(j.monthly_gross_min)}–{SEK(j.monthly_gross_max)}
+                        </strong>{" "}
+                        kr/mån
+                      </div>
+                      <div style={{ color: "var(--text-dim)", fontSize: 10 }}>
+                        Sista ans. {j.application_deadline} →
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
 
@@ -410,6 +434,16 @@ export function ArbetsformedlingenV2() {
           />
         )}
       </div>
+
+      {/* Detaljvy-modal · klick på jobb-card */}
+      {detailJob && (
+        <JobDetailModal
+          job={detailJob}
+          onClose={() => setDetailJob(null)}
+          onApply={() => handleApply(detailJob)}
+          applyBusy={applyBusy}
+        />
+      )}
     </div>
   );
 }
@@ -446,16 +480,14 @@ function ActiveInterviewPanel({
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // Round 1
-  const [coverHours, setCoverHours] = useState(1.5);
   // Round 2
   const [tone, setTone] = useState<"saker" | "reflekterande" | "ansprakvol" | "arlig">("reflekterande");
   const [answers, setAnswers] = useState<string[]>(["", "", "", ""]);
-  // Round 3
-  const [effort, setEffort] = useState<"lat" | "normal" | "djup">("normal");
+  // Round 3 · case-uppgift med riktig text
   const [caseAnswer, setCaseAnswer] = useState("");
-  // Round 4
+  // Round 4 · klädsel + research-svar
   const [dress, setDress] = useState<"vardag" | "business_casual" | "formell">("business_casual");
-  const [research, setResearch] = useState(0.5);
+  const [researchText, setResearchText] = useState("");
 
   const submit = async (payload: Record<string, unknown>) => {
     setSubmitting(true);
@@ -611,41 +643,11 @@ function ActiveInterviewPanel({
       )}
 
       {app.status === "round_1" && (
-        <div>
-          <h3 style={ronH3Style}>Rond 1 · CV + personligt brev</h3>
-          <p
-            style={{
-              color: "var(--text-mid)",
-              fontFamily: "var(--serif)",
-              fontSize: 13,
-            }}
-          >
-            Hur lång tid vill du lägga på personligt brev? Mer tid = bättre intryck men kostar fritid + relation.
-          </p>
-          <input
-            type="range" min="0.5" max="4" step="0.5" value={coverHours}
-            onChange={(e) => setCoverHours(parseFloat(e.target.value))}
-            style={{ width: "100%" }}
-          />
-          <div
-            style={{
-              fontFamily: "var(--mono)",
-              fontSize: 11,
-              color: "#fff",
-              marginTop: 4,
-            }}
-          >
-            {coverHours} timmar
-          </div>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => submit({ cover_letter_hours: coverHours })}
-            style={btnStyle()}
-          >
-            Skicka in
-          </button>
-        </div>
+        <CoverLetterEditor
+          app={app}
+          submitting={submitting}
+          onSubmit={(text) => submit({ cover_letter_text: text })}
+        />
       )}
 
       {app.status === "round_2" && (
@@ -716,74 +718,123 @@ function ActiveInterviewPanel({
 
       {app.status === "round_3" && (
         <div>
-          <h3 style={ronH3Style}>Rond 3 · Case</h3>
-          <label style={ronLabelStyle}>
-            Effort:&nbsp;
-            <select
-              value={effort}
-              onChange={(e) => setEffort(e.target.value as typeof effort)}
-              style={ronSelectStyle}
-            >
-              <option value="lat">Lat (mindre tid)</option>
-              <option value="normal">Normal</option>
-              <option value="djup">Djup (kostar fritid)</option>
-            </select>
-          </label>
+          <h3 style={ronH3Style}>Rond 3 · Kompetenstest · case-uppgift</h3>
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 13.5,
+              color: "var(--text-mid)",
+              lineHeight: 1.5,
+              marginBottom: 12,
+            }}
+          >
+            <strong style={{ color: "#fff" }}>Caset:</strong> En kollega
+            kommer till dig med ett problem som rör rollen som{" "}
+            <em style={{ color: "var(--warm)" }}>{app.yrke_display}</em>.
+            Beskriv hur du skulle hantera situationen — visa hur du tänker
+            steg-för-steg, inte bara slutsatsen. Sikta på 80–250 ord.
+            AI bedömer både innehåll och språk.
+          </p>
           <textarea
-            rows={6}
-            style={{ ...ronTextareaStyle, marginTop: 10 }}
-            placeholder="Skriv ditt case-svar här..."
+            rows={10}
+            style={{ ...ronTextareaStyle, marginTop: 4 }}
+            placeholder="Steg 1: jag skulle först fråga... Steg 2: ..."
             value={caseAnswer}
             onChange={(e) => setCaseAnswer(e.target.value)}
           />
+          <div
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 10,
+              color: "var(--text-dim)",
+              marginTop: 6,
+              marginBottom: 12,
+            }}
+          >
+            {caseAnswer.trim().split(/\s+/).filter(Boolean).length} ord
+            {caseAnswer.trim().split(/\s+/).filter(Boolean).length < 30
+              && " · för kort (min 30)"}
+          </div>
           <button
             type="button"
-            disabled={submitting}
-            onClick={() => submit({ effort_level: effort, case_answer: caseAnswer })}
+            disabled={
+              submitting
+              || caseAnswer.trim().split(/\s+/).filter(Boolean).length < 30
+            }
+            onClick={() => submit({ case_answer_text: caseAnswer })}
             style={btnStyle()}
           >
-            Skicka in
+            {submitting ? "AI-bedömer..." : "Skicka in →"}
           </button>
         </div>
       )}
 
       {app.status === "round_4" && (
         <div>
-          <h3 style={ronH3Style}>Rond 4 · Intervju på plats</h3>
+          <h3 style={ronH3Style}>Rond 4 · Slutintervju på plats</h3>
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 13.5,
+              color: "var(--text-mid)",
+              lineHeight: 1.5,
+              marginBottom: 14,
+            }}
+          >
+            Du sitter på en stol mitt emot rekryteraren från{" "}
+            <strong style={{ color: "#fff" }}>{app.employer_name}</strong>.
+            Hen ler och säger: "Berätta — vad vet du om oss? Varför vill
+            du jobba just här?"
+          </p>
+
           <label style={ronLabelStyle}>
-            Klädsel:&nbsp;
+            Klädsel
             <select
               value={dress}
               onChange={(e) => setDress(e.target.value as typeof dress)}
-              style={ronSelectStyle}
+              style={{ ...ronSelectStyle, marginLeft: 8 }}
             >
               <option value="vardag">Vardags</option>
               <option value="business_casual">Business casual</option>
               <option value="formell">Formell</option>
             </select>
           </label>
-          <div
-            style={{
-              marginTop: 10,
-              fontFamily: "var(--mono)",
-              fontSize: 11,
-              color: "#fff",
-            }}
-          >
-            Företagsforskning: {research} h
-            <input
-              type="range" min="0" max="2" step="0.5" value={research}
-              onChange={(e) => setResearch(parseFloat(e.target.value))}
-              style={{ width: "100%", marginTop: 4 }}
+
+          <div style={{ marginTop: 14 }}>
+            <label style={ronLabelStyle}>
+              Ditt research-svar (vad vet du om {app.employer_name}?)
+            </label>
+            <textarea
+              rows={8}
+              style={{ ...ronTextareaStyle, marginTop: 4 }}
+              placeholder={`${app.employer_name} är ett företag som... Det jag tycker är intressant med just er roll är...`}
+              value={researchText}
+              onChange={(e) => setResearchText(e.target.value)}
             />
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "var(--text-dim)",
+                marginTop: 6,
+              }}
+            >
+              {researchText.trim().split(/\s+/).filter(Boolean).length} ord
+              {researchText.trim().split(/\s+/).filter(Boolean).length < 20
+                && " · skriv minst 20 ord"}
+            </div>
           </div>
+
           <button
             type="button"
-            disabled={submitting}
-            onClick={() => submit({ dress, research_hours: research })}
-            style={btnStyle()}
+            disabled={
+              submitting
+              || researchText.trim().split(/\s+/).filter(Boolean).length < 20
+            }
+            onClick={() => submit({ dress, research_text: researchText })}
+            style={{ ...btnStyle(), marginTop: 14 }}
           >
-            Skicka in
+            {submitting ? "AI-bedömer..." : "Skicka in →"}
           </button>
         </div>
       )}
@@ -888,4 +939,417 @@ const ronLabelStyle: React.CSSProperties = {
   color: "var(--text-mid)",
   display: "inline-block",
   marginBottom: 6,
+};
+
+
+// === Sprint 7 · Personligt brev-editor med AI-feedback ===
+
+function CoverLetterEditor({
+  app, submitting, onSubmit,
+}: {
+  app: V2ArbetsformedlingenApplication;
+  submitting: boolean;
+  onSubmit: (text: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const [feedback, setFeedback] = useState<{
+    score: number; feedback_md: string; highlights: string[];
+  } | null>(null);
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  const tooShort = wordCount < 30;
+  const tooLong = wordCount > 600;
+
+  async function getFeedback() {
+    if (tooShort) {
+      setError("Skriv minst 30 ord för att få feedback.");
+      return;
+    }
+    setFeedbackBusy(true);
+    setError(null);
+    try {
+      const res = await v2Api.arbetsformedlingenCoverLetterPreview({
+        text,
+        yrke_display: app.yrke_display,
+        employer_name: app.employer_name,
+      });
+      setFeedback(res);
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      if (msg.includes("503")) setError("AI-funktioner är inte aktiverade.");
+      else if (msg.includes("502")) setError("AI-tjänsten gick inte att nå.");
+      else setError(msg);
+    } finally {
+      setFeedbackBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3 style={ronH3Style}>Rond 1 · Personligt brev</h3>
+      <p
+        style={{
+          color: "var(--text-mid)",
+          fontFamily: "var(--serif)",
+          fontSize: 13.5,
+          lineHeight: 1.5,
+          marginBottom: 12,
+        }}
+      >
+        Skriv ett personligt brev till{" "}
+        <strong style={{ color: "var(--warm)" }}>{app.employer_name}</strong>.
+        Berätta varför just <em>detta</em> jobbet och ge konkreta exempel
+        från din erfarenhet. Sikta på 200–400 ord. Du kan be om AI-feedback
+        innan du skickar in — den kostar inget extra rond.
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={14}
+        placeholder="Hej,&#10;&#10;Jag söker jobbet som ... eftersom ..."
+        style={{
+          width: "100%",
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid var(--line-strong)",
+          borderRadius: 6,
+          color: "#fff",
+          fontFamily: "var(--serif)",
+          fontSize: 14,
+          lineHeight: 1.5,
+          padding: "12px 14px",
+          boxSizing: "border-box",
+          resize: "vertical",
+        }}
+      />
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginTop: 6,
+          fontFamily: "var(--mono)",
+          fontSize: 10,
+          color: tooShort ? "#fca5a5" : tooLong ? "#fca5a5" : "var(--text-dim)",
+        }}
+      >
+        <span>
+          {wordCount} ord
+          {tooShort && " · för kort (min 30)"}
+          {tooLong && " · för långt (max 600)"}
+        </span>
+        <span style={{ color: "var(--text-dim)" }}>
+          Tips: 200–400 ord brukar landa bäst
+        </span>
+      </div>
+
+      {error && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "8px 12px",
+            background: "rgba(220,38,38,0.08)",
+            color: "#fca5a5",
+            borderRadius: 4,
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {feedback && (
+        <div
+          style={{
+            marginTop: 14,
+            padding: "14px 16px",
+            background: "rgba(139, 92, 246, 0.06)",
+            borderLeft: "3px solid #a78bfa",
+            borderRadius: 4,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 9,
+              letterSpacing: "1.4px",
+              textTransform: "uppercase",
+              color: "#a78bfa",
+              marginBottom: 6,
+            }}
+          >
+            ✦ AI-feedback · {feedback.score}/25 poäng
+          </div>
+          <div
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 13.5,
+              color: "rgba(255,255,255,0.85)",
+              lineHeight: 1.55,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {feedback.feedback_md}
+          </div>
+          {feedback.highlights.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 9.5,
+                  letterSpacing: "1.2px",
+                  textTransform: "uppercase",
+                  color: "#6ee7b7",
+                  marginBottom: 6,
+                }}
+              >
+                ✓ Det här gör du bra
+              </div>
+              {feedback.highlights.map((h, i) => (
+                <div
+                  key={i}
+                  style={{
+                    fontSize: 13,
+                    color: "rgba(255,255,255,0.78)",
+                    fontFamily: "var(--serif)",
+                    marginTop: 4,
+                  }}
+                >
+                  • {h}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          disabled={feedbackBusy || tooShort || tooLong}
+          onClick={getFeedback}
+          style={{
+            ...btnStyle(),
+            background: "transparent",
+            border: "1px solid #a78bfa",
+            color: "#a78bfa",
+          }}
+        >
+          {feedbackBusy ? "AI-bedömer..." : "✦ Be om AI-feedback"}
+        </button>
+        <button
+          type="button"
+          disabled={submitting || tooShort || tooLong}
+          onClick={() => onSubmit(text)}
+          style={btnStyle()}
+        >
+          {submitting ? "Skickar..." : "Skicka in →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// === Sprint 7 · Job-detaljvy modal ===
+
+export function JobDetailModal({
+  job, onClose, onApply, applyBusy,
+}: {
+  job: V2ArbetsformedlingenJob;
+  onClose: () => void;
+  onApply: () => void;
+  applyBusy: boolean;
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 100,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#14131a",
+          border: "1px solid var(--line-strong)",
+          borderRadius: 10,
+          maxWidth: 720, width: "100%",
+          maxHeight: "90vh", overflowY: "auto",
+          padding: "26px 30px",
+        }}
+      >
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          alignItems: "start", marginBottom: 14,
+        }}>
+          <div>
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 9.5,
+                letterSpacing: "1.4px",
+                textTransform: "uppercase",
+                color: "var(--accent)",
+                marginBottom: 4,
+              }}
+            >
+              ● Jobbannons
+            </div>
+            <h2 style={{
+              fontFamily: "var(--serif)", fontSize: 26,
+              fontWeight: 700, letterSpacing: "-0.5px",
+              margin: 0,
+            }}>
+              {job.yrke_display}
+            </h2>
+            <div style={{
+              fontFamily: "var(--serif)", fontSize: 16, marginTop: 4,
+              color: "var(--warm)", fontStyle: "italic",
+            }}>
+              {job.employer_name} · {job.city_display}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              ...btnStyle(),
+              background: "transparent",
+              border: "1px solid var(--line-strong)",
+              color: "var(--text-mid)",
+            }}
+          >
+            Stäng
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+            gap: 0,
+            margin: "16px -30px",
+            borderTop: "1px solid var(--line)",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
+          {[
+            { label: "Lön/mån", value: `${SEK(job.monthly_gross_min)}–${SEK(job.monthly_gross_max)}` },
+            { label: "Anställning", value: job.employment_type },
+            { label: "Arbetstid", value: job.work_hours },
+            { label: "Tillträde", value: job.start_date.replace("Tillträde ", "") },
+            { label: "Sista ans.", value: job.application_deadline },
+          ].map((c) => (
+            <div key={c.label} style={{
+              padding: "14px 18px",
+              borderRight: "1px solid var(--line)",
+              background: "rgba(255,255,255,0.02)",
+            }}>
+              <div style={{
+                fontFamily: "var(--mono)", fontSize: 9,
+                letterSpacing: "1.4px", textTransform: "uppercase",
+                color: "var(--text-dim)", marginBottom: 4,
+              }}>
+                {c.label}
+              </div>
+              <div style={{
+                fontFamily: "var(--serif)", fontSize: 13,
+                color: "#fff",
+              }}>
+                {c.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Section title="Om företaget">
+          <p style={{
+            fontFamily: "var(--serif)", fontSize: 14.5, lineHeight: 1.6,
+            color: "rgba(255,255,255,0.8)",
+          }}>
+            {job.company_blurb.replace("{employer}", job.employer_name)}
+          </p>
+        </Section>
+
+        <Section title="Vad du kommer göra">
+          <ul style={listStyle}>
+            {job.job_description.map((d, i) => <li key={i}>{d}</li>)}
+          </ul>
+        </Section>
+
+        <Section title="Krav">
+          <ul style={listStyle}>
+            {job.requirements.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        </Section>
+
+        {job.meriter.length > 0 && (
+          <Section title="Meriter">
+            <ul style={listStyle}>
+              {job.meriter.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+          </Section>
+        )}
+
+        <Section title="Förmåner">
+          <ul style={listStyle}>
+            {job.benefits.map((b, i) => <li key={i}>{b}</li>)}
+          </ul>
+        </Section>
+
+        <div style={{
+          marginTop: 26, display: "flex", gap: 10,
+          paddingTop: 18, borderTop: "1px solid var(--line)",
+        }}>
+          <button
+            type="button"
+            disabled={applyBusy}
+            onClick={onApply}
+            style={btnStyle()}
+          >
+            {applyBusy ? "Söker..." : "Sök jobbet →"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              ...btnStyle(),
+              background: "transparent",
+              border: "1px solid var(--line-strong)",
+              color: "var(--text-mid)",
+            }}
+          >
+            Avbryt
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div style={{
+        fontFamily: "var(--mono)", fontSize: 9.5,
+        letterSpacing: "1.4px", textTransform: "uppercase",
+        color: "var(--accent)", marginBottom: 8,
+      }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const listStyle: React.CSSProperties = {
+  listStyle: "none", padding: 0, margin: 0,
+  display: "flex", flexDirection: "column", gap: 6,
+  fontFamily: "var(--serif)", fontSize: 14,
+  color: "rgba(255,255,255,0.8)", lineHeight: 1.5,
 };

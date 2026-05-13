@@ -147,21 +147,68 @@ def _high_cost_credit_count(session: Session) -> int:
         return 0
 
 
-def _budget_violations(session: Session, year_month: str) -> tuple[int, list[str]]:
-    """Kollar elevens budget för denna månad mot Konsumentverket. Returnerar
-    (antal_violations, lista_av_categorinamn) — kategorinamn behövs i UI."""
+def _load_active_student_profile() -> object | None:
+    """Hämta master-DB::StudentProfile för aktuell scope-elev (None om
+    saknas eller om vi inte är i en student-scope)."""
+    try:
+        from ..school.engines import (
+            get_current_actor_student,
+            master_session as _ms,
+        )
+        from ..school.models import StudentProfile
+        actor_id = get_current_actor_student()
+        if actor_id is None:
+            return None
+        with _ms() as msdb:
+            prof = (
+                msdb.query(StudentProfile)
+                .filter(StudentProfile.student_id == actor_id)
+                .first()
+            )
+            if prof is None:
+                return None
+            # Detacha fältvärdena så de funkar utanför sessionen
+            class _Snap:
+                pass
+            snap = _Snap()
+            for f in (
+                "age", "family_status", "children_ages",
+                "housing_type",
+            ):
+                setattr(snap, f, getattr(prof, f, None))
+            return snap
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_load_active_student_profile: misslyckades",
+        )
+        return None
+
+
+def _budget_violations(
+    session: Session, year_month: str,
+) -> tuple[int, list[tuple[str, str, float]]]:
+    """Kollar elevens budget för denna månad mot Konsumentverket.
+
+    Returnerar (antal_violations, [(cat_name, severity, ratio), ...])
+    så caller kan applicera differentierat straff (subexistens vs snålt).
+    Använder familje-aware lookup om StudentProfile är tillgänglig.
+    """
     from ..db.models import Category
+    profile = _load_active_student_profile()
     rows = (
         session.query(Budget, Category.name)
         .join(Category, Category.id == Budget.category_id)
         .filter(Budget.month == year_month)
         .all()
     )
-    violations: list[str] = []
+    violations: list[tuple[str, str, float]] = []
     for b, cat_name in rows:
-        check = check_against_minimum(cat_name, int(b.planned_amount))
+        # Budgetar lagras negativa för utgifter — använd absolutbeloppet.
+        actual = abs(int(b.planned_amount or 0))
+        check = check_against_minimum(cat_name, actual, profile=profile)
         if check.is_violation:
-            violations.append(cat_name)
+            violations.append((cat_name, check.severity, check.ratio))
     return len(violations), violations
 
 
@@ -578,6 +625,42 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         )
         from ..school.models import StudentProfile as _SP_rent
         from datetime import date as _d_rent, timedelta as _td_rent
+
+        # Hämta aktuell elevs profil för housing_type-koll. Tidigare:
+        # `.order_by(student_id.desc()).first()` plockade SENASTE profilen i
+        # master-DB:n (alltså senaste skapade eleven) → fel data för alla
+        # andra elever. Vi använder ContextVar:n `get_current_actor_student`
+        # som scope-middleware sätter per request.
+        _housing_type_for_actor: Optional[str] = None
+        _net_salary_for_actor: Optional[float] = None
+        _age_for_actor: Optional[int] = None
+        try:
+            from ..school.engines import (
+                master_session as _ms_rent2,
+                get_current_actor_student as _gcas_rent,
+            )
+            _actor_id = _gcas_rent()
+            if _actor_id is not None:
+                with _ms_rent2() as _msdb2:
+                    _prof = (
+                        _msdb2.query(_SP_rent)
+                        .filter(_SP_rent.student_id == _actor_id)
+                        .first()
+                    )
+                    if _prof is not None:
+                        _housing_type_for_actor = (
+                            getattr(_prof, "housing_type", None) or None
+                        )
+                        _net_salary_for_actor = (
+                            float(_prof.net_salary_monthly)
+                            if _prof.net_salary_monthly else None
+                        )
+                        _age_for_actor = (
+                            int(_prof.age) if _prof.age is not None else None
+                        )
+        except Exception:
+            pass
+
         active_rentals = (
             session.query(_RC)
             .filter(_RC.status == "active")
@@ -618,30 +701,12 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
                     "långsiktigt boende.",
                 ))
 
-            # Hyresandel av netto — slå mot StudentProfile.net_salary_monthly
-            # OBS: StudentProfile bor i master-DB (MasterBase), inte i
-            # scope-DB. session-parametern här är en scope-DB-session
-            # → vi måste öppna master_session separat. Lazy import för
-            # att undvika circular.
-            try:
-                from ..school.engines import master_session as _ms_rent
-                with _ms_rent() as _msdb:
-                    profile = (
-                        _msdb.query(_SP_rent)
-                        .order_by(_SP_rent.student_id.desc())
-                        .first()
-                    )
-                    # Detacha så vi kan använda fältet utanför sessionen
-                    _net_salary = (
-                        float(profile.net_salary_monthly)
-                        if profile and profile.net_salary_monthly
-                        else None
-                    )
-            except Exception:
-                _net_salary = None
-            profile = _net_salary  # rebrand för enkelhet nedan
-            if profile is not None:
-                net = profile  # vi rebrand-ade till net_salary ovan
+            # Hyresandel av netto — använd actor-scopad net_salary som
+            # vi hämtade ovan (tidigare bug: .order_by(student_id.desc())
+            # plockade fel elevs profil).
+            _net_salary = _net_salary_for_actor
+            if _net_salary is not None:
+                net = _net_salary
                 if net > 0 and rent > 0:
                     share = rent / net
                     if share > 0.40:
@@ -685,13 +750,35 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
                     "året — kostnaden ökar snabbare än lön.",
                 ))
         else:
-            # Ingen aktiv bostad alls — registrerat boende saknas
-            factors.append(WellbeingFactor(
-                "safety", -2,
-                "Inget registrerat hyreskontrakt eller bostadsrätt — "
-                "boendet är odefinierat.",
-            ))
-            safety -= 2
+            # Ingen aktiv hyresrätt. Det betyder INTE att boendet saknas:
+            # elever som äger bostadsrätt/villa/radhus har housing_type
+            # satt på profilen istället för en RentalContract-rad.
+            # Tidigare bugg: koden straffade ALLA elever som inte hade
+            # hyresrätt (inkl. bostadsrätt-ägare) med "boendet är
+            # odefinierat" → falsk negativ.
+            if _housing_type_for_actor in (
+                "bostadsratt", "villa", "radhus",
+            ):
+                safety += 4
+                factors.append(WellbeingFactor(
+                    "safety", 4,
+                    f"Äger {_housing_type_for_actor} — full kontroll "
+                    "över boendet, inget besittningsskydd att förlora.",
+                ))
+            else:
+                try:
+                    has_any_account = (
+                        session.query(Account.id).limit(1).first() is not None
+                    )
+                except Exception:
+                    has_any_account = False
+                if has_any_account:
+                    factors.append(WellbeingFactor(
+                        "safety", -2,
+                        "Inget registrerat hyreskontrakt eller bostadsrätt — "
+                        "boendet är odefinierat.",
+                    ))
+                    safety -= 2
     except Exception:
         import logging
         logging.getLogger(__name__).exception(
@@ -707,22 +794,29 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         from ..db.models import Account as _Acc_pen
 
         _isk_now = float(_isk_bal(session))
-        # Hämta StudentProfile (master-DB) för ålder
-        try:
-            from ..school.engines import master_session as _ms_pen
-            with _ms_pen() as _msdb_pen:
-                _prof_pen = (
-                    _msdb_pen.query(_SP_pen)
-                    .order_by(_SP_pen.student_id.desc())
-                    .first()
+        # Hämta ålder för AKTUELL elev (inte 'senaste' i master, vilket
+        # gav 38 år på alla elever om en till elev skapades efter).
+        # Återanvänd actor-scopat värde från rental-factorn ovan om vi
+        # hann hämta det där; annars gör en egen scope-koll här.
+        _age_pen = _age_for_actor
+        if _age_pen is None:
+            try:
+                from ..school.engines import (
+                    master_session as _ms_pen,
+                    get_current_actor_student as _gcas_pen,
                 )
-                _age_pen = (
-                    int(_prof_pen.age)
-                    if _prof_pen and _prof_pen.age is not None
-                    else None
-                )
-        except Exception:
-            _age_pen = None
+                _actor_pen = _gcas_pen()
+                if _actor_pen is not None:
+                    with _ms_pen() as _msdb_pen:
+                        _prof_pen = (
+                            _msdb_pen.query(_SP_pen)
+                            .filter(_SP_pen.student_id == _actor_pen)
+                            .first()
+                        )
+                        if _prof_pen and _prof_pen.age is not None:
+                            _age_pen = int(_prof_pen.age)
+            except Exception:
+                _age_pen = None
 
         # ISK aktivt (har innehav) → +economy
         if _isk_now > 0:
@@ -955,17 +1049,54 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         )
 
     # --- HÄLSA-DIMENSION (budget vs minimum) ---
+    # Pedagogik: ju lägre eleven sätter budgeten under KV-schablonen,
+    # desto hårdare drar det i pentagon. Matens subexistens-nivå (under
+    # 50 % av KV) ger extra hälso-straff utöver baslinjen — du KAN inte
+    # leva på halva matbudgeten utan att kroppen märker det. Och 3+
+    # samtidiga violations sänker även sociala axeln (isolering pga
+    # snål budget — ingen råd med vänner, presenter, fika).
     health = 50
-    n_violations, violation_cats = _budget_violations(session, year_month)
+    social_penalty_budget = 0  # Tillämpas när social initierats nedan
+    social_penalty_factor: Optional[WellbeingFactor] = None
+    n_violations, violation_rows = _budget_violations(session, year_month)
+    cat_names_only = [c for c, _, _ in violation_rows]
     if n_violations > 0:
-        delta = -5 * n_violations
-        health += delta
-        cat_str = ", ".join(violation_cats[:3])
+        per_cat_delta = 0
+        for cat_name, severity, _ratio in violation_rows:
+            per_cat_delta += -5 if severity == "subexistens" else -2
+        health += per_cat_delta
+        cat_str = ", ".join(cat_names_only[:3])
         factors.append(WellbeingFactor(
-            "health", delta,
-            f"{n_violations} budget(ar) under Konsumentverket-minimum "
-            f"({cat_str}). −5 p per kategori.",
+            "health", per_cat_delta,
+            f"{n_violations} budget"
+            f"{'ar' if n_violations > 1 else ''} under Konsumentverkets "
+            f"minimum ({cat_str}). −2 p per snål, −5 p per subexistens.",
         ))
+
+        # Eskalering 1 · mat-subexistens slår direkt mot hälsa
+        mat_subexistens = any(
+            severity == "subexistens"
+            and any(k in cat_name.lower()
+                    for k in ("mat", "livsmedel", "ica", "coop", "willys"))
+            for cat_name, severity, _r in violation_rows
+        )
+        if mat_subexistens:
+            health -= 3
+            factors.append(WellbeingFactor(
+                "health", -3,
+                "Mat under hälften av KV-schablon — kropp och energi "
+                "kan inte hänga med i längden.",
+            ))
+
+        # Eskalering 2 · 3+ samtidiga violations → social isolering
+        # (sparas som deferred — social-axeln initieras längre ned)
+        if n_violations >= 3:
+            social_penalty_budget = -5
+            social_penalty_factor = WellbeingFactor(
+                "social", -5,
+                f"{n_violations} samtidiga budget-violations — när allt "
+                "ska klippas hamnar vänner, fika och presenter sist.",
+            )
     elif rows_total := (
         session.query(Budget).filter(Budget.month == year_month).count()
     ):
@@ -1002,6 +1133,10 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
 
     social = 50
     leisure = 50
+    if social_penalty_budget != 0:
+        social += social_penalty_budget
+        if social_penalty_factor is not None:
+            factors.append(social_penalty_factor)
     for e in decided_events:
         impact = e.impact_applied or {}
         social += int(impact.get("social", 0))
@@ -1310,6 +1445,105 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         import logging
         logging.getLogger(__name__).exception(
             "calculate_wellbeing: WellbeingEvent-summa misslyckades",
+        )
+
+    # === FÖRETAGS-CROSS-FAKTORER (om eleven har biz-mode aktiverat) ===
+    # Asymmetrisk · stora negativa biz-händelser ger större privat-effekt
+    # än stora positiva. Tids-stress läggs separat eftersom det räknas
+    # från active jobs-timmar, inte pentagon-axlar.
+    try:
+        from ..business.models import Company as _BizCompany, Job as _BizJob
+        from ..business.cross_pentagon import (
+            biz_to_private_factors,
+            compute_time_stress_factors,
+            compute_weekly_business_hours,
+            TimeStressInput,
+        )
+        from ..business.service import compute_business_pentagon
+        # Hämta elevens aktiva bolag (om något) inom samma scope-DB
+        biz = (
+            session.query(_BizCompany)
+            .filter(_BizCompany.active.is_(True))
+            .first()
+        )
+        if biz is not None:
+            biz_pent = compute_business_pentagon(session, company=biz)
+            cross_factors = biz_to_private_factors(biz_pent["axes"])
+            for cf in cross_factors:
+                if cf.axis == "economy":
+                    economy += cf.points
+                elif cf.axis == "health":
+                    health += cf.points
+                elif cf.axis == "social":
+                    social += cf.points
+                elif cf.axis == "leisure":
+                    leisure += cf.points
+                elif cf.axis == "safety":
+                    safety += cf.points
+                factors.append(WellbeingFactor(
+                    cf.axis, cf.points,
+                    f"Företag: {cf.explanation}",
+                ))
+            # Tids-stress · räkna timmar/vecka från active jobs
+            in_progress = (
+                session.query(_BizJob)
+                .filter(
+                    _BizJob.company_id == biz.id,
+                    _BizJob.status == "in_progress",
+                )
+                .all()
+            )
+            biz_hours = compute_weekly_business_hours(
+                in_progress, industry_key=biz.industry_key,
+            )
+            # Hämta anställd-h från StudentProfile (default 40h heltid)
+            employed_h = 40
+            try:
+                from ..school.engines import (
+                    master_session as _ms_emp,
+                    get_current_actor_student as _gcas_emp,
+                )
+                from ..school.models import StudentProfile as _SP_emp
+                actor_id = _gcas_emp()
+                if actor_id is not None:
+                    with _ms_emp() as _msdb_emp:
+                        _prof_emp = (
+                            _msdb_emp.query(_SP_emp)
+                            .filter(_SP_emp.student_id == actor_id)
+                            .first()
+                        )
+                        if _prof_emp is not None and hasattr(
+                            _prof_emp, "weekly_hours_employed",
+                        ):
+                            v = getattr(_prof_emp, "weekly_hours_employed", None)
+                            if v is not None:
+                                employed_h = int(v)
+            except Exception:
+                pass
+            time_stress = compute_time_stress_factors(TimeStressInput(
+                weekly_hours_employed=employed_h,
+                weekly_hours_business=biz_hours,
+                consecutive_weeks_overload=0,   # TODO Fas 3: spåra
+            ))
+            for cf in time_stress:
+                if cf.axis == "economy":
+                    economy += cf.points
+                elif cf.axis == "health":
+                    health += cf.points
+                elif cf.axis == "social":
+                    social += cf.points
+                elif cf.axis == "leisure":
+                    leisure += cf.points
+                elif cf.axis == "safety":
+                    safety += cf.points
+                factors.append(WellbeingFactor(
+                    cf.axis, cf.points,
+                    f"Tidsstress: {cf.explanation}",
+                ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: biz-cross-factors misslyckades",
         )
 
     # --- KLAMP + TOTAL ---

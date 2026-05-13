@@ -982,6 +982,15 @@ def _compute_credit_for_student(
             savings_buffer_months=savings_buffer_months,
             satisfaction_score=sat_score,
             months_on_platform=months_on_platform,
+            # Livssituations-faktorer från elevens profil. None om profil
+            # saknas (demo-läge eller äldre seed) — då hoppar formeln över
+            # dem och använder bara beteendefaktorer.
+            age=profile.age if profile else None,
+            monthly_net_income=(
+                profile.net_salary_monthly if profile else None
+            ),
+            family_status=profile.family_status if profile else None,
+            housing_type=profile.housing_type if profile else None,
         )
 
         # Cachea i master-DB (insert always — håller historik)
@@ -1073,6 +1082,40 @@ def session_status(
             raise HTTPException(404, "Sessionen finns inte")
         if sess.student_id != student_id:
             raise HTTPException(403, "Sessionen tillhör annan elev")
+        expired = sess.expires_at < datetime.utcnow()
+        return SessionStatusOut(
+            token=token,
+            purpose=sess.purpose,
+            confirmed=sess.confirmed_at is not None,
+            expired=expired,
+            confirmed_at=(
+                sess.confirmed_at.isoformat() if sess.confirmed_at else None
+            ),
+        )
+
+
+@router.get(
+    "/session/{token}/public",
+    response_model=SessionStatusOut,
+)
+def session_status_public(token: str) -> SessionStatusOut:
+    """Publik (anonym) variant av session-status för mobil-vyn.
+
+    Mobilen scannar QR och hamnar på /v2/bank-sign/:token utan att
+    vara inloggad. Den behöver kunna läsa session-meta (purpose,
+    expired, confirmed_at) för att rendera rätt vy. Token är i sig
+    säkerhetsmekanismen — den är slumpad och kort-livad (15 min)
+    och PIN-bekräftelse kräver fortfarande student.bank_pin_hash.
+    """
+    _require_school()
+    with master_session() as s:
+        sess = (
+            s.query(BankSession)
+            .filter(BankSession.token == token)
+            .first()
+        )
+        if not sess:
+            raise HTTPException(404, "Sessionen finns inte")
         expired = sess.expires_at < datetime.utcnow()
         return SessionStatusOut(
             token=token,

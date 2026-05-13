@@ -18,9 +18,80 @@
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { v2Api, type BankData, type LoanData } from "./api";
+import {
+  v2Api,
+  type BankData,
+  type LoanData,
+  type V2LoanApplyResponse,
+  type V2LoanKind,
+} from "./api";
 import { V2Banner } from "./V2Banner";
+import { BankIdSignModal } from "./BankIdSignModal";
+import { ConfirmModal } from "./ConfirmModal";
 import "./lan.css";
+
+// Realistiska intervall per lånetyp — speglar backend-_LOAN_KIND_SPECS
+type LoanKindSpec = {
+  key: V2LoanKind;
+  label: string;
+  blurb: string;
+  minAmount: number;
+  maxAmount: number;
+  minTerm: number;
+  maxTerm: number;
+  defaultAmount: number;
+  defaultTerm: number;
+  warning?: string;
+};
+
+const LOAN_KIND_SPECS: LoanKindSpec[] = [
+  {
+    key: "privatlan",
+    label: "Privatlån",
+    blurb: "För renovering, resa, möbler. Pengarna går in på lönekontot.",
+    minAmount: 10_000,
+    maxAmount: 500_000,
+    minTerm: 12,
+    maxTerm: 144,
+    defaultAmount: 100_000,
+    defaultTerm: 60,
+  },
+  {
+    key: "billan",
+    label: "Billån",
+    blurb: "Bunden till bilköpet. Pengarna går till säljaren.",
+    minAmount: 50_000,
+    maxAmount: 500_000,
+    minTerm: 36,
+    maxTerm: 84,
+    defaultAmount: 200_000,
+    defaultTerm: 60,
+  },
+  {
+    key: "bolan",
+    label: "Bolån",
+    blurb: "För bostadsköp. Lägst ränta — men kräver kontantinsats 15 %.",
+    minAmount: 200_000,
+    maxAmount: 5_000_000,
+    minTerm: 120,
+    maxTerm: 600,
+    defaultAmount: 2_000_000,
+    defaultTerm: 360,
+  },
+  {
+    key: "smslan",
+    label: "SMS-lån",
+    blurb: "Snabbutbetalning utan kreditprövning. EXTREMT hög ränta.",
+    minAmount: 1_000,
+    maxAmount: 30_000,
+    minTerm: 1,
+    maxTerm: 12,
+    defaultAmount: 5_000,
+    defaultTerm: 6,
+    warning:
+      "Effektiv årsränta 30–60 %. Du betalar tillbaka mycket mer än du lånar.",
+  },
+];
 
 const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
@@ -47,12 +118,243 @@ export function LanV2() {
   const [extraBusy, setExtraBusy] = useState(false);
   const [extraMsg, setExtraMsg] = useState<string | null>(null);
 
+  // Ansök om nytt lån-state
+  const [applyKind, setApplyKind] = useState<V2LoanKind | null>(null);
+  const [applyAmount, setApplyAmount] = useState<string>("");
+  const [applyTerm, setApplyTerm] = useState<string>("");
+  const [applyPurpose, setApplyPurpose] = useState<string>("");
+  const [applyAccountId, setApplyAccountId] = useState<number | null>(null);
+  const [applyOffer, setApplyOffer] =
+    useState<V2LoanApplyResponse | null>(null);
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  function openApply(kind: V2LoanKind) {
+    const spec = LOAN_KIND_SPECS.find((s) => s.key === kind)!;
+    setApplyKind(kind);
+    setApplyAmount(String(spec.defaultAmount));
+    setApplyTerm(String(spec.defaultTerm));
+    setApplyPurpose("");
+    setApplyOffer(null);
+    setApplyError(null);
+    const checking = bank?.accounts.find((a) => a.type === "checking");
+    setApplyAccountId(checking?.id || bank?.accounts[0]?.id || null);
+  }
+
+  function closeApply() {
+    setApplyKind(null);
+    setApplyOffer(null);
+    setApplyError(null);
+  }
+
+  async function runApplyCheck() {
+    if (!applyKind) return;
+    const amt = parseFloat(
+      applyAmount.replace(/\s/g, "").replace(",", "."),
+    );
+    const term = parseInt(applyTerm, 10);
+    if (isNaN(amt) || amt <= 0) {
+      setApplyError("Ange giltigt lånebelopp");
+      return;
+    }
+    if (isNaN(term) || term <= 0) {
+      setApplyError("Ange löptid (mån)");
+      return;
+    }
+    setApplyError(null);
+    setApplyBusy(true);
+    try {
+      const res = await v2Api.loanApply({
+        loan_kind: applyKind,
+        amount: amt,
+        term_months: term,
+        purpose: applyPurpose || undefined,
+        debit_account_id: applyAccountId || undefined,
+        accept_offer: false,
+      });
+      setApplyOffer(res);
+    } catch (e) {
+      setApplyError(String((e as Error)?.message || e));
+    } finally {
+      setApplyBusy(false);
+    }
+  }
+
+  async function acceptApplyOffer() {
+    // Apply-modalen har redan tagit emot ett approved offer via
+    // submitApply(accept_offer=false). Vi accepterar nu via
+    // BankID-signering (Fas 4) · INTE direkt deposit. Eleven har
+    // redan klickat accept i modalen, så vi hoppar över extra
+    // confirm-dialog och initierar BankID-flödet direkt.
+    if (!applyOffer || !applyOffer.approved) return;
+    const appId = applyOffer.application_id;
+    setApplyError(null);
+    setPendingMsg(null);
+    setBankErr(null);
+    setBankConfirmed(false);
+    try {
+      const s = await v2Api.bankSessionInit(
+        `private_loan_sign_${appId}`,
+      );
+      // Stäng apply-modalen så bara BankID-modalen syns
+      setApplyKind(null);
+      setBankSessionForApp({
+        applicationId: appId,
+        token: s.token,
+        qr_url: s.qr_url,
+        expires_at: s.expires_at,
+      });
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      if (msg.includes("PIN saknas")) {
+        setApplyError(
+          "BankID saknar PIN — sätt först din bank-PIN under /v2/bank-id.",
+        );
+      } else {
+        setApplyError(`Fel vid BankID-init: ${msg}`);
+      }
+    }
+  }
+
   function refresh() {
     v2Api
       .lan()
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
     v2Api.bank(0).then(setBank).catch(() => null);
+    v2Api.creditPendingOffers()
+      .then((d) => setPendingOffers(d.offers))
+      .catch(() => setPendingOffers([]));
+  }
+
+  const [pendingOffers, setPendingOffers] = useState<
+    Array<{
+      application_id: number;
+      kind: string;
+      requested_amount: number;
+      requested_months: number;
+      offered_rate: number | null;
+      offered_monthly_payment: number | null;
+      simulated_lender: string | null;
+      score_value: number | null;
+      created_at: string;
+    }>
+  >([]);
+  const [pendingMsg, setPendingMsg] = useState<string | null>(null);
+
+  // Fas 4 · BankID-state för accept (QR-flöde med polling)
+  const [bankSessionForApp, setBankSessionForApp] = useState<{
+    applicationId: number;
+    token: string;
+    qr_url: string;
+    expires_at: string;
+  } | null>(null);
+  const [bankConfirmed, setBankConfirmed] = useState(false);
+  const [bankErr, setBankErr] = useState<string | null>(null);
+
+  async function finalizePendingOffer(applicationId: number) {
+    // Slutför signering · för fall där polling-flödet brutits efter
+    // att eleven signerat (stängd flik, krasch). Backend hittar
+    // bekräftad BankID-session och accepterar.
+    setPendingMsg(null);
+    try {
+      const res = await v2Api.creditFinalize(applicationId);
+      setPendingMsg(
+        `✓ Lån slutfört · ${SEK(Math.round(res.deposited_amount))} kr `
+        + `insatt. ${res.pedagogical_note}`,
+      );
+      refresh();
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      // 400 = ingen bekräftad session · fall tillbaka till BankID-flöde
+      if (msg.includes("400") || msg.includes("Ingen bekräftad")) {
+        return acceptPendingOffer(applicationId);
+      }
+      setPendingMsg(`Fel: ${msg}`);
+    }
+  }
+
+  async function acceptPendingOffer(applicationId: number) {
+    // BankID-modalen är i sig en bekräftelse — eleven måste signera
+    // med PIN på mobilen för att lånet ska genomföras. En extra
+    // confirm()-dialog innan känns redundant och introducerar en
+    // native browser-popup som inte matchar v2-temat.
+    setPendingMsg(null);
+    setBankErr(null);
+    setBankConfirmed(false);
+    try {
+      const s = await v2Api.bankSessionInit(
+        `private_loan_sign_${applicationId}`,
+      );
+      setBankSessionForApp({
+        applicationId,
+        token: s.token,
+        qr_url: s.qr_url,
+        expires_at: s.expires_at,
+      });
+    } catch (e) {
+      const msg = String((e as Error)?.message || e);
+      if (msg.includes("PIN saknas")) {
+        setPendingMsg(
+          "BankID saknar PIN — sätt först din bank-PIN under /v2/bank-id.",
+        );
+      } else {
+        setPendingMsg(`Fel vid BankID-init: ${msg}`);
+      }
+    }
+  }
+
+  // Polla session-status tills mobil-bekräftelsen kommer in.
+  useEffect(() => {
+    if (!bankSessionForApp || bankConfirmed) return;
+    const { token, applicationId } = bankSessionForApp;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const status = await v2Api.bankSessionStatus(token);
+        if (cancelled) return;
+        if (status.confirmed_at) {
+          setBankConfirmed(true);
+          clearInterval(interval);
+          try {
+            const res = await v2Api.creditAcceptFromMail(
+              applicationId, token,
+            );
+            setBankSessionForApp(null);
+            setPendingMsg(
+              `✓ Lån signerat & accepterat · ${SEK(Math.round(res.deposited_amount))} kr insatt. ${res.pedagogical_note}`,
+            );
+            refresh();
+          } catch (e) {
+            setBankErr(
+              `Lånet kunde inte slutföras: ${String((e as Error)?.message || e)}`,
+            );
+          }
+        }
+      } catch {
+        // Tyst — fortsätt polla
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [bankSessionForApp, bankConfirmed]);
+
+  const [declineConfirm, setDeclineConfirm] = useState<number | null>(null);
+
+  function askDeclinePendingOffer(applicationId: number) {
+    setDeclineConfirm(applicationId);
+  }
+
+  async function declinePendingOffer(applicationId: number) {
+    try {
+      await v2Api.creditDecline(applicationId);
+      setPendingMsg("Du tackade nej till lånet.");
+      refresh();
+    } catch (e) {
+      setPendingMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    }
   }
 
   async function executeExtraAmort() {
@@ -112,6 +414,33 @@ export function LanV2() {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-finalize: efter att pending-offers laddats, försök slutföra
+  // varje pending offer som har en bekräftad BankID-session (eleven
+  // signerade men polling missade slutfasen). Backend returnerar 400
+  // om ingen confirmed session finns — då gör vi inget.
+  useEffect(() => {
+    if (pendingOffers.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const o of pendingOffers) {
+        if (cancelled) break;
+        try {
+          await v2Api.creditFinalize(o.application_id);
+          if (cancelled) break;
+          setPendingMsg(
+            `✓ Lån slutfört automatiskt (BankID-signering hittad)`,
+          );
+          refresh();
+          break;  // En åt gången · sedan ny refresh
+        } catch {
+          // Ingen confirmed session · normalt · tyst
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOffers.length]);
 
   if (error) {
     return (
@@ -420,6 +749,388 @@ export function LanV2() {
                 }}
               >
                 {extraMsg}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* === PENDING LÅNEERBJUDANDEN (Fas 2) ===
+            Godkända men ej accepterade · syns när eleven har stängt
+            ansök-modalen utan att slutföra eller följt brev-länken
+            från postlådan. Här hittar de tillbaka. */}
+        {pendingOffers.length > 0 && (
+          <>
+            <div
+              className="section-eye"
+              style={{ marginTop: 32, color: "#a78bfa" }}
+            >
+              ● Godkända erbjudanden · väntar på din signering
+            </div>
+            <p
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 13.5,
+                color: "var(--text-mid)",
+                marginTop: 4,
+                marginBottom: 16,
+              }}
+            >
+              Du har {pendingOffers.length} pending lån-erbjudande{pendingOffers.length === 1 ? "" : "n"}.
+              Acceptera för att få pengarna utbetalade på lönekontot,
+              eller tacka nej.
+            </p>
+            <div style={{ display: "grid", gap: 12, marginBottom: 24 }}>
+              {pendingOffers.map((o) => (
+                <div
+                  key={o.application_id}
+                  style={{
+                    padding: 18,
+                    background:
+                      "linear-gradient(135deg, rgba(167,139,250,0.06), rgba(15,21,37,0.55))",
+                    border: "1px solid rgba(167,139,250,0.30)",
+                    borderRadius: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 14, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{
+                        fontFamily: "var(--serif)",
+                        fontSize: 17, fontWeight: 700, color: "#fff",
+                      }}>
+                        {o.simulated_lender || "Långivaren"}{" — "}
+                        <em style={{ color: "var(--warm)" }}>
+                          {SEK(o.requested_amount)} kr
+                        </em>
+                      </div>
+                      <div style={{
+                        fontFamily: "var(--mono)",
+                        fontSize: 11, color: "rgba(255,255,255,0.6)",
+                        marginTop: 6, letterSpacing: 0.5,
+                      }}>
+                        {o.requested_months} mån
+                        {o.offered_rate != null && (
+                          <> · ränta {(o.offered_rate * 100).toFixed(2)} %</>
+                        )}
+                        {o.offered_monthly_payment != null && (
+                          <> · {SEK(Math.round(o.offered_monthly_payment))} kr/mån</>
+                        )}
+                        {o.score_value != null && (
+                          <> · UC {o.score_value}</>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="cta-btn"
+                        onClick={() => acceptPendingOffer(o.application_id)}
+                        style={{ border: 0, cursor: "pointer" }}
+                      >
+                        ✓ Acceptera
+                      </button>
+                      <button
+                        type="button"
+                        className="cta-btn ghost"
+                        onClick={() => finalizePendingOffer(o.application_id)}
+                        style={{
+                          border: "1px solid rgba(110,231,183,0.3)",
+                          cursor: "pointer",
+                          color: "#6ee7b7",
+                        }}
+                        title="Om du redan signerat med BankID men inte fick pengarna · klicka för att slutföra"
+                      >
+                        Slutför signering
+                      </button>
+                      <button
+                        type="button"
+                        className="cta-btn ghost"
+                        onClick={() => askDeclinePendingOffer(o.application_id)}
+                        style={{ border: 0, cursor: "pointer" }}
+                      >
+                        ✗ Tacka nej
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {pendingMsg && (
+              <div style={{
+                padding: "10px 14px",
+                marginBottom: 20,
+                borderRadius: 6,
+                border: pendingMsg.startsWith("Fel")
+                  ? "1px solid rgba(252,165,165,0.4)"
+                  : "1px solid rgba(110,231,183,0.4)",
+                background: pendingMsg.startsWith("Fel")
+                  ? "rgba(252,165,165,0.06)"
+                  : "rgba(110,231,183,0.06)",
+                color: pendingMsg.startsWith("Fel") ? "#fca5a5" : "#6ee7b7",
+                fontFamily: "var(--mono)",
+                fontSize: 12,
+              }}>
+                {pendingMsg}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* === ANSÖK OM NYTT LÅN === */}
+        <div className="section-eye" style={{ marginTop: 32 }}>
+          Ansök om nytt lån
+        </div>
+        <p
+          style={{
+            fontFamily: "var(--serif)",
+            fontSize: 13.5,
+            color: "var(--text-mid)",
+            marginTop: 4,
+            marginBottom: 16,
+          }}
+        >
+          Du kan ansöka om fyra olika lånetyper. Banken bedömer din
+          kreditprofil (UC) och din betalningsförmåga (KALP). Lånetagning
+          påverkar din wellbeing — för bra eller sämre.
+        </p>
+        <div className="acct-grid">
+          {LOAN_KIND_SPECS.map((spec) => (
+            <div
+              key={spec.key}
+              className={`acct${
+                spec.key === "smslan" ? " warning" : ""
+              }`}
+            >
+              <div>
+                <div className="acct-eye">
+                  {spec.key === "smslan" ? "Varning" : "Ansök"}
+                </div>
+                <div className="acct-name">{spec.label}</div>
+                <div className="acct-num" style={{ fontSize: 11.5 }}>
+                  {spec.blurb}
+                </div>
+                <div
+                  className="acct-num"
+                  style={{ marginTop: 6, color: "var(--text-dim)" }}
+                >
+                  {SEK(spec.minAmount)}–{SEK(spec.maxAmount)} kr ·
+                  {" "}{spec.minTerm}–{spec.maxTerm} mån
+                </div>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  className="cta-btn"
+                  onClick={() => openApply(spec.key)}
+                  style={{ marginTop: 10, padding: "8px 14px" }}
+                >
+                  Ansök →
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* INLINE APPLY-FORMULÄR */}
+        {applyKind && (
+          <div
+            className={`lan-apply-form${
+              applyKind === "smslan" ? " danger" : ""
+            }`}
+          >
+            <div className="lan-apply-form-head">
+              <div className="lan-apply-form-eye">
+                ● Ansökan ·{" "}
+                {LOAN_KIND_SPECS.find((s) => s.key === applyKind)?.label}
+              </div>
+              <button
+                type="button"
+                className="cta-btn ghost"
+                onClick={closeApply}
+                style={{ padding: "4px 12px", fontSize: 9.5 }}
+              >
+                Stäng
+              </button>
+            </div>
+
+            {LOAN_KIND_SPECS.find((s) => s.key === applyKind)?.warning && (
+              <div className="lan-apply-form-warn">
+                ⚠{" "}
+                {
+                  LOAN_KIND_SPECS.find((s) => s.key === applyKind)
+                    ?.warning
+                }
+              </div>
+            )}
+
+            <div className="lan-apply-grid">
+              <div>
+                <label className="lan-form-label">Belopp (kr)</label>
+                <input
+                  type="text"
+                  value={applyAmount}
+                  onChange={(e) => setApplyAmount(e.target.value)}
+                  className="lan-input"
+                />
+              </div>
+              <div>
+                <label className="lan-form-label">Löptid (mån)</label>
+                <input
+                  type="text"
+                  value={applyTerm}
+                  onChange={(e) => setApplyTerm(e.target.value)}
+                  className="lan-input"
+                />
+              </div>
+              <div>
+                <label className="lan-form-label">
+                  Konto för utbetalning
+                </label>
+                <select
+                  value={applyAccountId || ""}
+                  onChange={(e) =>
+                    setApplyAccountId(parseInt(e.target.value, 10) || null)
+                  }
+                  className="lan-input"
+                >
+                  {bank?.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="lan-form-label">Syfte (frivilligt)</label>
+              <input
+                type="text"
+                value={applyPurpose}
+                onChange={(e) => setApplyPurpose(e.target.value)}
+                placeholder="t.ex. ny bil, renovering, semester"
+                className="lan-input"
+              />
+            </div>
+
+            <div className="lan-apply-actions">
+              {!applyOffer && (
+                <button
+                  type="button"
+                  className="cta-btn"
+                  onClick={runApplyCheck}
+                  disabled={applyBusy}
+                >
+                  {applyBusy ? "Prövar..." : "Pröva utan att binda mig"}
+                </button>
+              )}
+              {applyOffer && applyOffer.approved && !applyOffer.loan_id && (
+                <button
+                  type="button"
+                  className="cta-btn"
+                  onClick={acceptApplyOffer}
+                  disabled={applyBusy}
+                >
+                  {applyBusy
+                    ? "Genomför..."
+                    : `Godkänn — ta lånet (${SEK(applyOffer.offered_monthly_payment || 0)} kr/mån)`}
+                </button>
+              )}
+              {applyOffer && (
+                <button
+                  type="button"
+                  className="cta-btn ghost"
+                  onClick={() => {
+                    setApplyOffer(null);
+                  }}
+                >
+                  Räkna om
+                </button>
+              )}
+            </div>
+
+            {applyError && (
+              <div className="lan-apply-error">{applyError}</div>
+            )}
+
+            {applyOffer && (
+              <div
+                className={`lan-apply-result ${
+                  applyOffer.loan_id
+                    ? "taken"
+                    : applyOffer.approved
+                      ? "ok"
+                      : "fail"
+                }`}
+              >
+                {applyOffer.loan_id ? (
+                  <>
+                    <div className="lan-apply-result-head ok">
+                      ✓ Lånet är genomfört · saldo finns på ditt konto
+                    </div>
+                    <div className="lan-apply-result-meta">
+                      {applyOffer.lender} ·{" "}
+                      {SEK(applyOffer.offered_monthly_payment || 0)} kr/mån
+                      {" "}· ränta{" "}
+                      {((applyOffer.offered_rate || 0) * 100).toFixed(2)} %
+                    </div>
+                  </>
+                ) : applyOffer.approved ? (
+                  <>
+                    <div className="lan-apply-result-head ok">
+                      ✓ Godkänd av {applyOffer.lender}
+                    </div>
+                    <div className="lan-apply-result-meta">
+                      <strong>Score:</strong> {applyOffer.score} (grad{" "}
+                      {applyOffer.grade}) ·{" "}
+                      <strong>Ränta:</strong>{" "}
+                      {((applyOffer.offered_rate || 0) * 100).toFixed(2)} %
+                      {" "}· <strong>Per mån:</strong>{" "}
+                      {SEK(applyOffer.offered_monthly_payment || 0)} kr
+                      {" "}· <strong>Totalt återbetalas:</strong>{" "}
+                      {SEK(applyOffer.offered_total_repay || 0)} kr
+                    </div>
+                    <div className="lan-apply-result-foot">
+                      KALP{" "}
+                      {applyOffer.kalp_passed
+                        ? `passerad (+${SEK(applyOffer.kalp_left_after_all)} kr/mån kvar efter allt)`
+                        : `EJ passerad (saknar ${SEK(Math.abs(applyOffer.kalp_left_after_all))} kr/mån)`}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="lan-apply-result-head fail">
+                      ✗ Avslag
+                    </div>
+                    <div className="lan-apply-result-meta">
+                      {applyOffer.decline_reason}
+                    </div>
+                    {applyOffer.score > 0 && (
+                      <div className="lan-apply-result-foot">
+                        Score: {applyOffer.score} (grad {applyOffer.grade})
+                      </div>
+                    )}
+                  </>
+                )}
+                {applyOffer.warnings.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    {applyOffer.warnings.map((w, i) => (
+                      <div key={i} className="lan-apply-warning-row">
+                        ⚠ {w}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {applyOffer.wellbeing_impact.length > 0 && (
+                  <div className="lan-apply-result-foot">
+                    Wellbeing-påverkan:{" "}
+                    {applyOffer.wellbeing_impact
+                      .map(
+                        (w) =>
+                          `${w.axis} ${w.delta > 0 ? "+" : ""}${w.delta}`,
+                      )
+                      .join(" · ")}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -806,6 +1517,39 @@ export function LanV2() {
           </aside>
         </div>
       </div>
+
+      {/* Decline-confirm modal · stylad istället för native confirm() */}
+      <ConfirmModal
+        open={declineConfirm !== null}
+        title="Tacka nej till lånet?"
+        body="Ansökan markeras som nekad och syns inte längre under pending erbjudanden."
+        confirmLabel="Ja, tacka nej"
+        cancelLabel="Avbryt"
+        destructive
+        onConfirm={() => {
+          if (declineConfirm !== null) declinePendingOffer(declineConfirm);
+          setDeclineConfirm(null);
+        }}
+        onCancel={() => setDeclineConfirm(null)}
+      />
+
+      {/* BankID-signering modal · QR-flöde (matchar /v2/bank-id) */}
+      {bankSessionForApp && (
+        <BankIdSignModal
+          session={{
+            token: bankSessionForApp.token,
+            qr_url: bankSessionForApp.qr_url,
+            expires_at: bankSessionForApp.expires_at,
+          }}
+          confirmed={bankConfirmed}
+          error={bankErr}
+          onClose={() => {
+            setBankSessionForApp(null);
+            setBankErr(null);
+            setBankConfirmed(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -71,6 +71,16 @@ class JobOpeningOut(BaseModel):
     education_level: str
     match_score: int
     description: str
+    # Sprint 7 · utökad annons-data
+    company_blurb: str = ""
+    job_description: list[str] = []
+    requirements: list[str] = []
+    meriter: list[str] = []
+    benefits: list[str] = []
+    employment_type: str = ""
+    application_deadline: str = ""
+    work_hours: str = ""
+    start_date: str = ""
 
 
 class JobsResponse(BaseModel):
@@ -93,6 +103,16 @@ class ApplyIn(BaseModel):
     education_level: str
     match_score: int
     description: str = ""
+    # Sprint 7 · annonsdata bevaras vid apply så sparkad i job_ad_data
+    company_blurb: str = ""
+    job_description: list[str] = []
+    requirements: list[str] = []
+    meriter: list[str] = []
+    benefits: list[str] = []
+    employment_type: str = ""
+    application_deadline: str = ""
+    work_hours: str = ""
+    start_date: str = ""
 
 
 class JobApplicationOut(BaseModel):
@@ -111,6 +131,11 @@ class JobApplicationOut(BaseModel):
     rounds_data: Optional[dict]
     started_on: str
     completed_on: Optional[str]
+    # Sprint 7 · läses av lärar-vyn så hen kan se elevens texter
+    cover_letter_text: Optional[str] = None
+    case_answer_text: Optional[str] = None
+    ai_feedback_md: Optional[str] = None
+    job_ad_data: Optional[dict] = None
 
 
 class RoundIn(BaseModel):
@@ -203,6 +228,10 @@ def _to_app_out(app: JobApplication) -> JobApplicationOut:
         rounds_data=app.rounds_data,
         started_on=app.started_on.isoformat() if app.started_on else "",
         completed_on=app.completed_on.isoformat() if app.completed_on else None,
+        cover_letter_text=getattr(app, "cover_letter_text", None),
+        case_answer_text=getattr(app, "case_answer_text", None),
+        ai_feedback_md=getattr(app, "ai_feedback_md", None),
+        job_ad_data=getattr(app, "job_ad_data", None),
     )
 
 
@@ -211,12 +240,22 @@ def _to_app_out(app: JobApplication) -> JobApplicationOut:
 
 @router.get("/jobs", response_model=JobsResponse)
 def list_jobs(
-    ym: str = "2026-01",
+    ym: Optional[str] = None,
     n: int = 6,
     info: TokenInfo = Depends(require_token),
 ):
-    """Lista relevanta jobb för eleven (sorterade på match_score)."""
+    """Lista relevanta jobb för eleven (sorterade på match_score).
+
+    `ym` default = innevarande SPEL-månad (annars defaultar till
+    real-current vilket gör att gamla jobb-deadlines verkar 'redan
+    passerade' när eleven är på en framtida spel-månad).
+    """
     sid = _require_student(info)
+    # SPEL-TID: default ym = innevarande spel-månad
+    from ..business.game_clock import current_game_date_for_student
+    today_game = current_game_date_for_student(sid)
+    if not ym:
+        ym = f"{today_game.year:04d}-{today_game.month:02d}"
     with master_session() as s:
         sp = (
             s.query(StudentProfile)
@@ -228,9 +267,45 @@ def list_jobs(
                 status.HTTP_404_NOT_FOUND, "Elevens profil saknas.",
             )
     profile = _profile_from_studentprofile(sp)
-    jobs = available_jobs_for_student(profile, ym, n=max(1, min(n, 12)))
+
+    # Difficulty-progression · 3+ avslag på 30 dagar → -10p match-score
+    # på alla jobb (verkligheten · arbetsgivare ser aktivitet men
+    # något skickar varningssignaler).
+    #
+    # SPEL-TID-FIX: tidigare användes _d_diff.today() (real-tid) för
+    # cutoff. JobApplication.completed_on lagras i spel-tid (typ
+    # 2026-01-15). Real-cutoff = 2026-04-09. completed_on < cutoff
+    # → ingen träff → modifier alltid 0. Pedagogiska budskapet
+    # "var aktiv men inte spammig" försvann.
+    from datetime import timedelta as _td_diff
+    from ..business.game_clock import current_game_date as _cgd_diff
+    cutoff = _cgd_diff() - _td_diff(days=30)
+    with session_scope() as scope_s:
+        recent_rejections = (
+            scope_s.query(JobApplication)
+            .filter(
+                JobApplication.status.in_(("rejected", "abandoned")),
+                JobApplication.completed_on.isnot(None),
+                JobApplication.completed_on >= cutoff,
+            )
+            .count()
+        )
+    difficulty_modifier = -10 if recent_rejections >= 3 else 0
+
+    jobs = available_jobs_for_student(
+        profile, ym, n=max(1, min(n, 12)),
+        difficulty_modifier=difficulty_modifier,
+        today_game=today_game,
+    )
+    mats_msg = MATS_OPENING_MESSAGE
+    if difficulty_modifier < 0:
+        mats_msg += (
+            f"\n\n⚠ Du har {recent_rejections} avslag/avbrott senaste "
+            "30 dagarna — det syns i din profil. Match-score är något "
+            "nedjusterad. Lägg mer tid per ansökan."
+        )
     return JobsResponse(
-        mats_message=MATS_OPENING_MESSAGE,
+        mats_message=mats_msg,
         year_month=ym,
         jobs=[JobOpeningOut(**asdict(j)) for j in jobs],
     )
@@ -261,9 +336,28 @@ def apply(
                 status.HTTP_400_BAD_REQUEST,
                 "Du har redan 2 pågående ansökningar. Avsluta en innan du söker fler.",
             )
+        # SPEL-TID-FIX: started_on ska vara spel-tid · annars driftar
+        # ansökningens started_on bort från resten av spelets datum.
+        from ..business.game_clock import current_game_date as _cgd_apply
         app = apply_to_job(
-            s, student_id=sid, opening=opening, today=_date.today(),
+            s, student_id=sid, opening=opening, today=_cgd_apply(),
         )
+        # Lärar-spårning
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="job.applied",
+                summary=f"Sökte jobb: {opening.yrke_display} hos {opening.employer_name}",
+                payload={
+                    "application_id": app.id,
+                    "yrke_key": opening.yrke_key,
+                    "employer": opening.employer_name,
+                    "match_score": opening.match_score,
+                    "monthly_gross_median": opening.monthly_gross_median,
+                },
+            )
+        except Exception:
+            pass
         return _to_app_out(app)
 
 
@@ -320,6 +414,21 @@ def accept(
             app = accept_offer(s, student_id=sid, application_id=app_id)
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="job.accepted",
+                summary=f"Tog jobbet: {app.yrke_display} hos {app.employer_name}",
+                payload={
+                    "application_id": app.id,
+                    "yrke_key": app.yrke_key,
+                    "employer": app.employer_name,
+                    "monthly_gross_offered": app.monthly_gross_offered,
+                    "final_score": app.final_score,
+                },
+            )
+        except Exception:
+            pass
         return _to_app_out(app)
 
 
@@ -334,6 +443,19 @@ def decline(
             app = decline_offer(s, student_id=sid, application_id=app_id)
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="job.declined",
+                summary=f"Tackade nej till {app.yrke_display} hos {app.employer_name}",
+                payload={
+                    "application_id": app.id,
+                    "yrke_key": app.yrke_key,
+                    "final_score": app.final_score,
+                },
+            )
+        except Exception:
+            pass
         return _to_app_out(app)
 
 
@@ -348,7 +470,81 @@ def abandon(
             app = abandon_application(s, student_id=sid, application_id=app_id)
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        try:
+            from ..school.activity import log_activity
+            log_activity(
+                kind="job.abandoned",
+                summary=f"Avbröt ansökan till {app.yrke_display}",
+                payload={"application_id": app.id, "yrke_key": app.yrke_key},
+            )
+        except Exception:
+            pass
         return _to_app_out(app)
+
+
+# === Cover-letter-preview · AI-feedback INNAN submit ===
+
+class CoverLetterPreviewIn(BaseModel):
+    text: str
+    yrke_display: str
+    employer_name: str
+    job_description: Optional[str] = None
+    requirements: list[str] = []
+
+
+class CoverLetterPreviewOut(BaseModel):
+    score: int
+    feedback_md: str
+    highlights: list[str] = []
+
+
+@router.post("/cover-letter-preview", response_model=CoverLetterPreviewOut)
+def cover_letter_preview(
+    body: CoverLetterPreviewIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Eleven får AI-feedback på personliga brevet INNAN hen submittar
+    rond 1. Hjälper hen iterera utan att förbruka rond-tillfället.
+    """
+    sid = _require_student(info)
+    text = (body.text or "").strip()
+    if len(text.split()) < 30:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Skriv minst 30 ord innan du ber om feedback.",
+        )
+    from ..school.ai import evaluate_cover_letter
+    from ..school.engines import master_session
+    from ..school.models import Student as _Stu_p
+    with master_session() as ms:
+        stu = ms.get(_Stu_p, sid)
+        teacher_id = stu.teacher_id if stu else None
+    try:
+        res = evaluate_cover_letter(
+            cover_letter_text=text,
+            job_title=body.yrke_display,
+            employer=body.employer_name,
+            job_description=body.job_description or body.yrke_display,
+            requirements=body.requirements,
+            teacher_id=teacher_id,
+        )
+        if res is None:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "AI-tjänsten gick inte att nå.",
+            )
+        return CoverLetterPreviewOut(
+            score=int(res.data.get("score", 12)),
+            feedback_md=res.data.get("feedback_md", ""),
+            highlights=res.data.get("highlights", []) or [],
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "AI-bedömning misslyckades.",
+        )
 
 
 # === Lärar-endpoint ===

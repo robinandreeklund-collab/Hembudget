@@ -14,6 +14,8 @@ import {
 import { V2Banner } from "./V2Banner";
 import { useAutoStartIntroGuide } from "./guides/GuideContext";
 import { PentagonFlipCard } from "./PentagonFlipCard";
+import { BizSummaryCard } from "./biz/BizSummaryCard";
+import { GameTimeWidget } from "./GameTimeWidget";
 import "./hub.css";
 
 const SEK = (n: number) =>
@@ -58,7 +60,13 @@ export function HubV2() {
             setLatestEvent(null);
             return;
           }
-          const today = new Date().toISOString().slice(0, 10);
+          // Använd SPEL-tid för "overdue"-sortering · annars använder
+          // vi real-tid (= maj 2026 medan eleven är på spel-januari)
+          // och eventcard plockar fakturor som inte är förfallna än.
+          const today = (
+            (d as any).game_time?.iso_date
+            || new Date().toISOString().slice(0, 10)
+          );
           const invoices = items.filter(
             (i) => i.mail_type === "invoice" && i.due_date,
           );
@@ -83,7 +91,8 @@ export function HubV2() {
         .catch(() => undefined);
     };
     fetchMail();
-    const t = setInterval(fetchMail, 15000);
+    // 30 s · sänkt från 15 s pga. polling-aggregat överbelastade Postgres
+    const t = setInterval(fetchMail, 30000);
     return () => clearInterval(t);
   }, []);
 
@@ -137,10 +146,17 @@ export function HubV2() {
       ? "Balanserad"
       : "Slösa";
 
-  // Karaktärs-meta
+  // Karaktärs-meta · profession ersätts av status-beroende text
+  // när eleven sagt upp sig / är egenföretagare / arbetslös.
+  const employmentLabel = (() => {
+    const status = character.employment_status || "employed";
+    if (status === "unemployed") return "Söker jobb";
+    if (status === "self_employed") return "Egenföretagare";
+    return character.profession;  // 'employed' · vanlig titel
+  })();
   const metaParts = [
     character.age != null ? `${character.age} år` : null,
-    character.profession,
+    employmentLabel,
     character.city,
     character.family_status,
   ].filter(Boolean);
@@ -158,6 +174,9 @@ export function HubV2() {
       <div className="hub-shell">
         <header className="hub-head">
           <div>
+            {hub.game_time && (
+              <GameTimeWidget gameTime={hub.game_time} />
+            )}
             <span className="hub-pill">Privatekonomi som händer</span>
             <h1 className="hub-h1">
               {character.first_name || character.display_name.split(" ")[0]},{" "}
@@ -165,15 +184,18 @@ export function HubV2() {
             </h1>
             <p className="hub-lead">
               Du driver din ekonomi i <em>realtid</em>. Pentagonen tippar när
-              något händer. Allt här är{" "}
-              <em>live från databasen</em> — inga mockar.
+              något händer.
             </p>
           </div>
 
           <article className="hub-char-card">
             <div className="hub-char-eye">
               {(() => {
-                const d = new Date();
+                // Använd spel-tid (game_time.iso_date) i stället för
+                // browser-Date(). Annars visar character-cardet 'torsdag
+                // · maj' när spel-tiden är jan 2026.
+                const refIso = hub.game_time?.iso_date;
+                const d = refIso ? new Date(refIso + "T12:00:00") : new Date();
                 const day = d.toLocaleDateString("sv-SE", { weekday: "long" });
                 const month = d.toLocaleDateString("sv-SE", { month: "long" });
                 return `${day} · ${month}`;
@@ -217,7 +239,8 @@ export function HubV2() {
                   } else {
                     parts.push(
                       <span key="evt">
-                        Senaste händelse: <strong>{latestEvent.subject}</strong>
+                        Nästa att hantera:{" "}
+                        <strong>{latestEvent.subject}</strong>
                         .{" "}
                       </span>,
                     );
@@ -227,7 +250,7 @@ export function HubV2() {
                   parts.push(
                     <span key="lon">
                       Lönen <em>{SEK(character.net_salary_monthly)} kr</em>{" "}
-                      netto i fas.{" "}
+                      netto/månad.{" "}
                     </span>,
                   );
                 }
@@ -240,11 +263,20 @@ export function HubV2() {
                   const label = isOwned
                     ? "Boendekostnaden (avgift/bolån/drift) på"
                     : "Hyran på";
+                  const legacy = character.housing_legacy_monthly || 0;
+                  const total = character.housing_monthly + legacy;
                   parts.push(
                     <span key="hyra">
                       {label}{" "}
                       <strong>{SEK(character.housing_monthly)} kr</strong>{" "}
                       dras varje månad.{" "}
+                      {legacy > 0 && (
+                        <em style={{ color: "#fbbf24" }}>
+                          + {SEK(legacy)} kr/mån i uppsägningstid till{" "}
+                          {character.housing_legacy_until} (totalt{" "}
+                          {SEK(total)} kr).{" "}
+                        </em>
+                      )}
                     </span>,
                   );
                 }
@@ -295,6 +327,10 @@ export function HubV2() {
           </article>
         </header>
 
+        {/* === Företags-summary · visas BARA om eleven har aktiverat
+             mode och skapat bolag. Renderar ingenting annars. === */}
+        <BizSummaryCard />
+
         {/* RECAP-STRIPE · 4 nyckeltal */}
         <div className="hub-recap">
           <div className="hub-recap-cell">
@@ -303,7 +339,33 @@ export function HubV2() {
               <em className="up">+ {SEK(month_summary.income)}</em> kr
             </div>
             <div className="hub-recap-sub">
-              {month_summary.transactions_count} transaktioner totalt
+              {month_summary.income === 0
+                && character.net_salary_monthly
+                ? `lönen kommer ${(() => {
+                    // Använd spel-tiden (game_time.iso_date) i stället
+                    // för real-datum så texten stämmer med eleven nu
+                    // är 1 jan i spel-tid och nästa lön = 25 jan.
+                    const refIso = hub.game_time?.iso_date;
+                    const ref = refIso ? new Date(refIso) : new Date();
+                    const day = ref.getDate();
+                    const target = new Date(ref);
+                    if (day <= 25) {
+                      target.setDate(25);
+                    } else {
+                      target.setMonth(ref.getMonth() + 1);
+                      target.setDate(25);
+                    }
+                    const months = [
+                      "jan", "feb", "mar", "apr", "maj", "jun",
+                      "jul", "aug", "sep", "okt", "nov", "dec",
+                    ];
+                    return `25 ${months[target.getMonth()]}`;
+                  })()}`
+                : `${month_summary.transactions_count} ${
+                    month_summary.transactions_count === 1
+                      ? "transaktion"
+                      : "transaktioner"
+                  }`}
             </div>
           </div>
           <div className="hub-recap-cell">
@@ -314,7 +376,9 @@ export function HubV2() {
             <div className="hub-recap-sub">live från transactions</div>
           </div>
           <div className="hub-recap-cell">
-            <div className="hub-recap-eye">Sparat denna mån</div>
+            <div className="hub-recap-eye">
+              {month_summary.saved >= 0 ? "Sparat denna mån" : "Underskott denna mån"}
+            </div>
             <div className="hub-recap-num">
               <em className="warm">
                 {month_summary.saved >= 0 ? "+ " : "− "}
@@ -322,7 +386,9 @@ export function HubV2() {
               </em>{" "}
               kr
             </div>
-            <div className="hub-recap-sub">in − ut</div>
+            <div className="hub-recap-sub">
+              från {SEK(month_summary.start_of_month_balance)} kr 1:a
+            </div>
           </div>
           <div className="hub-recap-cell">
             <div className="hub-recap-eye">Sparkvot</div>
@@ -344,11 +410,64 @@ export function HubV2() {
             </div>
             <div className="hub-recap-sub">
               {month_summary.save_rate_pct == null
-                ? "ingen lön denna mån"
+                ? character.net_salary_monthly
+                  ? "väntar månadens lön"
+                  : "ingen lön registrerad"
                 : "mål 15 %"}
             </div>
           </div>
         </div>
+
+        {/* HÄNDELSER · pending events + bjudningar */}
+        {hub.pending_events && hub.pending_events.length > 0 && (
+          <section className="hub-events">
+            <div className="hub-events-head">
+              <span className="hub-events-eye">● Händelser att hantera</span>
+              <Link to="/v2/handelser" className="hub-events-link">
+                Visa alla →
+              </Link>
+            </div>
+            <div className="hub-events-list">
+              {hub.pending_events.slice(0, 4).map((ev) => {
+                const icon: Record<string, string> = {
+                  social: "♥", family: "✦", culture: "♪",
+                  sport: "▲", opportunity: "★", unexpected: "!",
+                  mat: "◉", lifestyle: "✧",
+                };
+                const urgent = ev.days_until_deadline <= 1;
+                return (
+                  <Link
+                    to="/v2/handelser"
+                    key={`${ev.kind}-${ev.id}`}
+                    className={`hub-event-card${urgent ? " urgent" : ""}${
+                      ev.kind === "invite" ? " invite" : ""
+                    }`}
+                  >
+                    <span className="hub-event-icon">
+                      {icon[ev.category] || "●"}
+                    </span>
+                    <div className="hub-event-body">
+                      <div className="hub-event-cat">
+                        {ev.kind === "invite" && ev.from_name
+                          ? `Bjudning från ${ev.from_name}`
+                          : ev.category}
+                      </div>
+                      <div className="hub-event-title">{ev.title}</div>
+                      <div className="hub-event-meta">
+                        {ev.cost > 0 && `${SEK(ev.cost)} kr · `}
+                        {ev.days_until_deadline <= 0
+                          ? "deadline IDAG"
+                          : ev.days_until_deadline === 1
+                            ? "deadline imorgon"
+                            : `${ev.days_until_deadline} dagar kvar`}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* PENTAGON · live från wellbeing · klick på axel = flip-card */}
         {pentagon ? (
@@ -479,7 +598,9 @@ export function HubV2() {
         )}
 
         {/* Bug 6 · HÄNDELSE under pentagon (matchar demo .event-card) */}
-        {latestEvent && <EventCard mail={latestEvent} />}
+        {latestEvent && (
+          <EventCard mail={latestEvent} todayIso={hub.game_time?.iso_date} />
+        )}
 
         {/* === KOMPASSEN · navigation till alla aktörer + verktyg === */}
         <div className="compass" data-guide="hub-compass">
@@ -537,7 +658,11 @@ export function HubV2() {
               <div className="compass-node-eye">Aktör 02</div>
               <div className="compass-node-name">Arbetsgivaren</div>
               <div className="compass-node-val">
-                {character.employer || "Lön + samtal"}
+                {character.employment_status === "unemployed"
+                  ? "Söker jobb"
+                  : character.employment_status === "self_employed"
+                  ? "Egenföretagare"
+                  : character.employer || "Lön + samtal"}
               </div>
             </Link>
             <Link to="/v2/skatten" className="compass-node alert">
@@ -554,6 +679,11 @@ export function HubV2() {
               <div className="compass-node-eye">Aktör 05</div>
               <div className="compass-node-name">Avanza · ISK</div>
               <div className="compass-node-val">fonder + aktier</div>
+            </Link>
+            <Link to="/v2/allabolag" className="compass-node">
+              <div className="compass-node-eye">Aktör · klass</div>
+              <div className="compass-node-name">Allabolag</div>
+              <div className="compass-node-val">klassens företag</div>
             </Link>
             <Link to="/v2/forsakringar" className="compass-node">
               <div className="compass-node-eye">Aktör 06</div>
@@ -600,6 +730,29 @@ export function HubV2() {
               <div className="compass-node-eye">Verktyg 02</div>
               <div className="compass-node-name">Bokföring</div>
               <div className="compass-node-val">klassa transaktioner</div>
+            </Link>
+            <Link to="/v2/huvudbok" className="compass-node">
+              <div className="compass-node-eye">Verktyg 07</div>
+              <div className="compass-node-name">Huvudboken</div>
+              <div className="compass-node-val">balans · resultat · netto</div>
+            </Link>
+            <Link
+              to="/v2/handelser"
+              className={`compass-node${
+                hub.pending_events && hub.pending_events.length > 0
+                  ? " alert"
+                  : ""
+              }`}
+            >
+              <div className="compass-node-eye">Verktyg 08</div>
+              <div className="compass-node-name">
+                Händelser
+                {hub.pending_events && hub.pending_events.length > 0
+                  && ` · ${hub.pending_events.length}`}
+              </div>
+              <div className="compass-node-val">
+                förslag · sociala val
+              </div>
             </Link>
             <Link to="/v2/simulator" className="compass-node">
               <div className="compass-node-eye">Verktyg 05</div>
@@ -663,8 +816,13 @@ export function HubV2() {
  * EventCard · senaste händelse under pentagon (Bug 6).
  * Matchar demo .event-card-stilen i /proposals/vol-7/elev.html.
  */
-function EventCard({ mail }: { mail: V2MailItem }) {
-  const today = new Date().toISOString().slice(0, 10);
+function EventCard({
+  mail, todayIso,
+}: { mail: V2MailItem; todayIso?: string }) {
+  // SPEL-tid · todayIso kommer från hub.game_time.iso_date. Om
+  // den saknas (legacy-fall) faller vi tillbaka till real-tid men
+  // det är fel · alltid bättre att skicka in spel-tiden.
+  const today = todayIso || new Date().toISOString().slice(0, 10);
   const isOverdue = mail.due_date != null && mail.due_date < today;
   const isInvoice = mail.mail_type === "invoice";
   const amount = mail.amount != null ? Math.abs(mail.amount) : null;

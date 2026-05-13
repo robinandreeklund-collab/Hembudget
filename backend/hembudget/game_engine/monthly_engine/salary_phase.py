@@ -26,7 +26,8 @@ from ..profile_generator.schema import GeneratedProfile
 from ..release_schedule import release_at_for_day
 
 
-SALARY_DAY = 25  # Utbetalningsdag
+SALARY_DAY = 25  # Utbetalningsdag · pengarna landar på kontot
+LONESPEC_DAY = 22  # Lönespec-mailet · normalt 2-3 dagar före utbetalning
 
 
 def _payday(year_month: str) -> date:
@@ -98,13 +99,31 @@ def _create_salary_for(
         year_month=year_month,
     )
 
-    released_at = (
+    # Lönespec-mailet kommer 2-3 dagar FÖRE lön-transaktionen (det är
+    # så det funkar i verkligheten · skattedagen är 22-23, lönedagen 25).
+    # I real-tids-projektionen blir mailet alltså synligt innan pengarna
+    # syns på kontot — eleven hinner läsa specen, kontrollera skatten,
+    # och INNAN pengarna landar.
+    mail_released_at = (
+        release_at_for_day(release_base, LONESPEC_DAY)
+        if release_base is not None
+        else None
+    )
+    tx_released_at = (
         release_at_for_day(release_base, SALARY_DAY)
         if release_base is not None
         else None
     )
 
     sender_label = "Arbetsgivaren" + (" (partner)" if is_partner else "")
+    # received_at = SPEL-datetime · annars stämplas alla seedade mail
+    # med real-tid (utcnow) → eleven ser "7 maj" i postlådan trots
+    # att lönespec gäller januari. Vi använder pay_d - 3 dgr (lönespec
+    # arriverar 2-3 dgr före lön i verkligheten) som naive datetime.
+    from datetime import datetime as _dt_sp, timedelta as _td_sp
+    spec_arrival = _dt_sp.combine(
+        pay_d - _td_sp(days=3), _dt_sp.min.time(),
+    ).replace(hour=9)
     mail = MailItem(
         sender=sender_label,
         sender_short="WORK",
@@ -117,7 +136,8 @@ def _create_salary_for(
         amount=Decimal(tax.net_monthly),
         due_date=pay_d,
         status="unhandled",
-        released_at=released_at,
+        released_at=mail_released_at,
+        received_at=spec_arrival,
     )
     s.add(mail)
 
@@ -136,7 +156,7 @@ def _create_salary_for(
         normalized_merchant=sender_label,
         hash=_tx_hash(student_scope, year_month, tx_kind),
         user_verified=True,
-        released_at=released_at,
+        released_at=tx_released_at,
     )
     s.add(tx)
     s.flush()
@@ -174,18 +194,65 @@ def generate_salary_phase(
     name = student_name or profile.name
     summaries = []
 
-    _mail, _tx, main_summary = _create_salary_for(
-        s,
-        person_name=name,
-        yrke_key=profile.yrke_key,
-        gross_monthly=profile.monthly_gross,
-        year_month=year_month,
-        salary_account=salary_account,
-        student_scope=student_scope,
-        is_partner=False,
-        release_base=release_base,
-    )
-    summaries.append(main_summary)
+    # Anställningsstatus-gate · skippa huvudpersonens lön om eleven
+    # sagt upp sig (status='self_employed'/'unemployed') OCH employment_
+    # end_on har passerats. Partner-lön påverkas EJ (partner har sin
+    # egen anställning som vi inte simulerar uppsägning för än).
+    main_employed = True
+    try:
+        from ...school.engines import (
+            master_session as _ms_emp,
+            get_current_actor_student as _gcas_emp,
+        )
+        from ...school.models import StudentProfile as _SP_emp
+        from datetime import date as _d_emp
+        _actor_emp = _gcas_emp()
+        if _actor_emp is not None:
+            with _ms_emp() as _msdb_emp:
+                _prof_emp = (
+                    _msdb_emp.query(_SP_emp)
+                    .filter(_SP_emp.student_id == _actor_emp)
+                    .first()
+                )
+                if _prof_emp is not None:
+                    status = (
+                        getattr(_prof_emp, "employment_status", None)
+                        or "employed"
+                    )
+                    end_on = getattr(_prof_emp, "employment_end_on", None)
+                    ym_y, ym_m = map(int, year_month.split("-"))
+                    ym_last_day = _d_emp(
+                        ym_y, ym_m,
+                        28,  # konservativt 28e så bara hela månader efter
+                        # uppsägningstidens slut räknas som "ingen lön"
+                    )
+                    if status != "employed":
+                        # Status redan annan än anställd
+                        if end_on is None or ym_last_day > end_on:
+                            main_employed = False
+    except Exception:
+        # Defensiv · vid fel · falla tillbaka till anställd så lön
+        # genereras (annars kraschar tick_month tyst för alla elever
+        # som har migrationsproblem).
+        import logging
+        logging.getLogger(__name__).exception(
+            "salary_phase: employment-status-check misslyckades · "
+            "behandlar som 'employed'",
+        )
+
+    if main_employed:
+        _mail, _tx, main_summary = _create_salary_for(
+            s,
+            person_name=name,
+            yrke_key=profile.yrke_key,
+            gross_monthly=profile.monthly_gross,
+            year_month=year_month,
+            salary_account=salary_account,
+            student_scope=student_scope,
+            is_partner=False,
+            release_base=release_base,
+        )
+        summaries.append(main_summary)
 
     if (
         profile.family.partner_yrke_key

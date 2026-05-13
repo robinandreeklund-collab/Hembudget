@@ -113,7 +113,7 @@ export function ClassPicker() {
             border: "1px solid var(--line-strong, rgba(255,255,255,0.18))",
             borderRadius: 10,
             boxShadow: "0 16px 48px -10px rgba(0,0,0,0.5)",
-            zIndex: 95,
+            zIndex: 1000,
             overflow: "hidden",
           }}
         >

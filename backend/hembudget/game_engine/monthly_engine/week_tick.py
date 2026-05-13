@@ -289,7 +289,19 @@ def _check_and_create_run(
         if existing is not None and existing.status == "completed":
             return True, existing.id
         if existing is not None:
-            # in_progress eller failed — rensa partiell state INNAN retry
+            # Anti-race · om en annan tråd just nu kör samma tick
+            # (in_progress, startad inom 5 min) ska vi INTE purge:a
+            # och retrya. Då skulle vi rensa partiella data medan
+            # andra tråden skapar dem → race + dubbletter.
+            if existing.status == "in_progress":
+                age_sec = (
+                    datetime.utcnow() - existing.started_at
+                ).total_seconds() if existing.started_at else 1e9
+                if age_sec < 300:
+                    # Skipped: en annan tråd håller på, skippa
+                    # tyst (returnera 'skipped'-flagga)
+                    return True, existing.id
+            # in_progress > 5 min eller failed — rensa partiell state
             existing.status = "in_progress"
             existing.started_at = datetime.utcnow()
             existing.error_message = None
@@ -316,7 +328,13 @@ def _check_and_create_run(
 
 def _purge_partial_tick_data(student: Student, year_month: str) -> None:
     """Rensa transaktioner + mail + events skapade av ett FAILED tick-run
-    så vi kan köra om idempotent. year_month = "YYYY-MM"."""
+    så vi kan köra om idempotent. year_month = "YYYY-MM".
+
+    Filtrerar på Transaction.date och MailItem.due_date eftersom de
+    motsvarar SPEL-månaden. received_at = real-tid när tick körde,
+    INTE relevant för att hitta mails från en historisk spel-månad
+    (kan ha skapats real-tid 2026-05 men ha due_date 2025-10).
+    """
     from datetime import date as _d
     from ...db.models import (
         Account as _Acc, MailItem as _Mail, Transaction as _Tx,
@@ -343,7 +361,18 @@ def _purge_partial_tick_data(student: Student, year_month: str) -> None:
                 s.query(_Tx).filter(
                     _Tx.date >= start, _Tx.date < end,
                 ).delete(synchronize_session=False)
+                # Mail · använd due_date för fakturor/lönespec så vi
+                # fångar mails från spel-månaden oavsett när de blev
+                # 'levererade' i real-tid. Mails utan due_date (info-
+                # brev, sociala events) rensas bara om received_at
+                # inom real-period (gamla beteendet).
                 s.query(_Mail).filter(
+                    _Mail.due_date.isnot(None),
+                    _Mail.due_date >= start,
+                    _Mail.due_date < end,
+                ).delete(synchronize_session=False)
+                s.query(_Mail).filter(
+                    _Mail.due_date.is_(None),
                     _Mail.received_at >= datetime.combine(
                         start, datetime.min.time(),
                     ),
@@ -402,8 +431,14 @@ def tick_month(
     """
     if release_base is None:
         try:
-            from datetime import date as _d_now
-            today = _d_now.today()
+            # SPEL-tid, INTE real-tid. Real-tid idag är t.ex. 2026-05-12
+            # medan elevens spel-tid kan vara 2026-02-07. Använder vi
+            # real-tid blir alla spel-månader < real-tid "historiska" →
+            # release_base=None → ALLA transaktioner pre-released → eleven
+            # ser hela månadens transaktioner direkt (inkl. transaktioner
+            # som ska hända senare i spel-månaden).
+            from ..game_clock import current_game_date as _gd
+            today = _gd()
             current_ym = f"{today.year:04d}-{today.month:02d}"
             # Lexikografisk jämförelse fungerar för "YYYY-MM"
             if year_month >= current_ym:
@@ -439,6 +474,42 @@ def tick_month(
                 accounts = ensure_scope_accounts(s, profile)
                 lonekonto = accounts["lonekonto"]
 
+                # Bil-seed (SKV-3) · skapar InsurancePolicy, ev. Loan
+                # och välkomstmail för bilägare. Idempotent. Tysta fel.
+                try:
+                    from .car_seed import seed_car_for_scope
+                    from datetime import date as _d_car
+                    # Sätt seed-datum till första av year_month
+                    ym_y, ym_m = year_month.split("-")
+                    today_for_car = _d_car(int(ym_y), int(ym_m), 1)
+                    seed_car_for_scope(
+                        s, student_id=student.id, today_game=today_for_car,
+                    )
+                except Exception:
+                    log.exception(
+                        "tick_month: car-seed misslyckades för "
+                        "student=%s ym=%s",
+                        student.id, year_month,
+                    )
+
+                # Frisktandvård-seed (SKV-4) · skapar InsurancePolicy +
+                # välkomstmail för elever med frisktandvård i sin
+                # StudentProfile. Idempotent. Tysta fel.
+                try:
+                    from .dental_seed import seed_dental_for_scope
+                    from datetime import date as _d_d
+                    ym_y, ym_m = year_month.split("-")
+                    today_for_d = _d_d(int(ym_y), int(ym_m), 1)
+                    seed_dental_for_scope(
+                        s, student_id=student.id, today_game=today_for_d,
+                    )
+                except Exception:
+                    log.exception(
+                        "tick_month: dental-seed misslyckades för "
+                        "student=%s ym=%s",
+                        student.id, year_month,
+                    )
+
                 summary["salary"] = generate_salary_phase(
                     s,
                     profile=profile,
@@ -454,6 +525,7 @@ def tick_month(
                     profile=profile,
                     year_month=year_month,
                     student_scope=scope_key,
+                    student_id=student.id,
                     rng=random.Random(rng_master.random()),
                     release_base=release_base,
                 )
@@ -629,6 +701,31 @@ def tick_month(
                     summary["business"] = {"error": str(_biz_exc)[:300]}
 
                 s.commit()
+
+                # Persistera wellbeing-snapshot direkt så lärar-vyer
+                # kan läsa den i en batched query istället för att
+                # räkna om från scratch (20+ queries per elev × N elever
+                # i klass-overview blev 1-3 s; med snapshot blir det
+                # < 100 ms eftersom alla läses i ETT IN-query).
+                try:
+                    from ...wellbeing.calculator import (
+                        calculate_wellbeing as _calc_wb,
+                        persist_wellbeing as _persist_wb,
+                    )
+                    wb_result = _calc_wb(s, year_month)
+                    _persist_wb(s, wb_result)
+                    s.commit()
+                    summary["wellbeing"] = {
+                        "year_month": year_month,
+                        "total_score": wb_result.total_score,
+                        "persisted": True,
+                    }
+                except Exception:
+                    log.exception(
+                        "tick_month: wellbeing-persist failed — "
+                        "klass-overview faller tillbaka på live-beräkning",
+                    )
+                    summary["wellbeing"] = {"persisted": False}
     except Exception as exc:
         log.exception(
             "monthly_engine: tick FAILED för student=%s ym=%s",

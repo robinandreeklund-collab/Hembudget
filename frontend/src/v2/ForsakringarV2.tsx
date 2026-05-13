@@ -48,6 +48,7 @@ const KIND_LABEL: Record<V2InsurancePolicyKind, string> = {
   bostadsrattsforsakring: "Bostadsrätt",
   bilforsakring: "Bil",
   djur: "Djur",
+  frisktandvard: "Frisktandvård",
   ovrig: "Övrig",
 };
 
@@ -55,6 +56,16 @@ const STATUS_LABEL: Record<V2InsuranceStatus, string> = {
   active: "Aktiv",
   considered: "Övervägs",
   cancelled: "Avbruten",
+};
+
+type FrisktandvardOffer = {
+  tier: number;
+  age_category: "atb" | "normal";
+  premium_monthly: number;
+  explanation: string;
+  tier_prices_atb: Record<number, number>;
+  tier_prices_normal: Record<number, number>;
+  already_active: boolean;
 };
 
 export function ForsakringarV2() {
@@ -72,6 +83,59 @@ export function ForsakringarV2() {
   const [deductible, setDeductible] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Frisktandvård-offert (SKV-4)
+  const [ftvOffer, setFtvOffer] = useState<FrisktandvardOffer | null>(null);
+  const [ftvBusy, setFtvBusy] = useState(false);
+  const [ftvError, setFtvError] = useState<string | null>(null);
+
+  async function loadFtvOffer() {
+    setFtvError(null);
+    setFtvBusy(true);
+    try {
+      const offer = await v2Api.frisktandvardOffer();
+      setFtvOffer(offer);
+    } catch (e) {
+      setFtvError(String((e as Error)?.message || e));
+    } finally {
+      setFtvBusy(false);
+    }
+  }
+
+  async function activateFtv() {
+    if (!ftvOffer) return;
+    setFtvBusy(true);
+    try {
+      // Hitta existerande considered-policy (från default-seed)
+      const existing = (data?.policies || []).find(
+        (p) => p.kind === "frisktandvard",
+      );
+      if (existing) {
+        await v2Api.insuranceUpdateStatus(existing.id, "active");
+      } else {
+        await v2Api.insuranceCreatePolicy({
+          provider: "Folktandvården",
+          name: `Frisktandvård · grupp ${ftvOffer.tier}`,
+          kind: "frisktandvard",
+          premium_monthly: ftvOffer.premium_monthly,
+          autogiro: true,
+          status: "active",
+          started_on: new Date().toISOString().slice(0, 10),
+          notes: (
+            `Prisgrupp ${ftvOffer.tier} (${ftvOffer.age_category}). ` +
+            `Täcker karieskontroll, lagningar, tandstensborttagning, ` +
+            `rotfyllning hos Folktandvården. 3-årsavtal.`
+          ),
+        });
+      }
+      setFtvOffer(null);
+      await refresh();
+    } catch (e) {
+      setFtvError(String((e as Error)?.message || e));
+    } finally {
+      setFtvBusy(false);
+    }
+  }
 
   function refresh(): Promise<void> {
     return v2Api
@@ -249,6 +313,89 @@ export function ForsakringarV2() {
               ))}
             </ul>
           </div>
+        )}
+
+        {/* === SKV-4 · Frisktandvård CTA === */}
+        {!policies.some(
+          (p) => p.kind === "frisktandvard" && p.status === "active",
+        ) && (
+          <div
+            style={{
+              marginTop: 20, marginBottom: 14,
+              padding: 18,
+              background: "linear-gradient(135deg, rgba(110,231,183,0.08), rgba(15,21,37,0.55))",
+              border: "1px solid rgba(110,231,183,0.30)",
+              borderRadius: 10,
+              display: "flex",
+              gap: 18,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <div style={{
+                fontFamily: "JetBrains Mono, monospace", fontSize: 10,
+                fontWeight: 700, color: "#6ee7b7", letterSpacing: 1.4,
+              }}>
+                ● FOLKTANDVÅRDEN · NY TJÄNST
+              </div>
+              <div style={{
+                fontFamily: "Source Serif 4, Georgia, serif", fontSize: 20,
+                fontWeight: 700, color: "#fff", marginTop: 6,
+              }}>
+                Frisktandvård — fast månadspris
+              </div>
+              <div style={{
+                fontFamily: "Source Serif 4, Georgia, serif", fontSize: 13,
+                color: "rgba(255,255,255,0.78)", marginTop: 6, lineHeight: 1.5,
+              }}>
+                Slipp överraskningar vid stora ingrepp. Premien beror
+                på din tandhälsa (grupp 1-10) och ålder (ATB-rabatt
+                för 20-23 år och 67+).
+              </div>
+            </div>
+            <button
+              onClick={loadFtvOffer}
+              disabled={ftvBusy}
+              style={{
+                background: "rgba(110,231,183,0.20)",
+                border: "1px solid rgba(110,231,183,0.45)",
+                color: "#6ee7b7",
+                padding: "10px 18px",
+                borderRadius: 6,
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: 1.4,
+                cursor: ftvBusy ? "default" : "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {ftvBusy ? "..." : "HÄMTA OFFERT →"}
+            </button>
+          </div>
+        )}
+
+        {ftvError && (
+          <div style={{
+            padding: 10, marginBottom: 10,
+            background: "rgba(220,76,43,0.12)",
+            border: "1px solid rgba(220,76,43,0.35)",
+            borderRadius: 6,
+            color: "#fda594",
+            fontFamily: "JetBrains Mono, monospace", fontSize: 11,
+          }}>
+            {ftvError}
+          </div>
+        )}
+
+        {ftvOffer && (
+          <FtvOfferModal
+            offer={ftvOffer}
+            busy={ftvBusy}
+            onActivate={activateFtv}
+            onClose={() => setFtvOffer(null)}
+          />
         )}
 
         {/* AKTIVA + ÖVERVÄGDA POLICYS */}
@@ -733,4 +880,182 @@ function miniBtn(color: string): React.CSSProperties {
     textTransform: "uppercase",
     cursor: "pointer",
   };
+}
+
+
+// === SKV-4 · Frisktandvård-offert-modal ===
+
+function FtvOfferModal({
+  offer, busy, onActivate, onClose,
+}: {
+  offer: FrisktandvardOffer;
+  busy: boolean;
+  onActivate: () => void;
+  onClose: () => void;
+}) {
+  const myPrices = offer.age_category === "atb"
+    ? offer.tier_prices_atb
+    : offer.tier_prices_normal;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.65)",
+        zIndex: 100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "linear-gradient(180deg, #0f1525, #0a0e1a)",
+          border: "1px solid rgba(110,231,183,0.30)",
+          borderRadius: 12,
+          padding: 28,
+          maxWidth: 640,
+          width: "100%",
+          maxHeight: "90vh",
+          overflow: "auto",
+        }}
+      >
+        <div style={{
+          fontFamily: "JetBrains Mono, monospace", fontSize: 10,
+          fontWeight: 700, color: "#6ee7b7", letterSpacing: 1.4,
+        }}>
+          ● DIN PERSONLIGA OFFERT
+        </div>
+        <h2 style={{
+          fontFamily: "Source Serif 4, Georgia, serif",
+          fontSize: 24, fontWeight: 700, color: "#fff",
+          margin: "8px 0 16px",
+        }}>
+          Frisktandvård · grupp {offer.tier} ·{" "}
+          <em style={{ color: "#6ee7b7", fontStyle: "italic" }}>
+            {offer.premium_monthly} kr/mån
+          </em>
+        </h2>
+
+        <div style={{
+          fontFamily: "Source Serif 4, Georgia, serif", fontSize: 14,
+          color: "rgba(255,255,255,0.85)", lineHeight: 1.6,
+          whiteSpace: "pre-line",
+          marginBottom: 20,
+        }}>
+          {offer.explanation}
+        </div>
+
+        {/* Pristabell */}
+        <div style={{
+          background: "rgba(15,21,37,0.55)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 8,
+          padding: 14,
+          marginBottom: 20,
+        }}>
+          <div style={{
+            fontFamily: "JetBrains Mono, monospace", fontSize: 10,
+            fontWeight: 700, color: "#c7d2fe", letterSpacing: 1.4,
+            marginBottom: 10,
+          }}>
+            ● HELA PRISTABELLEN ({offer.age_category === "atb" ? "ATB-rabatt" : "normal-ålder"})
+          </div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 6,
+            fontFamily: "JetBrains Mono, monospace", fontSize: 11,
+          }}>
+            {Object.entries(myPrices).map(([tier, price]) => {
+              const isMine = parseInt(tier, 10) === offer.tier;
+              return (
+                <div key={tier} style={{
+                  padding: 8,
+                  borderRadius: 4,
+                  background: isMine
+                    ? "rgba(110,231,183,0.18)"
+                    : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${isMine ? "rgba(110,231,183,0.45)" : "rgba(255,255,255,0.08)"}`,
+                  textAlign: "center",
+                }}>
+                  <div style={{
+                    color: isMine ? "#6ee7b7" : "rgba(255,255,255,0.50)",
+                    fontSize: 9, fontWeight: 700, letterSpacing: 0.8,
+                  }}>
+                    GRUPP {tier}
+                  </div>
+                  <div style={{
+                    color: isMine ? "#fff" : "rgba(255,255,255,0.85)",
+                    fontWeight: 700, marginTop: 3,
+                  }}>
+                    {price} kr
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {offer.already_active ? (
+          <div style={{
+            padding: 12,
+            background: "rgba(110,231,183,0.10)",
+            border: "1px solid rgba(110,231,183,0.30)",
+            borderRadius: 6,
+            color: "#6ee7b7",
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 13,
+            marginBottom: 12,
+          }}>
+            ✓ Du har redan ett aktivt frisktandvårdsavtal · ingen åtgärd behövs.
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={onClose}
+            style={{
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.20)",
+              color: "rgba(255,255,255,0.65)",
+              padding: "10px 18px",
+              borderRadius: 6,
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 1.4,
+              cursor: "pointer",
+            }}
+          >
+            STÄNG
+          </button>
+          {!offer.already_active && (
+            <button
+              onClick={onActivate}
+              disabled={busy}
+              style={{
+                background: "rgba(110,231,183,0.20)",
+                border: "1px solid rgba(110,231,183,0.45)",
+                color: "#6ee7b7",
+                padding: "10px 22px",
+                borderRadius: 6,
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: 1.4,
+                cursor: busy ? "default" : "pointer",
+              }}
+            >
+              {busy ? "AKTIVERAR..." : `AKTIVERA · ${offer.premium_monthly} KR/MÅN →`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

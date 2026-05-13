@@ -164,6 +164,40 @@ def is_available() -> bool:
     return _get_client() is not None
 
 
+def resolve_prompt(
+    prompt_key: str, *, teacher_id: int | None, default: str,
+) -> str:
+    """Returnera lärarens custom-prompt om en finns + är aktiv,
+    annars default. Idempotent + fail-soft.
+
+    Används av varje AI-anropare för att låta läraren styra hur AI
+    pratar med deras klass. Tom custom_text behandlas som "använd
+    default" (vill man stänga av en feature gör man det via lärar-
+    konto-toggle, inte via tom prompt).
+    """
+    if not teacher_id:
+        return default
+    try:
+        from .engines import master_session
+        from .models import TeacherAiPrompt
+        with master_session() as s:
+            row = (
+                s.query(TeacherAiPrompt)
+                .filter(
+                    TeacherAiPrompt.teacher_id == teacher_id,
+                    TeacherAiPrompt.prompt_key == prompt_key,
+                    TeacherAiPrompt.is_active.is_(True),
+                )
+                .first()
+            )
+            if row and row.custom_text and row.custom_text.strip():
+                return row.custom_text
+    except Exception:
+        log = logging.getLogger(__name__)
+        log.exception("resolve_prompt failed för %s", prompt_key)
+    return default
+
+
 def is_enabled_for_teacher(teacher_id: int) -> bool:
     """Kombinerar klient-tillgänglighet + per-lärarkonfig."""
     if not is_available():
@@ -531,7 +565,11 @@ def generate_feedback_suggestion(
     )
     return _call_claude(
         model=MODEL_HAIKU,
-        system=FEEDBACK_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "teacher_feedback",
+            teacher_id=teacher_id,
+            default=FEEDBACK_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_FEEDBACK,
         use_thinking=False,
@@ -606,7 +644,11 @@ def score_with_rubric(
     )
     return _call_claude_structured(
         model=MODEL_SONNET,
-        system=RUBRIC_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "rubric_grading",
+            teacher_id=teacher_id,
+            default=RUBRIC_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_RUBRIC,
         tool_name="submit_rubric_assessment",
@@ -698,7 +740,11 @@ def answer_chat_message(
             system=[
                 {
                     "type": "text",
-                    "text": CHAT_SYSTEM_PROMPT,
+                    "text": resolve_prompt(
+                        "chat_coach",
+                        teacher_id=teacher_id,
+                        default=CHAT_SYSTEM_PROMPT,
+                    ),
                     "cache_control": {"type": "ephemeral"},
                 },
             ],
@@ -788,20 +834,52 @@ def negotiate_salary_round(
 
     events_summary = "; ".join(recent_events[-3:]) if recent_events else "inga"
 
-    system = NEGOTIATION_SYSTEM_TEMPLATE.format(
-        student_name=student_name,
-        profession=profession,
-        employer=employer,
-        salary=salary,
-        years=max(0, years),
-        agreement_name=agreement_name,
-        pct=avtal_pct,
-        score=satisfaction_score,
-        trend=satisfaction_trend,
-        events_summary=events_summary,
-        round_no=round_no,
-        max_rounds=max_rounds,
+    # Resolva lärarens custom-prompt om en finns · annars default-templaten.
+    # Lärare styr Marias HR-stil per klass via /teacher/v2/ai-prompts.
+    template = resolve_prompt(
+        "negotiation_maria",
+        teacher_id=teacher_id,
+        default=NEGOTIATION_SYSTEM_TEMPLATE,
     )
+    # Fail-soft: om lärarens custom-text saknar någon obligatorisk
+    # f-string-variabel ramlar formattering · då faller vi tillbaka
+    # till default-templaten. Lärare har validerats vid spara att alla
+    # variabler finns men bug i UI:t kan släppa förbi.
+    try:
+        system = template.format(
+            student_name=student_name,
+            profession=profession,
+            employer=employer,
+            salary=salary,
+            years=max(0, years),
+            agreement_name=agreement_name,
+            pct=avtal_pct,
+            score=satisfaction_score,
+            trend=satisfaction_trend,
+            events_summary=events_summary,
+            round_no=round_no,
+            max_rounds=max_rounds,
+        )
+    except (KeyError, IndexError):
+        log = logging.getLogger(__name__)
+        log.warning(
+            "negotiate_salary_round: lärarens custom-prompt saknade "
+            "obligatorisk variabel · fall tillbaka till default",
+        )
+        system = NEGOTIATION_SYSTEM_TEMPLATE.format(
+            student_name=student_name,
+            profession=profession,
+            employer=employer,
+            salary=salary,
+            years=max(0, years),
+            agreement_name=agreement_name,
+            pct=avtal_pct,
+            score=satisfaction_score,
+            trend=satisfaction_trend,
+            events_summary=events_summary,
+            round_no=round_no,
+            max_rounds=max_rounds,
+        )
 
     # Historik som turn-by-turn-meddelanden. Eleven = "user",
     # AI = "assistant". Vi inkluderar bara ronder som faktiskt
@@ -1043,7 +1121,9 @@ def answer_student_question(
     user = f"{context}\n\nElevens fråga:\n{question}"
     return _call_claude(
         model=MODEL_SONNET,
-        system=QA_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "qa_coach", teacher_id=teacher_id, default=QA_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_QA,
         use_thinking=True,
@@ -1118,7 +1198,11 @@ def generate_module_template(
     )
     return _call_claude_structured(
         model=MODEL_SONNET,
-        system=MODULE_GEN_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "module_gen",
+            teacher_id=teacher_id,
+            default=MODULE_GEN_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_MODULE,
         tool_name="submit_module_template",
@@ -1176,7 +1260,11 @@ def generate_student_summary(
 ) -> Optional[AIStructuredResult]:
     return _call_claude_structured(
         model=MODEL_SONNET,
-        system=STUDENT_SUMMARY_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "student_summary",
+            teacher_id=teacher_id,
+            default=STUDENT_SUMMARY_SYSTEM_PROMPT,
+        ),
         user_prompt=context_bundle + "\n\nKör `submit_student_summary`.",
         max_tokens=1200,
         tool_name="submit_student_summary",
@@ -1295,7 +1383,11 @@ def explain_stock_term(
     user = f"Förklara termen: '{term}'"
     return _call_claude(
         model=MODEL_HAIKU,
-        system=STOCK_TERM_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "stock_term_explain",
+            teacher_id=teacher_id,
+            default=STOCK_TERM_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_STOCK_TERM,
         use_thinking=False,
@@ -1340,7 +1432,11 @@ def feedback_on_trade(
     )
     return _call_claude(
         model=MODEL_HAIKU,
-        system=STOCK_TRADE_FEEDBACK_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "stock_trade_feedback",
+            teacher_id=teacher_id,
+            default=STOCK_TRADE_FEEDBACK_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_STOCK_FEEDBACK,
         use_thinking=False,
@@ -1378,7 +1474,11 @@ def evaluate_diversification(
     )
     return _call_claude(
         model=MODEL_HAIKU,
-        system=DIVERSIFICATION_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "diversification",
+            teacher_id=teacher_id,
+            default=DIVERSIFICATION_SYSTEM_PROMPT,
+        ),
         user_prompt=user,
         max_tokens=MAX_TOKENS_DIVERSIFICATION,
         use_thinking=False,
@@ -1443,7 +1543,11 @@ def monthly_wellbeing_feedback(
     )
     return _call_claude(
         model=MODEL_HAIKU,
-        system=WELLBEING_MONTHLY_SYSTEM_PROMPT,
+        system=resolve_prompt(
+            "wellbeing_monthly",
+            teacher_id=teacher_id,
+            default=WELLBEING_MONTHLY_SYSTEM_PROMPT,
+        ),
         user_prompt=prompt,
         max_tokens=MAX_TOKENS_WELLBEING_MONTHLY,
         use_thinking=False,
@@ -1525,5 +1629,201 @@ def class_invite_motivation(
         user_prompt=prompt,
         max_tokens=MAX_TOKENS_INVITE_MOTIVATION,
         use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+# ============================================================
+#  Feature: Arbetsförmedlingen · personligt brev + intervjusvar
+# ============================================================
+
+COVER_LETTER_SYSTEM_PROMPT = """Du är en svensk karriärcoach som bedömer
+elevens personliga brev till en jobbansökan. Eleven är en gymnasieelev
+som lär sig hantera ekonomi och arbetsliv.
+
+Din uppgift är att ge KONSTRUKTIV feedback på brevet. Bedöm fyra saker:
+
+1. **Personligt vs generiskt** — Pratar eleven om SIG SJÄLV och VARFÖR
+   just detta jobb, eller är det ett generiskt cookie-cutter-brev som
+   skulle kunna skickas till vilket företag som helst?
+
+2. **Konkreta exempel** — Ger eleven specifika, verifierbara exempel
+   ("jag drev en webbshop som elevföretag" >> "jag är driven")?
+
+3. **Företagsspecifik koppling** — Visar brevet att eleven LÄST om
+   företaget och rollen, eller är det total ovetskap?
+
+4. **Språk + längd** — Är språket vårdat utan att vara stelt?
+   Lagom längd (200–400 ord)?
+
+Score 0–25 där 25 = perfekt.
+Riktlinjer:
+- 22-25: Personligt, konkret, företagsspecifikt, vårdat språk.
+- 16-21: Bra men saknar något — ofta företagsspecifik koppling.
+- 10-15: Generiskt eller för kort — eleven har inte läst om jobbet.
+- 0-9: Dåligt — kanske bara en mening eller helt fel ton.
+
+Var ärlig men vänlig. Eleven SKA få veta vad som behöver bättre.
+Inga emojis. Skriv på svenska."""
+
+
+COVER_LETTER_TOOL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {
+            "type": "integer", "minimum": 0, "maximum": 25,
+            "description": "Total poäng 0-25 för brevet.",
+        },
+        "score_personlig": {
+            "type": "integer", "minimum": 0, "maximum": 7,
+            "description": "Personligt vs generiskt (0-7p)",
+        },
+        "score_konkret": {
+            "type": "integer", "minimum": 0, "maximum": 6,
+            "description": "Konkreta exempel (0-6p)",
+        },
+        "score_foretag": {
+            "type": "integer", "minimum": 0, "maximum": 7,
+            "description": "Företagsspecifik koppling (0-7p)",
+        },
+        "score_sprak": {
+            "type": "integer", "minimum": 0, "maximum": 5,
+            "description": "Språk + längd (0-5p)",
+        },
+        "feedback_md": {
+            "type": "string",
+            "description": (
+                "Pedagogisk feedback i markdown · börja med en kort "
+                "summering, sedan 2-4 punkter som eleven kan göra bättre. "
+                "Max 250 ord."
+            ),
+        },
+        "highlights": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "1-2 saker eleven gjorde BRA (positiv förstärkning)",
+        },
+    },
+    "required": ["score", "feedback_md", "highlights"],
+}
+
+
+def evaluate_cover_letter(
+    *,
+    cover_letter_text: str,
+    job_title: str,
+    employer: str,
+    job_description: str,
+    requirements: list[str],
+    teacher_id: int | None = None,
+) -> Optional[AIStructuredResult]:
+    """Bedöm personligt brev. Returnerar score 0-25 + feedback + highlights."""
+    user = (
+        f"## Jobbet eleven söker\n"
+        f"**Titel:** {job_title}\n"
+        f"**Arbetsgivare:** {employer}\n"
+        f"**Beskrivning:** {job_description}\n"
+        f"**Krav:** {', '.join(requirements) if requirements else '(ej specificerat)'}\n\n"
+        f"## Elevens personliga brev\n\n{cover_letter_text}\n\n"
+        f"---\nKör `submit_cover_letter_evaluation`."
+    )
+    return _call_claude_structured(
+        model=MODEL_SONNET,
+        system=resolve_prompt(
+            "cover_letter_mats",
+            teacher_id=teacher_id,
+            default=COVER_LETTER_SYSTEM_PROMPT,
+        ),
+        user_prompt=user,
+        max_tokens=900,
+        tool_name="submit_cover_letter_evaluation",
+        tool_description=(
+            "Bedöm elevens personliga brev mot jobbannonsen. "
+            "Ge score 0-25 + delpoäng + feedback + highlights."
+        ),
+        tool_schema=COVER_LETTER_TOOL_SCHEMA,
+        teacher_id=teacher_id,
+    )
+
+
+# === Intervjusvar-bedömning · rond 2 + rond 3 ============
+
+INTERVIEW_ANSWER_SYSTEM_PROMPT = """Du är en svensk rekryterare som bedömer
+elevens svar i en jobbintervju. Eleven är en gymnasielev som tränar på
+intervjuteknik.
+
+Din uppgift är att bedöma KVALITETEN på elevens svar. För varje svar:
+
+1. Är svaret konkret eller bara fluff?
+2. Visar det självkännedom (t.ex. styrkor/svagheter med exempel)?
+3. Är språket professionellt utan att vara stelt? (rätt ton för
+   intervju-kontext)
+4. Har eleven tänkt själv eller bara skrivit floskler?
+
+Score 0-15 totalt för uppsättning av svar (3-5 frågor):
+- 12-15: Konkret, självmedvetet, professionellt språk.
+- 8-11: OK svar men kan vara djupare.
+- 4-7: Mest floskler eller för kort.
+- 0-3: Dåligt — fluff eller felaktig ton.
+
+Var ärlig men vänlig. Inga emojis. Svenska."""
+
+
+INTERVIEW_ANSWER_TOOL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {
+            "type": "integer", "minimum": 0, "maximum": 15,
+            "description": "Total poäng 0-15 för svaren.",
+        },
+        "language_score": {
+            "type": "integer", "minimum": 0, "maximum": 5,
+            "description": "Språkkvalitet 0-5 (hur professionell tonen är)",
+        },
+        "feedback_md": {
+            "type": "string",
+            "description": (
+                "Kort feedback i markdown · 2-3 punkter, max 150 ord. "
+                "Säg vad eleven gjorde bra och vad som kan bli bättre."
+            ),
+        },
+    },
+    "required": ["score", "feedback_md", "language_score"],
+}
+
+
+def evaluate_interview_answers(
+    *,
+    job_title: str,
+    employer: str,
+    questions_and_answers: list[dict],
+    teacher_id: int | None = None,
+) -> Optional[AIStructuredResult]:
+    """Bedöm intervjusvar (rond 2). Returnerar score + språkbedömning."""
+    qa_block = "\n".join(
+        f"**F:** {qa.get('question', '')}\n**S:** {qa.get('answer', '')}\n"
+        for qa in questions_and_answers
+    )
+    user = (
+        f"## Intervju\n"
+        f"**Roll:** {job_title} hos {employer}\n\n"
+        f"## Frågor och svar\n\n{qa_block}\n\n"
+        f"---\nKör `submit_interview_evaluation`."
+    )
+    return _call_claude_structured(
+        model=MODEL_SONNET,
+        system=resolve_prompt(
+            "interview_mats",
+            teacher_id=teacher_id,
+            default=INTERVIEW_ANSWER_SYSTEM_PROMPT,
+        ),
+        user_prompt=user,
+        max_tokens=600,
+        tool_name="submit_interview_evaluation",
+        tool_description=(
+            "Bedöm intervjusvar. Ge total score 0-15 + delpoäng på "
+            "språkkvalitet + feedback."
+        ),
+        tool_schema=INTERVIEW_ANSWER_TOOL_SCHEMA,
         teacher_id=teacher_id,
     )

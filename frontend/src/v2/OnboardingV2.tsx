@@ -80,7 +80,7 @@ function track(
     .catch(() => undefined);
 }
 
-const TOTAL = 8;
+const TOTAL = 9;
 const NEXT_LABELS = [
   "",
   "Möt din karaktär →",
@@ -89,6 +89,7 @@ const NEXT_LABELS = [
   "Visa postlådan →",
   "Visa Echo →",
   "En fråga om värderingar →",
+  "Sätt din budget →",
   "Sista regeln →",
   "Starta Ekonomilabbet ↗",
 ];
@@ -173,15 +174,10 @@ export function OnboardingV2() {
         fairness_choice: isSingle ? null : fairness,
         partner_model: isSingle ? "solo" : "ai",
       });
-      // Seed:a Konsumentverkets schabloner som start-budget så
-      // eleven har en första-budget-direkt (matchar v1-onboarding-
-      // steg 'Sätt din månadsbudget'). Om något felar är det inte
-      // kritiskt — eleven kan göra det manuellt i /v2/budget.
-      try {
-        await v2Api.resetBudgetToKonsumentverket();
-      } catch {
-        /* fail-soft */
-      }
+      // Budgeten är seedad vid student-skapandet och justerad av
+      // eleven i Step 8 — INGET extra reset här (det skulle skriva
+      // över elevens egna val). Fallback finns i /v2/budget om
+      // något hade gått fel.
       nav(result.redirect_to);
     } catch (e) {
       setError(String((e as Error)?.message || e));
@@ -200,7 +196,7 @@ export function OnboardingV2() {
       );
       // Skip Step 7 (sambo-fairness) om eleven är ensam — det
       // är meningslöst att fråga hur ekonomin ska delas om man
-      // bor själv.
+      // bor själv. Hoppar då direkt till Step 8 (budget).
       if (step === 6 && isSingle) {
         setStep(8);
       } else {
@@ -261,7 +257,8 @@ export function OnboardingV2() {
               charName={charName}
             />
           )}
-          {step === 8 && <Step8 charName={charName} character={character} />}
+          {step === 8 && <Step8Budget charName={charName} />}
+          {step === 9 && <Step9 charName={charName} character={character} />}
 
           <div className="onb-foot">
             <span className="onb-step-num">
@@ -1277,8 +1274,344 @@ function Step7({
   );
 }
 
-/* === STEG 8 — Klar / Vol. 18 är laddad === */
-function Step8({
+/* === STEG 8 — Sätt din budget (KV-schabloner per hushåll) === */
+function Step8Budget({ charName }: { charName: string }) {
+  const [budget, setBudget] = useState<
+    import("./api").BudgetData | null
+  >(null);
+  const [error, setError] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    v2Api
+      .budget()
+      .then((b) => {
+        if (!cancelled) setBudget(b);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(String((e as Error)?.message || e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Visa ALLA non-income-kategorier · variabla går att ändra direkt,
+  // fasta (hyra, el, försäkring etc.) syns som read-only så eleven
+  // får en helhetsbild av månadsbudgeten redan i onboardingen.
+  const allRows = (budget?.categories || []).filter((c) => !c.is_income);
+  const editableRows = allRows.filter((c) => !c.is_fixed);
+  const fixedRows = allRows.filter((c) => c.is_fixed);
+
+  async function saveRow(categoryId: number, valueStr: string) {
+    const parsed = Number.parseInt(valueStr, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    setSavingId(categoryId);
+    try {
+      const updated = await v2Api.updateBudgetCategory(categoryId, {
+        planned_amount: parsed,
+        is_income: false,
+      });
+      setBudget((b) =>
+        b
+          ? {
+              ...b,
+              categories: b.categories.map((c) =>
+                c.category_id === categoryId ? updated : c,
+              ),
+            }
+          : b,
+      );
+      setDrafts((d) => {
+        const { [categoryId]: _omit, ...rest } = d;
+        return rest;
+      });
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return (
+    <div className="onb-step">
+      <div className="onb-eye">Onboarding · steg 8 av 9 · budget</div>
+      <h1 className="onb-h">
+        Sätt <em>din</em> budget.
+      </h1>
+      <p className="onb-lead">
+        Vi har förifyllt {charName}s budget från Konsumentverkets
+        schabloner — nivå för ett hushåll som ditt. Justera nedan om du
+        vill leva sparsammare eller ha mer marginal. <em>Belopp styr
+        verkligheten</em>: sänker du mat genereras lägre matkostnader,
+        men inte under 70 % av KV-schablonen — kroppen behöver mat. För
+        nöje & restaurang är det 0 % floor, så där styr du helt själv.
+      </p>
+
+      {error && (
+        <div
+          style={{
+            padding: "8px 12px",
+            background: "rgba(220,76,43,0.08)",
+            border: "1px solid rgba(220,76,43,0.4)",
+            borderRadius: 6,
+            color: "#fca5a5",
+            fontSize: 12,
+            margin: "12px 0",
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {!budget ? (
+        <div
+          style={{
+            padding: "20px 0",
+            color: "var(--text-dim)",
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+          }}
+        >
+          Laddar budgeten…
+        </div>
+      ) : editableRows.length === 0 && fixedRows.length === 0 ? (
+        <div
+          style={{
+            padding: "20px 0",
+            color: "var(--text-dim)",
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+          }}
+        >
+          Budgeten håller på att seedas (KV-schabloner). Om det här
+          står kvar efter en stund: gå till /v2/budget och tryck
+          "Skapa månads-budget" så fylls den i.
+        </div>
+      ) : editableRows.length === 0 ? (
+        <div style={{
+          padding: "12px 16px",
+          margin: "16px 0",
+          background: "rgba(99,102,241,0.06)",
+          border: "1px solid rgba(99,102,241,0.20)",
+          borderRadius: 6,
+          fontFamily: "var(--serif)",
+          fontSize: 13,
+          color: "rgba(255,255,255,0.78)",
+          lineHeight: 1.55,
+        }}>
+          Inga variabla utgifter att justera än — bara fasta utgifter
+          (visas nedan). Du kan lägga till mat, kläder och nöje i{" "}
+          <em>/v2/budget</em> när du loggat in.
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 110px 110px",
+            columnGap: 16,
+            rowGap: 8,
+            margin: "16px 0",
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 9.5,
+              letterSpacing: "1.4px",
+              textTransform: "uppercase",
+              color: "var(--text-dim)",
+            }}
+          >
+            Kategori
+          </div>
+          <div
+            style={{
+              fontSize: 9.5,
+              letterSpacing: "1.4px",
+              textTransform: "uppercase",
+              color: "var(--text-dim)",
+              textAlign: "right",
+            }}
+          >
+            Din budget
+          </div>
+          <div
+            style={{
+              fontSize: 9.5,
+              letterSpacing: "1.4px",
+              textTransform: "uppercase",
+              color: "var(--text-dim)",
+              textAlign: "right",
+            }}
+          >
+            KV-schablon
+          </div>
+
+          {editableRows.map((c) => {
+            const draft = drafts[c.category_id];
+            const previewVal =
+              draft !== undefined && draft !== ""
+                ? Number.parseInt(draft, 10)
+                : c.planned;
+            const ref = c.consumer_reference;
+            let warning: { text: string; color: string } | null = null;
+            if (
+              ref != null &&
+              ref > 0 &&
+              Number.isFinite(previewVal) &&
+              previewVal >= 0
+            ) {
+              const ratio = previewVal / ref;
+              const pct = Math.round(ratio * 100);
+              if (ratio < 0.5) {
+                warning = {
+                  text: `🔴 ${pct} % av KV — subexistens (−5 hälsa)`,
+                  color: "#fca5a5",
+                };
+              } else if (ratio < 0.8) {
+                warning = {
+                  text: `🟡 ${pct} % av KV — risk (−2 hälsa)`,
+                  color: "var(--warm)",
+                };
+              }
+            }
+            return (
+              <div
+                key={c.category_id}
+                style={{ display: "contents" }}
+              >
+                <div style={{ alignSelf: "center" }}>
+                  <span style={{ marginRight: 6 }}>{c.icon}</span>
+                  {c.category_name}
+                  {warning && (
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: warning.color,
+                        marginTop: 2,
+                      }}
+                    >
+                      {warning.text}
+                    </div>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={
+                    draft !== undefined
+                      ? draft
+                      : String(Math.round(c.planned))
+                  }
+                  onChange={(e) =>
+                    setDrafts((d) => ({
+                      ...d,
+                      [c.category_id]: e.target.value,
+                    }))
+                  }
+                  onBlur={() => {
+                    const v = drafts[c.category_id];
+                    if (
+                      v !== undefined &&
+                      v !== String(Math.round(c.planned))
+                    ) {
+                      saveRow(c.category_id, v);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter")
+                      (e.target as HTMLInputElement).blur();
+                  }}
+                  disabled={savingId === c.category_id}
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 12,
+                    padding: "6px 8px",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 4,
+                    color: "var(--text)",
+                    textAlign: "right",
+                  }}
+                />
+                <div
+                  style={{
+                    alignSelf: "center",
+                    textAlign: "right",
+                    color: "var(--text-dim)",
+                  }}
+                >
+                  {ref != null
+                    ? `${SEK(ref)} kr`
+                    : "—"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {fixedRows.length > 0 && (
+        <>
+          <div style={{
+            fontSize: 9.5, letterSpacing: "1.4px", textTransform: "uppercase",
+            color: "var(--text-dim)", fontFamily: "var(--mono)",
+            marginTop: 18, marginBottom: 8,
+          }}>
+            ● FASTA UTGIFTER · kan inte ändras månadsvis
+          </div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 110px",
+            columnGap: 16, rowGap: 6,
+            fontFamily: "var(--mono)", fontSize: 11,
+            opacity: 0.7,
+          }}>
+            {fixedRows.map((c) => (
+              <div key={c.category_id} style={{ display: "contents" }}>
+                <div>
+                  <span style={{ marginRight: 6 }}>{c.icon}</span>
+                  {c.category_name}
+                </div>
+                <div style={{ textAlign: "right", color: "rgba(255,255,255,0.65)" }}>
+                  {SEK(c.planned)} kr
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div
+        style={{
+          padding: "12px 16px",
+          margin: "12px 0",
+          background: "rgba(220,76,43,0.05)",
+          border: "1px solid rgba(220,76,43,0.25)",
+          borderRadius: 6,
+          fontFamily: "var(--serif)",
+          fontSize: 13,
+          lineHeight: 1.55,
+          color: "var(--text-dim)",
+        }}
+      >
+        <strong style={{ color: "var(--accent)" }}>Tips.</strong> Tre
+        eller fler kategorier under 80 % av KV ger automatiskt
+        social-axel −5 (du isolerar dig när allt ska klippas). Mat
+        under 50 % ger dessutom hälsa −3 direkt — pengar slut på 12:e
+        är ingen pedagogik, det är en livsstilsvarning.
+      </div>
+    </div>
+  );
+}
+
+
+/* === STEG 9 — Klar / Vol. 18 är laddad === */
+function Step9({
   charName,
   character,
 }: {
@@ -1292,7 +1625,7 @@ function Step8({
 
   return (
     <div className="onb-step">
-      <div className="onb-eye">Onboarding · steg 8 av 8 · klar</div>
+      <div className="onb-eye">Onboarding · steg 9 av 9 · klar</div>
       <h1 className="onb-h">
         Är du <em>redo</em>?
       </h1>
@@ -1342,10 +1675,11 @@ function Step8({
         >
           ● Din första budget
         </div>
-        Vi sätter automatiskt en startbudget från Konsumentverkets
-        schabloner när du klickar 'Klar'. Belopp för mat, hygien, kläder,
-        transport mm. baserat på ditt hushåll. Du justerar sedan i{" "}
-        <strong>/v2/budget</strong> — ditt val avslöjar dina vanor.
+        Du satte just din startbudget mot Konsumentverkets schabloner.
+        Beloppen styr de transaktioner som genereras — sätter du mat
+        lägre genereras lägre matkostnader, men inte under 70 % av
+        KV-schablonen (kroppen behöver mat). Du justerar i{" "}
+        <strong>/v2/budget</strong> närsomhelst.
       </div>
 
       <div className="onb-rules">

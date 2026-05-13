@@ -88,6 +88,31 @@ def _add_months(d: date, n: int) -> date:
     return date(new_y, new_m, min(d.day, 28))
 
 
+def _termination_date_from(notice_date: date, months: int) -> date:
+    """Beräkna uppsägningens sista dag enligt svensk hyreslag.
+
+    Tillsvidareavtal: 3 månaders uppsägningstid räknat från
+    NÄRMAST FÖLJANDE MÅNADSSKIFTE.
+
+    Exempel: säg upp 7 jan 2026 → uppsägningen startar 1 feb 2026 →
+    3 hela månader → sista dagen är 30 april 2026.
+
+    Vi returnerar sista dagen i den 3:e månaden efter följande
+    månadsskifte (dvs notice_start + 3 mån − 1 dag).
+    """
+    # Närmast följande månadsskifte
+    if notice_date.month == 12:
+        notice_start = date(notice_date.year + 1, 1, 1)
+    else:
+        notice_start = date(notice_date.year, notice_date.month + 1, 1)
+    # Slutdatum = första dagen i (notice_start + months) − 1 dag
+    end_y = notice_start.year + (notice_start.month - 1 + months) // 12
+    end_m = (notice_start.month - 1 + months) % 12 + 1
+    next_first = date(end_y, end_m, 1)
+    from datetime import timedelta as _td_term
+    return next_first - _td_term(days=1)
+
+
 def ensure_active_home(
     s: Session,
     *,
@@ -102,6 +127,13 @@ def ensure_active_home(
     existing = get_active_home(s)
     if existing is not None:
         return existing
+
+    # entered_on i spel-tid · year_month-hint kan vara real-tid
+    try:
+        from ...business.game_clock import current_game_date as _cgd_ea
+        entered = _cgd_ea()
+    except Exception:
+        entered = _ym_first_day(year_month)
 
     h = profile.housing
     home = ActiveHome(
@@ -120,7 +152,7 @@ def ensure_active_home(
         ),
         loan_id=None,
         listing_id=None,
-        entered_on=_ym_first_day(year_month),
+        entered_on=entered,
         household_size_when_chosen=household_size_for(profile),
     )
     s.add(home)
@@ -137,6 +169,12 @@ def give_notice_on_rental(
     """Säg upp aktiv hyresrätt med 3 månaders uppsägning.
 
     Returnerar uppdaterad ActiveHome.
+
+    OBS: year_month är en advisory hint — vi använder ALLTID
+    current_game_date() som bas för termination_date eftersom
+    frontend ibland skickar real-tid YYYY-MM istället för spel-tid.
+    Tidigare fick eleven termination_date = real-tid + 3 mån vilket
+    landade i framtiden av spel-tid.
     """
     home = get_active_home(s)
     if home is None:
@@ -149,9 +187,16 @@ def give_notice_on_rental(
     if home.status == "notice_given":
         return home  # Idempotent
 
-    notice_start = _ym_first_day(year_month)
+    # Använd spel-tid · year_month-hint ignoreras
+    try:
+        from ...business.game_clock import current_game_date as _cgd_gn
+        notice_start = _cgd_gn()
+    except Exception:
+        notice_start = _ym_first_day(year_month)
     home.status = "notice_given"
-    home.termination_date = _add_months(notice_start, RENTAL_NOTICE_MONTHS)
+    home.termination_date = _termination_date_from(
+        notice_start, RENTAL_NOTICE_MONTHS,
+    )
     s.flush()
 
     try:
@@ -200,15 +245,27 @@ def move_to_rental(
             "Sälj BR/villa via /sell först.",
         )
 
-    # Markera gamla som terminerad direkt vid flytt (ingen 3-mån-väntan
-    # eftersom man flyttar in i nytt direkt — uppsägning ses som klar)
-    old.status = "terminated"
-    old.termination_date = _ym_first_day(year_month)
+    # 3 månaders uppsägningstid räknat från SPEL-tid — eleven är
+    # skyldig att betala hyran på gamla bostaden under övergångs-
+    # perioden även om man flyttat in i ny lägenhet. termination_date
+    # = spel-tid + 90 dgr så HubV2-bannerns 'uppsägningstid till X'
+    # och hyresavi-serien stämmer.
+    try:
+        from ...business.game_clock import current_game_date as _cgd_mvr
+        notice_start = _cgd_mvr()
+    except Exception:
+        notice_start = _ym_first_day(year_month)
+    old.status = "notice_given"
+    old.termination_date = _termination_date_from(
+        notice_start, RENTAL_NOTICE_MONTHS,
+    )
 
     # Skapa ny rental ActiveHome från listing.
     # Listing är tekniskt "till salu" men vi behandlar hyresrätt-listings
     # som "ledig hyresrätt att hyra" i Sprint 5b. asking_price ignoreras
     # (hyresrätter har ingen köpeskilling), monthly_avgift = månadshyra.
+    # entered_on i SPEL-tid · year_month-hint från frontend kan vara
+    # real-tid och då blir 'tillträtt'-datum fel i UI.
     new_home = ActiveHome(
         home_type="hyresratt",
         status="active",
@@ -221,7 +278,7 @@ def move_to_rental(
         purchase_price=None,
         loan_id=None,
         listing_id=new_listing.listing_id,
-        entered_on=_ym_first_day(year_month),
+        entered_on=notice_start,
         household_size_when_chosen=old.household_size_when_chosen,
     )
     s.add(new_home)
@@ -280,17 +337,24 @@ def promote_listing_to_active_home(
 
     Skapar ny ActiveHome från listing.
     """
+    # SPEL-tid · year_month-hint kan vara real-tid
+    try:
+        from ...business.game_clock import current_game_date as _cgd_pr
+        today_g = _cgd_pr()
+    except Exception:
+        today_g = _ym_first_day(year_month)
+
     old = get_active_home(s)
     if old is not None:
         if old.home_type == "hyresratt":
-            old.status = "terminated"
-            old.termination_date = _add_months(
-                _ym_first_day(year_month), RENTAL_NOTICE_MONTHS,
+            old.status = "notice_given"
+            old.termination_date = _termination_date_from(
+                today_g, RENTAL_NOTICE_MONTHS,
             )
         else:
             old.status = "selling"
             old.estimated_sale_date = _add_months(
-                _ym_first_day(year_month), SALE_HORIZON_MONTHS,
+                today_g, SALE_HORIZON_MONTHS,
             )
 
     new_home = ActiveHome(
@@ -305,7 +369,7 @@ def promote_listing_to_active_home(
         purchase_price=Decimal(listing.asking_price),
         loan_id=loan_id,
         listing_id=listing.listing_id,
-        entered_on=_ym_first_day(year_month),
+        entered_on=today_g,
         household_size_when_chosen=household_size,
     )
     s.add(new_home)

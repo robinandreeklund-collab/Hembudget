@@ -517,6 +517,46 @@ export function BudgetV2() {
               const justSaved = savedFlash[c.category_id] != null;
               const errMsg = rowError[c.category_id];
 
+              // Realtime KV-feedback: använder draft-värdet om eleven
+              // är mitt i en justering, annars persistat planned. När
+              // planned < 80 % av Konsumentverkets schablon vet vi att
+              // wellbeing-violation triggas — visa det DIRECT istället
+              // för att eleven först ska upptäcka det i pentagon.
+              const draftRawKv = drafts[c.category_id];
+              const previewPlannedKv =
+                draftRawKv !== undefined && draftRawKv !== ""
+                  ? Number.parseInt(draftRawKv, 10)
+                  : c.planned;
+              const kvRef = c.consumer_reference;
+              let kvWarning: { text: string; tone: "warn" | "danger" } | null =
+                null;
+              if (
+                !c.is_fixed &&
+                !c.is_income &&
+                kvRef != null &&
+                kvRef > 0 &&
+                Number.isFinite(previewPlannedKv) &&
+                previewPlannedKv >= 0
+              ) {
+                const ratio = previewPlannedKv / kvRef;
+                const pct = Math.round(ratio * 100);
+                if (ratio < 0.5) {
+                  kvWarning = {
+                    text:
+                      "🔴 " + pct + " % av KV-schablon · " +
+                      "subexistens — pentagon-hälsa sänks med −5",
+                    tone: "danger",
+                  };
+                } else if (ratio < 0.8) {
+                  kvWarning = {
+                    text:
+                      "🟡 " + pct + " % av KV-schablon · " +
+                      "risk att hälsan sänks med −2",
+                    tone: "warn",
+                  };
+                }
+              }
+
               return (
                 <div
                   className={`budget-form-row${rowClass}`}
@@ -539,8 +579,15 @@ export function BudgetV2() {
                     </div>
                     <div
                       className={`budget-cat-sub${
-                        c.status === "over" ? " over" : ""
+                        c.status === "over" || kvWarning?.tone === "danger"
+                          ? " over"
+                          : ""
                       }`}
+                      style={
+                        kvWarning?.tone === "warn"
+                          ? { color: "var(--warm)" }
+                          : undefined
+                      }
                     >
                       {saving
                         ? "Sparar…"
@@ -548,6 +595,8 @@ export function BudgetV2() {
                         ? "Sparat ✓"
                         : errMsg
                         ? errMsg
+                        : kvWarning
+                        ? kvWarning.text
                         : c.is_fixed
                         ? "Fast kostnad · autogiro"
                         : c.status === "savings"

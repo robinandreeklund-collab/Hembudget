@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
+import { WaitlistBlock } from "@/components/editorial/WaitlistBlock";
 import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
 import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
 import { LiveTime, LiveCountdown } from "@/components/editorial/LiveClock";
@@ -17,6 +18,7 @@ export default function ParentSignup() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [betaCode, setBetaCode] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -28,6 +30,8 @@ export default function ParentSignup() {
     setErr(null);
     if (password.length < 8) return setErr("Lösenord måste vara minst 8 tecken.");
     if (password !== confirm) return setErr("Lösenorden matchar inte.");
+    // Beta-kod-pre-validation borttagen — backend svarar 403 med
+    // "ange beta-kod eller använd väntelistan" så texten är konsekvent.
     if (siteKey && !turnstileToken)
       return setErr("Säkerhetskontroll pågår — vänta en sekund.");
     setBusy(true);
@@ -35,13 +39,22 @@ export default function ParentSignup() {
       await api("/parent/signup", {
         method: "POST",
         body: JSON.stringify({
-          email, password, name: name || "Förälder",
+          email, password,
+          name: name || "Förälder",
+          beta_code: betaCode.trim(),
         }),
         turnstileToken: turnstileToken ?? undefined,
       });
       setDone(true);
     } catch (e: unknown) {
-      if (e instanceof ApiError && e.status === 503) {
+      if (e instanceof ApiError && e.status === 403) {
+        const detail = (e.body as { detail?: { error?: string; message?: string } })?.detail;
+        if (detail?.error?.startsWith("beta_code_")) {
+          setErr(detail.message || "Beta-koden godkändes inte.");
+        } else {
+          setErr(e.message || "Registrering nekad.");
+        }
+      } else if (e instanceof ApiError && e.status === 503) {
         setErr(
           "E-postutskick är inte påslaget på servern. Kontakta administratören.",
         );
@@ -131,6 +144,24 @@ export default function ParentSignup() {
             placeholder="Bekräfta lösenord"
             required
           />
+          <div className="ed-beta-block">
+            <div className="ed-beta-eye">● Beta · stängd registrering</div>
+            <p className="ed-beta-help">
+              Plattformen är just nu i beta och vi öppnar upp stegvis.
+              Har du fått en beta-kod? Ange den här.
+            </p>
+            <input
+              className="ed-input"
+              type="text"
+              value={betaCode}
+              onChange={(e) => setBetaCode(e.target.value.toUpperCase())}
+              placeholder="Beta-kod"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+          </div>
+          <WaitlistBlock role="parent" siteKey={siteKey} />
           <Turnstile
             siteKey={siteKey}
             onToken={setTurnstileToken}

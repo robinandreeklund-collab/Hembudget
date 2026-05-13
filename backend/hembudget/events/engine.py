@@ -90,10 +90,24 @@ def _passes_triggers(
     rng: random.Random,
     checking: Decimal,
     savings: Decimal,
+    has_car: bool = False,
+    weeks_active: int = 0,
 ) -> tuple[bool, str]:
     """Kollar om ett template passerar sina trigger-villkor.
-    Returnerar (passes, skip_reason)."""
+    Returnerar (passes, skip_reason).
+
+    Nya triggers (SKV-3):
+      requires_has_car · skipa om eleven saknar bil
+      min_week · minst N spel-veckor sedan karaktärsskapande
+    """
     triggers = template.triggers or {}
+
+    # SKV-3 · bil-event-villkor
+    if triggers.get("requires_has_car") and not has_car:
+        return False, "no_car"
+    min_week = triggers.get("min_week")
+    if min_week is not None and weeks_active < int(min_week):
+        return False, "too_early"
 
     weekday_filter = triggers.get("weekday")
     if weekday_filter and today.weekday() not in weekday_filter:
@@ -155,6 +169,23 @@ def tick_for_student(
     samma-code-event (under 14 dagar) — undviker dubletter.
     """
     today = today or date.today()
+
+    # Anchor-guard · generera ALDRIG events före GAME_ANCHOR_DATE
+    # (2026-01-01). Seed-flödet kör tick_month för historiska månader
+    # (Okt/Nov/Dec 2025) för att fylla bankhistorik + lönespecar — men
+    # SOCIALA events ska inte skapas där eftersom eleven inte ens spelade
+    # då. De skulle annars dyka upp som 'missade' i Historik-fliken
+    # (deadline < today efter att eleven nått anchor) vilket ger en
+    # vilseledande start: "du missade 12 events innan du ens loggade in".
+    from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+    if today < GAME_ANCHOR_DATE:
+        return EventTickResult(
+            week_seed=0,
+            candidates_evaluated=0,
+            events_created=0,
+            skipped_reason_counts={"before_anchor": 1},
+        )
+
     week_n = today.isocalendar()[1]
     week_seed_str = f"events-{student_seed}-{today.year}-W{week_n}"
     week_seed = int(hashlib.sha256(week_seed_str.encode()).hexdigest()[:8], 16)
@@ -163,13 +194,19 @@ def tick_for_student(
     # Idempotency: om tick redan körts denna ISO-vecka för denna scope,
     # gör inget. Pickar samma vecka är meningslöst — eleven har redan
     # sina förslag.
+    #
+    # VIKTIGT: filter:a på proposed_date (= spel-tid) inte created_at
+    # (= real-tid). Annars skip:par seed-flödet alla månader EFTER den
+    # första eftersom alla events har created_at = NOW (real-tid). Det
+    # innebar att en ny elev fick events seedade BARA för Okt 2025 och
+    # alla expirerade direkt vid spel-tid Jan 2 → inga sociala events.
     week_start = date.fromisocalendar(today.year, week_n, 1)
+    week_end = week_start + timedelta(days=6)
     already_ticked = (
         scope_session.query(StudentEvent)
         .filter(
-            StudentEvent.created_at >= datetime.combine(
-                week_start, datetime.min.time(),
-            ),
+            StudentEvent.proposed_date >= week_start,
+            StudentEvent.proposed_date <= week_end,
             StudentEvent.source == "system",
         )
         .first()
@@ -193,6 +230,28 @@ def tick_for_student(
     checking = _checking_balance(scope_session)
     savings = _savings_balance(scope_session)
 
+    # SKV-3 · bil-data + spel-veckor sedan karaktärsskapande
+    has_car_flag = False
+    weeks_active_for_events = 0
+    try:
+        from ..school.engines import master_session as _ms_car
+        from ..school.models import Student, StudentProfile as _SP
+        from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+        with _ms_car() as ms_car:
+            stu = ms_car.get(Student, student_seed)
+            if stu is not None and stu.created_at is not None:
+                sp = (
+                    ms_car.query(_SP)
+                    .filter(_SP.student_id == student_seed)
+                    .first()
+                )
+                if sp is not None:
+                    has_car_flag = bool(getattr(sp, "has_car", False))
+                delta_days = (today - GAME_ANCHOR_DATE).days
+                weeks_active_for_events = max(0, delta_days // 7)
+    except Exception:
+        pass
+
     # Hämta alla aktiva templates
     templates = (
         master_session.query(EventTemplate)
@@ -200,12 +259,19 @@ def tick_for_student(
         .all()
     )
 
-    # Existerande pågående/nyligen skapade events — undvik dubblar
-    cutoff = today - timedelta(days=14)
+    # Existerande pågående/nyligen skapade events — undvik dubblar.
+    #
+    # SPEL-TID-FIX: filtrera på proposed_date (spel-tid) istället för
+    # created_at (real-tid). Tidigare blandades spel-tid-cutoff med
+    # real-tid-tidsstämpel → cutoff = spel-2026-03-07 jämfördes med
+    # real-tid created_at = 2026-05-XX → ALLA real-tids-händelser
+    # räknades som "recent" → ALLA template-codes blockades som
+    # dupes → 0 nya sociala events skapades efter spel-tid-switchen.
+    cutoff_game = today - timedelta(days=14)
     recent_codes = {
         e.event_code
         for e in scope_session.query(StudentEvent)
-        .filter(StudentEvent.created_at >= datetime.combine(cutoff, datetime.min.time()))
+        .filter(StudentEvent.proposed_date >= cutoff_game)
         .all()
     }
 
@@ -220,6 +286,8 @@ def tick_for_student(
         passes, reason = _passes_triggers(
             tpl, today=today, rng=rng,
             checking=checking, savings=savings,
+            has_car=has_car_flag,
+            weeks_active=weeks_active_for_events,
         )
         if not passes:
             skip_counts[reason] = skip_counts.get(reason, 0) + 1
@@ -250,13 +318,47 @@ def tick_for_student(
 
         tpl, _w = candidates.pop(picked_idx)
         cost = _resolve_cost(tpl, rng)
+
+        # SKV-4 · insurance_covers · om eleven har aktiv policy som
+        # matchar triggers.insurance_covers (t.ex. 'frisktandvard')
+        # reduceras cost till 0 och title märks "(täckt)".
+        title = tpl.title
+        description = tpl.description
+        covers_kind = (tpl.triggers or {}).get("insurance_covers")
+        if covers_kind:
+            from ..db.models import InsurancePolicy as _IP
+            has_coverage = (
+                scope_session.query(_IP)
+                .filter(
+                    _IP.kind == covers_kind,
+                    _IP.status == "active",
+                )
+                .first()
+            ) is not None
+            if has_coverage:
+                cost = Decimal(0)
+                title = f"{tpl.title} · TÄCKT"
+                description = (
+                    f"{tpl.description}\n\n"
+                    f"✓ Täcks av din {covers_kind}-försäkring · 0 kr egen "
+                    "kostnad. Acceptera för att boka tiden."
+                )
+
         proposed = today + timedelta(days=rng.randint(1, max(2, tpl.duration_days // 2)))
-        deadline = today + timedelta(days=tpl.duration_days)
+        # För korta templates (duration_days=1-2) kan proposed ovan landa
+        # SENARE än today+duration_days, vilket skulle ge deadline < proposed
+        # och då filtreras eventet ut direkt av list_pending's
+        # `deadline >= today`-villkor. Säkerställ att eleven alltid har
+        # minst en spel-dag på sig att svara från proposed_date.
+        deadline = max(
+            today + timedelta(days=tpl.duration_days),
+            proposed + timedelta(days=1),
+        )
 
         ev = StudentEvent(
             event_code=tpl.code,
-            title=tpl.title,
-            description=tpl.description,
+            title=title,
+            description=description,
             category=tpl.category,
             cost=cost,
             proposed_date=proposed,

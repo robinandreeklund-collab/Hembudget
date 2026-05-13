@@ -23,6 +23,12 @@ export default function StudentLogin() {
         code.toUpperCase().trim(),
         turnstileToken ?? undefined,
       );
+      // Reload triggerar SPA-omstart med token i localStorage. URL:en
+      // /login/student fångas av authenticated-grenens catchall →
+      // RoleAwareHomeRedirect → V2RootRedirect → /v2/onboarding eller
+      // /v2/hub. Inga interimsanrop mellan setToken och navigation som
+      // kan 401:a och trigga 401-handlerns clearToken (det var bug:en
+      // som visade "{detail:'Missing bearer token'}" första gången).
       window.location.reload();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Inloggning misslyckades");

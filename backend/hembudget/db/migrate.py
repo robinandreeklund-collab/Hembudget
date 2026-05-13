@@ -717,11 +717,43 @@ def run_migrations(engine: Engine) -> list[str]:
                 "delivery_capacity",
                 "delivery_capacity INTEGER NOT NULL DEFAULT 1",
             ),
+            # Sprint 8 · industry_key + city_key för 10-bransch-väljaren
+            ("industry_key", "industry_key VARCHAR(40)"),
+            ("city_key", "city_key VARCHAR(40)"),
+            # Auto-tick · spelmotorn drar fram veckor automatiskt baserat
+            # på real-tid (inte manuell "Stega vecka"-knapp).
+            ("last_auto_tick_at", "last_auto_tick_at DATETIME"),
+            # Anti-repetition för leverans-quiz · JSON list[int] med
+            # senaste 10 fråge-id:n så eleven inte ser samma fråga
+            # tvång leveranser i rad.
+            (
+                "recent_quiz_question_ids",
+                "recent_quiz_question_ids TEXT",
+            ),
         ]
         for col_name, col_sql in biz_company_columns:
             if col_name not in cols:
                 _add_column(engine, "companies", col_sql)
                 applied.append(f"companies.{col_name}")
+
+    # === TaxYearReturn · SKV-2-fönster + verdict-state-machine ===
+    # Lägg till explicit kolumnerna som har NOT NULL + default (auto-
+    # migration skippar dem). Övriga (verdict, besked_due_on, payout_*,
+    # submitted_on) plockas av _auto_add_nullable_columns nedan.
+    if _table_exists(engine, "tax_year_returns"):
+        tyr_cols = _columns(engine, "tax_year_returns")
+        if "status" not in tyr_cols:
+            _add_column(
+                engine, "tax_year_returns",
+                "status VARCHAR(30) NOT NULL DEFAULT 'klar'",
+            )
+            applied.append("tax_year_returns.status")
+        if "late_fee" not in tyr_cols:
+            _add_column(
+                engine, "tax_year_returns",
+                "late_fee NUMERIC(14, 2) NOT NULL DEFAULT 0",
+            )
+            applied.append("tax_year_returns.late_fee")
 
     # === V2 Postlådan · MailItem-kolumner ===
     # Bug-fix: tabellen mail_items skapades initialt med bara
@@ -760,11 +792,61 @@ def run_migrations(engine: Engine) -> list[str]:
             # Strukturerad fakturadata · JSON för Postgres / TEXT för
             # SQLite. SQLAlchemy JSON-kolumnen mappar transparent.
             ("invoice_data", "invoice_data TEXT"),
+            # Dunning · auto-eskalering av obetalda fakturor
+            ("parent_mail_id", "parent_mail_id INTEGER"),
+            ("reminder_level", "reminder_level INTEGER"),
         ]
         for col_name, col_sql in mail_columns:
             if col_name not in mail_cols:
                 _add_column(engine, "mail_items", col_sql)
                 applied.append(f"mail_items.{col_name}")
+
+    # === UniqueConstraint på fakturanummer (Bug 5 i foretag.md) ===
+    # CompanyInvoice + SupplierInvoice fick tidigare dubblettnummer vid
+    # race conditions. Lägg constraint idempotent · försök CREATE
+    # UNIQUE INDEX, ignorera vid 'already exists'.
+    is_postgres = engine.dialect.name == "postgresql"
+    for table_name, idx_name, cols in [
+        (
+            "company_invoices",
+            "uq_company_invoice_number",
+            ("tenant_id", "company_id", "invoice_number"),
+        ),
+        (
+            "biz_supplier_invoices",
+            "uq_supplier_invoice_number",
+            ("tenant_id", "company_id", "invoice_number"),
+        ),
+    ]:
+        if not _table_exists(engine, table_name):
+            continue
+        try:
+            cols_sql = ", ".join(cols)
+            if is_postgres:
+                stmt = (
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} "
+                    f"ON {table_name} ({cols_sql})"
+                )
+            else:
+                stmt = (
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} "
+                    f"ON {table_name} ({cols_sql})"
+                )
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+            applied.append(f"unique-idx:{table_name}.{idx_name}")
+            log.info("scope-migration: skapade %s", idx_name)
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "already exists" in msg or "duplicate" in msg:
+                continue
+            # Krock på existerande dubbletter? Logga men fortsätt —
+            # den dagliga driften ska inte ta ner sig pga historisk
+            # data; admin får städa manuellt.
+            log.warning(
+                "scope-migration: kunde inte skapa %s · %s",
+                idx_name, exc,
+            )
 
     # === Generisk auto-migration · saknade NULLABLE-kolumner ===
     # Säkerhetsnät för framtiden: jämför varje scope-tabell mot
@@ -777,6 +859,101 @@ def run_migrations(engine: Engine) -> list[str]:
     # manuellt).
     auto_applied = _auto_add_nullable_columns(engine)
     applied.extend(auto_applied)
+
+    # === KANONISKA KATEGORIER · backfill (SKV-6) ===
+    # Alla tidigare kategori-strängar (Mat/Livsmedel/Restaurang/Kläder &
+    # Skor/Streaming/Apotek/Hälsa/Nöje/Hemförsäkring/Bilförsäkring osv.)
+    # → kanonisk lista i categorize/canonical.py.
+    #
+    # Strategi:
+    # 1. För varje alias som finns som Category.name → uppdatera till
+    #    kanonisk om (a) kanoniska redan finns: merga (uppdatera tx
+    #    category_id → kanoniska + ta bort alias-raden) (b) annars:
+    #    bara renamea.
+    # 2. parent_id = NULL för alla (vi har platt struktur nu).
+    #
+    # Idempotent · säker att köra varje uppstart.
+    if _table_exists(engine, "categories"):
+        try:
+            from hembudget.categorize.canonical import (
+                _ALIAS_MAP_RAW, canonicalize,
+                CANONICAL_CATEGORIES,
+            )
+            with engine.begin() as conn:
+                # Hämta alla nuvarande categories
+                cur = conn.execute(text(
+                    "SELECT id, name, parent_id, tenant_id "
+                    "FROM categories"
+                ))
+                rows = list(cur.fetchall())
+                # Bygg lookup: (tenant_id, canonical_name) → id
+                # Om kanonisk rad redan finns för en tenant använder
+                # vi den som mål för merge.
+                canon_id_by_tenant: dict[tuple, int] = {}
+                for cat_id, name, _pid, tenant_id in rows:
+                    if name in CANONICAL_CATEGORIES:
+                        canon_id_by_tenant.setdefault(
+                            (tenant_id, name), cat_id,
+                        )
+
+                for cat_id, name, _pid, tenant_id in rows:
+                    canonical = canonicalize(name)
+                    if canonical == name:
+                        # Redan kanonisk · säkerställ parent_id=NULL
+                        conn.execute(text(
+                            "UPDATE categories SET parent_id = NULL "
+                            "WHERE id = :i"
+                        ), {"i": cat_id})
+                        continue
+
+                    target_id = canon_id_by_tenant.get(
+                        (tenant_id, canonical),
+                    )
+                    if target_id is not None and target_id != cat_id:
+                        # Merge · flytta tx + budget + rules över,
+                        # ta bort alias-raden
+                        for tbl, col in (
+                            ("transactions", "category_id"),
+                            ("transactions", "subcategory_id"),
+                            ("budgets", "category_id"),
+                            ("rules", "category_id"),
+                            ("upcoming_transactions", "category_id"),
+                        ):
+                            if not _table_exists(engine, tbl):
+                                continue
+                            t_cols = _columns(engine, tbl)
+                            if col not in t_cols:
+                                continue
+                            try:
+                                conn.execute(text(
+                                    f"UPDATE {tbl} SET {col} = :t "
+                                    f"WHERE {col} = :s"
+                                ), {"t": target_id, "s": cat_id})
+                            except Exception:
+                                pass
+                        # Ta bort alias-raden
+                        try:
+                            conn.execute(text(
+                                "DELETE FROM categories WHERE id = :i"
+                            ), {"i": cat_id})
+                        except Exception:
+                            pass
+                    else:
+                        # Bara renamea
+                        try:
+                            conn.execute(text(
+                                "UPDATE categories SET name = :n, "
+                                "parent_id = NULL WHERE id = :i"
+                            ), {"n": canonical, "i": cat_id})
+                            canon_id_by_tenant[
+                                (tenant_id, canonical)
+                            ] = cat_id
+                        except Exception:
+                            pass
+            applied.append("categories:canonicalized")
+            log.info("scope-migration: kategorier kanoniserade")
+        except Exception:
+            log.exception("scope-migration: kategori-kanonisering misslyckades")
 
     return applied
 

@@ -121,15 +121,32 @@ export function CompanyModeToggle() {
 
 /**
  * Wrapper som visar BizHub när mode === "business" och privatekonomi
- * children annars. BizHub har egen onboarding-flow om bolag saknas.
+ * children annars.
+ *
+ * KRITISKT FÖR FLIP-ANIMATIONEN: BÅDA panelerna är permanent mountade
+ * och växlas via `display: none/block` i CSS baserat på body[data-mode].
+ * Tidigare mountades/unmountades de vid mode-byte, vilket gjorde att
+ * BizHub fetchade data och kalkylerade layout MITT i flip-in-animationen
+ * — vilket gav den choppy/hackiga känslan användaren beskrev. Med båda
+ * monterade är panel-swappen ren CSS, inga React-renders eller layout-
+ * recomputes mid-animation. Exakt som prototypen vol-7 där .panel:erna
+ * är siblings och `.panel.active`-klassen växlar.
+ *
+ * Kostnad: BizHub gör sin första API-fetch redan vid /v2/hub-mount
+ * (även om eleven aldrig togglar). Det är en mindre förlust för en
+ * markant smoothare upplevelse vid mode-byte.
  */
 export function CompanyModeWrapper({ children }: { children: React.ReactNode }) {
-  const [mode] = useCompanyMode();
-
-  if (mode === "business") {
-    return <BizHub />;
-  }
-  return <>{children}</>;
+  return (
+    <>
+      <div className="v2-mode-panel v2-mode-panel-private">
+        {children}
+      </div>
+      <div className="v2-mode-panel v2-mode-panel-business">
+        <BizHub />
+      </div>
+    </>
+  );
 }
 
 

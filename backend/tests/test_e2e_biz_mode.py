@@ -121,8 +121,8 @@ def test_biz_mode_full_flow(app_with_student):
         json={
             "name": "Sara A. AB",
             "form": "ab",
-            "industry_label": "hantverk",
-            "share_capital": 25000,
+            "industry_key": "snickare",
+            "share_capital": 25000, "funding_method": "business_loan_pg"
         },
     )
     assert r.status_code == 200, f"Kunde inte skapa bolag: {r.text}"
@@ -130,20 +130,30 @@ def test_biz_mode_full_flow(app_with_student):
     assert company["name"] == "Sara A. AB"
     assert company["form"] == "ab"
 
-    # === 3. Manuell tick → ska generera offertförfrågningar ===
+    # === 2b. Köp bas-utrustning + bil (krävs av snickare) ===
+    r = client.post(
+        "/v2/foretag/growth/startup-kit/buy", headers=H,
+        json={"item": "base_equipment", "funding_method": "business_loan_pg"},
+    )
+    assert r.status_code == 200, f"Kunde inte köpa bas-utrustning: {r.text}"
+    r = client.post(
+        "/v2/foretag/growth/startup-kit/buy", headers=H,
+        json={"item": "car", "funding_method": "business_loan_pg"},
+    )
+    assert r.status_code == 200, f"Kunde inte köpa bil: {r.text}"
+
+    # === 3. Manuell tick · ev. fler offerter (create_company pre-seedar
+    #        2 veckor så bolaget aldrig är tomt direkt efter skapande)
     r = client.post("/v2/foretag/tick", headers=H)
     assert r.status_code == 200, f"Tick failed: {r.text}"
-    tick_result = r.json()
-    assert tick_result["new_opportunities"] >= 1, (
-        f"Tick genererade 0 offerter — pipeline-engine fungerar inte. "
-        f"Notes: {tick_result.get('notes')}"
-    )
 
-    # === 4. Lista offerter ===
+    # === 4. Lista offerter — kombinerar pre-seed + manuell tick ===
     r = client.get("/v2/foretag/opportunities?status_filter=open", headers=H)
     assert r.status_code == 200, r.text
     opps = r.json()
-    assert len(opps) >= 1, "Inga öppna offerter listades"
+    assert len(opps) >= 1, (
+        "Inga öppna offerter listades — pipeline-engine fungerar inte."
+    )
     first_opp = opps[0]
 
     # === 5. Lämna offert (lågt pris för hög acceptans-sannolikhet) ===
@@ -223,7 +233,7 @@ def test_biz_class_overview_shows_company(app_with_student):
     # Skapa bolag
     client.post(
         "/v2/foretag", headers=H_S,
-        json={"name": "Test AB", "form": "ab", "industry_label": "konsult"},
+        json={"name": "Test AB", "form": "ab", "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"},
     )
 
     # Lärare hämtar klass-aggregat
@@ -248,7 +258,7 @@ def test_biz_supplier_invoice_mass_send(app_with_student):
     client.post(
         "/v2/foretag", headers=H_S,
         json={"name": "Bygg AB", "form": "enskild_firma",
-              "industry_label": "hantverk"},
+              "industry_key": "snickare"},
     )
 
     # Lärare skickar leverantörsfaktura
@@ -278,6 +288,218 @@ def test_biz_supplier_invoice_mass_send(app_with_student):
     assert invoices[0]["status"] == "open"
 
 
+def test_biz_bank_overview_shape(app_with_student):
+    """/v2/foretag/bank-overview returnerar 3 konton + tx-list +
+    moms-meta. Strukturen ska matcha BizBankOverviewOut-schemat."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+
+    # Utan bolag → 400
+    r = client.get("/v2/foretag/bank-overview", headers=H)
+    assert r.status_code == 400, r.text
+
+    # Skapa bolag
+    client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test AB", "form": "ab",
+            "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"
+        },
+    )
+
+    r = client.get("/v2/foretag/bank-overview", headers=H)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # 3 konton: företagskonto + skattekonto + buffert
+    assert len(data["accounts"]) == 3, f"Förväntade 3 konton, fick {len(data['accounts'])}"
+    primary = next((a for a in data["accounts"] if a["is_primary"]), None)
+    assert primary is not None
+    assert primary["eye"] == "Företagskonto"
+    # Tx-list finns (kan vara tom direkt efter create)
+    assert isinstance(data["transactions"], list)
+    # Meta-fält finns
+    assert "next_vat_due" in data
+    assert "own_salary_this_month" in data
+
+
+def test_biz_industries_endpoint_returns_10_industries(app_with_student):
+    """GET /v2/foretag/industries returnerar 10 fasta branscher med
+    metadata och 'available_in_my_city'-flagga per bransch."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    r = client.get("/v2/foretag/industries", headers=H)
+    assert r.status_code == 200, r.text
+    industries = r.json()
+    assert len(industries) == 10
+    keys = {i["key"] for i in industries}
+    assert "it_konsult" in keys
+    assert "rormokare" in keys
+    assert "frisor" in keys
+    # Varje bransch har metadata
+    for ind in industries:
+        assert ind["sni_code"]
+        assert ind["hourly_rate_min"] > 0
+        assert ind["hourly_rate_max"] > ind["hourly_rate_min"]
+        assert "available_in_my_city" in ind
+
+
+def test_biz_create_company_validates_industry_key(app_with_student):
+    """create_company måste få giltig industry_key. Fri text → 400."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    # Okänd bransch
+    r = client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test AB", "form": "ab",
+            "industry_key": "fri_text_blah", "share_capital": 25000, "funding_method": "business_loan_pg"
+        },
+    )
+    assert r.status_code == 400, r.text
+    assert "Okänd bransch" in r.json()["detail"]
+
+
+def test_biz_create_company_inherits_city_from_character(app_with_student):
+    """Stad ärvs från karaktärens StudentProfile.city — kan ej ändras."""
+    client, _teacher_token, student_token, _tid, sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+
+    # Sätt karaktärens stad explicit till Stockholm
+    from hembudget.school.models import StudentProfile
+    with master_session() as ms:
+        prof = ms.query(StudentProfile).filter_by(student_id=sid).first()
+        if prof is not None:
+            prof.city = "Stockholm"
+            ms.commit()
+
+    r = client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test", "form": "enskild_firma",
+            "industry_key": "it_konsult",
+        },
+    )
+    assert r.status_code == 200, r.text
+    company = r.json()
+    # city_key borde vara satt, även om vi inte skickade det
+    assert company["city_key"] is not None
+
+
+def test_biz_employment_decision_status_no_pending_at_start(app_with_student):
+    """Säg-upp-prompten ska INTE trigga direkt efter företagsstart
+    (0 timmar biz · 0 v överbelastning)."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test", "form": "ab",
+            "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"
+        },
+    )
+    r = client.get("/v2/foretag/employment-decision/status", headers=H)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["pending"] is False
+    assert data["employment_status"] == "employed"
+    assert data["weekly_hours_employed"] == 40
+
+
+def test_biz_employment_decision_apply_parttime(app_with_student):
+    """POST /employment-decision · go_parttime halverar lön och sätter 20h."""
+    client, _teacher_token, student_token, _tid, sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    client.post(
+        "/v2/foretag", headers=H,
+        json={
+            "name": "Test", "form": "enskild_firma",
+            "industry_key": "it_konsult",
+        },
+    )
+    # Spara löne-baseline för jämförelse
+    from hembudget.school.models import StudentProfile
+    with master_session() as ms:
+        prof = ms.query(StudentProfile).filter_by(student_id=sid).first()
+        baseline_gross = int(prof.gross_salary_monthly)
+
+    r = client.post(
+        "/v2/foretag/employment-decision",
+        headers=H,
+        json={"choice": "go_parttime"},
+    )
+    assert r.status_code == 200, r.text
+    result = r.json()
+    assert result["choice"] == "go_parttime"
+    assert result["weekly_hours_employed"] == 20
+    assert result["salary_change_pct"] == -50
+
+    # Verifiera att gross-salary halverades
+    with master_session() as ms:
+        prof = ms.query(StudentProfile).filter_by(student_id=sid).first()
+        assert int(prof.gross_salary_monthly) == baseline_gross // 2
+
+
+def test_biz_private_summary_returns_no_company_at_first(app_with_student):
+    """privateSummary returnerar has_company=false innan eleven skapat
+    bolag — så BizSummaryCard renderar ingenting."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    r = client.get("/v2/foretag/private-summary", headers=H)
+    assert r.status_code == 200, r.text
+    assert r.json()["has_company"] is False
+
+
+def test_biz_pentagon_axis_detail_returns_factors_and_events(app_with_student):
+    """Flip-kortets baksida · /v2/foretag/pentagon/axis/{axis} ska
+    returnera score + faktorer + events + summary för varje av de 5
+    axlarna. Speglar privat-pentagonens flip-kort.
+    """
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+
+    # Utan bolag → 400
+    r = client.get("/v2/foretag/pentagon/axis/omsattning", headers=H)
+    assert r.status_code == 400, r.text
+
+    # Skapa bolag
+    client.post(
+        "/v2/foretag", headers=H,
+        json={"name": "Pentagon AB", "form": "ab", "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"},
+    )
+
+    # Alla 5 axlar ska ge en giltig BizAxisDetail
+    for axis in ["omsattning", "kundbas", "likviditet", "tidsatgang", "vinst"]:
+        r = client.get(f"/v2/foretag/pentagon/axis/{axis}", headers=H)
+        assert r.status_code == 200, f"{axis}: {r.text}"
+        data = r.json()
+        assert data["axis"] == axis
+        assert data["axis_label"]  # icke-tom
+        assert data["axis_number"] in {"01", "02", "03", "04", "05"}
+        assert isinstance(data["score"], int)
+        assert 0 <= data["score"] <= 100
+        assert isinstance(data["factors"], list)
+        assert isinstance(data["events"], list)
+        assert data["summary_text"]
+
+
+def test_biz_pentagon_includes_axes_prev(app_with_student):
+    """compute_business_pentagon ska returnera axes_prev när det finns
+    historisk data (4-12 v sedan). Direkt efter create finns ingen,
+    så axes_prev=None är OK."""
+    client, _teacher_token, student_token, _tid, _sid = app_with_student
+    H = {"Authorization": f"Bearer {student_token}"}
+    client.post(
+        "/v2/foretag", headers=H,
+        json={"name": "TT", "form": "ab", "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"},
+    )
+    r = client.get("/v2/foretag/pentagon", headers=H)
+    assert r.status_code == 200, r.text
+    pent = r.json()
+    # axes_prev kan vara None när det inte finns historisk data
+    assert "axes_prev" in pent
+    # När det är None → frontend ritar ingen prev-polygon
+
+
 def test_biz_owner_salary_credits_private_account(app_with_student):
     """När eleven tar ut lön från AB ska pengarna landa på privat-konto."""
     client, teacher_token, student_token, _tid, sid = app_with_student
@@ -286,7 +508,7 @@ def test_biz_owner_salary_credits_private_account(app_with_student):
     # Skapa AB
     client.post(
         "/v2/foretag", headers=H_S,
-        json={"name": "AB", "form": "ab", "industry_label": "konsult"},
+        json={"name": "AB", "form": "ab", "industry_key": "it_konsult", "share_capital": 25000, "funding_method": "business_loan_pg"},
     )
 
     # Hämta privat-konto saldo INNAN

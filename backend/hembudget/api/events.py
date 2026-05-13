@@ -63,13 +63,147 @@ def _to_out(e: StudentEvent) -> StudentEventOut:
 @router.get("/pending")
 def list_pending(scope: Session = Depends(db)) -> dict:
     """Lista alla events med status='pending' inom deadline.
-    Frontend visar i notifikations-bubblan."""
+    Frontend visar i notifikations-bubblan.
+
+    Auto-expire körs först · seed-flödet skapar events historiskt
+    (jan-april) som har passerat deadlinen redan vid student-skapandet.
+    Utan auto-expire skulle de stå kvar som 'pending' och förvirra
+    eleven med 'Karaokekväll · deadline 6 jan' när det är 7 maj.
+
+    SPEL-TID: deadline-jämförelser måste ske mot spel-datum (synkat med
+    privat-tid). Använder vi real-tid (=maj 2026) markeras alla events
+    som expired direkt eftersom de seedats med deadline i spel-jan/feb.
+
+    Auto-tick: om elev öppnar /v2/handelser FÖRE /v2/hub eller
+    /v2/postladan så hade aldrig auto-tick av nya månader körts → 0
+    events. Vi triggar samma helper här så feed:en aldrig är tom.
+    """
+    from ..business.game_clock import current_game_date
+    # Trigger auto-tick av spel-månader så nya events skapas allteftersom
+    # eleven driver karaktären framåt. Tysta fel — får inte ta ner GET:en.
+    try:
+        from .v2 import _auto_tick_private_months_if_due
+        from .deps import require_auth as _ra  # noqa: F401
+        from ..school.engines import get_current_actor_student
+        sid = get_current_actor_student()
+        if sid is not None:
+            _auto_tick_private_months_if_due(sid)
+    except Exception:
+        pass
+
+    # Defensiv template-seedning · om startup-hooken har failat eller
+    # eleven kommer in innan templates seedats finns det 0 templates
+    # i master → tick_for_student returnerar 0 events → eleven får
+    # ALDRIG sociala förslag. Säkerställ att master har templates här.
+    try:
+        with master_session() as ms:
+            seed_event_templates(ms)
+    except Exception:
+        pass
+
+    today = current_game_date()
+
+    # Engångs-städning · radera pre-anchor system-events som
+    # tidigare seed-flöden råkade skapa när tick_month kördes för
+    # historiska månader (Okt-Dec 2025). De var alltid 'missade' i
+    # Historik-fliken eftersom deadline < today efter att eleven nått
+    # anchor → falskt intryck av att eleven 'missade' händelser hen
+    # aldrig fått chans att svara på. Endast system-skapade events
+    # rensas (lärar-skapade med source != 'system' lämnas orörda).
+    # Accepterade/declinade events rörs inte heller eftersom de kan ha
+    # en koppling till en Transaction som driver huvudboken.
+    try:
+        from ..game_engine.release_schedule import GAME_ANCHOR_DATE
+        pre_anchor = (
+            scope.query(StudentEvent)
+            .filter(
+                StudentEvent.proposed_date < GAME_ANCHOR_DATE,
+                StudentEvent.source == "system",
+                StudentEvent.status.in_(["pending", "expired"]),
+                StudentEvent.resulting_transaction_id.is_(None),
+            )
+            .all()
+        )
+        for e in pre_anchor:
+            scope.delete(e)
+        if pre_anchor:
+            scope.flush()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "list_pending: pre-anchor cleanup misslyckades",
+        )
+
+    expire_old_events(scope, today=today)
     rows = (
         scope.query(StudentEvent)
-        .filter(StudentEvent.status == "pending")
+        .filter(
+            StudentEvent.status == "pending",
+            StudentEvent.deadline >= today,
+        )
         .order_by(StudentEvent.deadline.asc())
         .all()
     )
+
+    # Backstop · säkerställ att senaste 4 spel-veckorna har events.
+    # tick_for_student är idempotent per ISO-vecka (already_ticked-
+    # check) så det är säkert att kalla. Ny elev som spelar from
+    # anchor (2026-01-01) → fyller på vecka 1, 2, 3, 4 av spel-tid.
+    # Eleven får både social-events att hantera + en känsla att
+    # spel-tiden faktiskt rör sig.
+    try:
+        from datetime import timedelta as _td_eg
+        from ..school.engines import (
+            get_current_actor_student as _gcas_e,
+        )
+        from ..school.models import Student as _Stu_e
+        sid_e = _gcas_e()
+        if sid_e is not None:
+            need_recompute = False
+            with master_session() as ms_e:
+                stu_e = ms_e.get(_Stu_e, sid_e)
+                if stu_e is not None:
+                    # Backfill senaste 4 spel-veckorna · 0..3 veckor
+                    # bakåt från today. tick_for_student skippar om
+                    # veckan redan tickats (already_ticked-flagga).
+                    for w_back in range(4):
+                        tick_day = today - _td_eg(days=w_back * 7)
+                        try:
+                            r = tick_for_student(
+                                scope_session=scope,
+                                master_session=ms_e,
+                                student_seed=sid_e,
+                                today=tick_day,
+                                max_events_per_tick=3,
+                            )
+                            if r.events_created > 0:
+                                need_recompute = True
+                        except Exception:
+                            import logging
+                            logging.getLogger(__name__).exception(
+                                "list_pending: backstop tick failed "
+                                "för day=%s student=%s",
+                                tick_day, sid_e,
+                            )
+                    if need_recompute:
+                        scope.commit()
+            if need_recompute:
+                # Re-query · ev. nya events som skapats
+                rows = (
+                    scope.query(StudentEvent)
+                    .filter(
+                        StudentEvent.status == "pending",
+                        StudentEvent.deadline >= today,
+                    )
+                    .order_by(StudentEvent.deadline.asc())
+                    .all()
+                )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "list_pending: backstop misslyckades",
+        )
+
     return {
         "events": [_to_out(e).model_dump() for e in rows],
         "count": len(rows),
@@ -118,6 +252,10 @@ def trigger_tick(
             today = date.fromisoformat(payload.today)
         except ValueError:
             raise HTTPException(400, "Felaktigt datum")
+    if today is None:
+        # Default · spel-tid synkat med privat
+        from ..business.game_clock import current_game_date
+        today = current_game_date()
 
     # Säkerställ att master har templates
     with master_session() as ms:
@@ -148,7 +286,8 @@ def trigger_tick(
 @router.post("/internal/expire")
 def trigger_expire(scope: Session = Depends(db)) -> dict:
     """Markera passade pending-events som expired."""
-    n = expire_old_events(scope)
+    from ..business.game_clock import current_game_date
+    n = expire_old_events(scope, today=current_game_date())
     return {"expired": n}
 
 
@@ -301,7 +440,55 @@ def accept_event(
         signed_amount = -_Dec(str(cost_applied))  # negativt = utgift
         desc = f"Event: {ev.title}"
 
-    # Skapa Transaction
+    # Skapa Transaction · datera i SPEL-tid, inte real-tid.
+    # Tidigare användes _dt.utcnow().date() (real-tid = 2026-05-XX när
+    # eleven är i spel-tid 2026-01-XX). Transaktionerna hamnade då i
+    # huvudbokens 'Maj 2026'-period istället för 'Januari 2026' där
+    # själva event-händelsen utspelar sig pedagogiskt. Vi använder
+    # event:ets proposed_date (= spel-tid när eleven blev erbjuden
+    # händelsen) som datum, med fallback till current_game_date() om
+    # något skulle saknas.
+    from ..business.game_clock import current_game_date as _cgd_acc
+    today_game = _cgd_acc()
+    tx_date = ev.proposed_date or today_game
+
+    # FRAMTIDA event · om proposed_date ligger efter spel-idag (t.ex.
+    # eleven accepterar 1 jan ett event som händer 4 jan), sätt
+    # Transaction.released_at till den real-tidpunkt då spel-tiden når
+    # tx_date. Då gömmer _released_filter transaktionen från bank/
+    # kontoutdrag tills spel-tiden faktiskt passerat datumet. Tidigare
+    # visades framtida tx direkt på kontoutdraget → eleven såg pengar
+    # försvinna innan händelsen ens hunnit hända. Pedagogiskt fel:
+    # belöning/straff ska komma PÅ det datum då händelsen utspelar sig.
+    tx_released_at = None
+    if tx_date > today_game:
+        try:
+            from ..game_engine.release_schedule import (
+                game_to_real_datetime as _g2r_acc,
+            )
+            from ..school.engines import (
+                master_session as _ms_acc,
+                get_current_actor_student as _gcas_acc,
+            )
+            from ..school.models import Student as _Stu_acc
+            from datetime import datetime as _dt_acc
+            _actor = _gcas_acc()
+            if _actor is not None:
+                with _ms_acc() as _msdb_acc:
+                    _stu = _msdb_acc.get(_Stu_acc, _actor)
+                    if _stu is not None and _stu.created_at is not None:
+                        # Använd morgonen av tx_date (08:00) som
+                        # spel-tidpunkt → transaktionen släpps när
+                        # eleven "vaknar" den dagen.
+                        game_dt = _dt_acc.combine(
+                            tx_date, _dt_acc.min.time(),
+                        ).replace(hour=8)
+                        tx_released_at = _g2r_acc(
+                            _stu.created_at, game_dt,
+                        )
+        except Exception:
+            tx_released_at = None
+
     tx = None
     if signed_amount != 0:
         h = _hashlib.sha256(
@@ -309,12 +496,13 @@ def accept_event(
         ).hexdigest()
         tx = Transaction(
             account_id=account_id,
-            date=_dt.utcnow().date(),
+            date=tx_date,
             amount=signed_amount,
             currency="SEK",
             raw_description=desc,
             is_transfer=False,
             hash=h,
+            released_at=tx_released_at,
         )
         scope.add(tx)
         scope.flush()
@@ -328,6 +516,55 @@ def accept_event(
 
     # Nollställ decline-streak — eleven har sagt ja
     _reset_decline_streak(scope)
+
+    # === Wellbeing-pentagon delta (V2) ===
+    # Tidigare lagrades impacts BARA i ev.impact_applied som JSON för
+    # audit. Pentagon-vyn uppdaterades aldrig automatiskt → eleven såg
+    # att hen accepterat 5 sociala events utan att 'social'-axeln rörde
+    # sig. Nu applicerar vi varje impact-axel via apply_pentagon_delta
+    # (samma funktion som lön / mail / lån-flöden använder).
+    from ..school.engines import get_current_actor_student
+    actor_id = get_current_actor_student()
+    if actor_id is not None:
+        from ..game_engine.pentagon import apply_pentagon_delta
+        # Mappa impact-axel-namn till pentagon-axlarna. EventTemplate
+        # använder economy/health/social/leisure/safety vilket är
+        # exakt samma namn som pentagon — så vi kan loopa direkt.
+        for axis, delta in impacts.items():
+            if delta == 0:
+                continue
+            try:
+                apply_pentagon_delta(
+                    actor_id,
+                    axis=axis,
+                    requested_delta=delta,
+                    reason_kind="event_accepted",
+                    reason_id=ev.id,
+                    reason_table="student_events",
+                    explanation=f"Accepterade '{ev.title}'",
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "event accept: pentagon-delta misslyckades",
+                )
+
+    # Lärar-spårning
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="event.accepted",
+            summary=f"Accepterade '{ev.title}'",
+            payload={
+                "event_id": ev.id,
+                "event_code": ev.event_code,
+                "category": ev.category,
+                "cost": float(ev.cost),
+                "impacts": impacts,
+            },
+        )
+    except Exception:
+        pass
 
     # Pedagogisk note
     if is_income:
@@ -427,6 +664,45 @@ def decline_event(
     ev.impact_applied = decline_impact
     scope.flush()
 
+    # Wellbeing-delta även vid decline (negativ social om socialt event)
+    from ..school.engines import get_current_actor_student
+    actor_id = get_current_actor_student()
+    if actor_id is not None and any(decline_impact.values()):
+        from ..game_engine.pentagon import apply_pentagon_delta
+        for axis, delta in decline_impact.items():
+            if delta == 0:
+                continue
+            try:
+                apply_pentagon_delta(
+                    actor_id,
+                    axis=axis,
+                    requested_delta=delta,
+                    reason_kind="event_declined",
+                    reason_id=ev.id,
+                    reason_table="student_events",
+                    explanation=f"Nekade '{ev.title}'",
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "event decline: pentagon-delta misslyckades",
+                )
+
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="event.declined",
+            summary=f"Nekade '{ev.title}'",
+            payload={
+                "event_id": ev.id,
+                "event_code": ev.event_code,
+                "category": ev.category,
+                "reason": payload.decision_reason,
+            },
+        )
+    except Exception:
+        pass
+
     # Underhåll decline-streak. social-kategori utan 'sparande'-skäl
     # räknas som onödigt nej.
     is_social = ev.category in {"social", "family", "culture", "sport"}
@@ -500,7 +776,10 @@ def list_classmates() -> dict:
 
     actor_id = get_current_actor_student()
     if actor_id is None:
-        raise HTTPException(403, "Saknar student-kontext")
+        # Lärare utan elev-impersonation har ingen klasskamrat-lista.
+        # Returnera tom istället för 403 så frontend kan rendera utan
+        # error-toast.
+        return {"classmates": [], "invites_enabled": False}
 
     with master_session() as ms:
         me = ms.query(Student).filter(Student.id == actor_id).first()
@@ -730,7 +1009,9 @@ def list_invitations(scope: Session = Depends(db)) -> dict:
 
     actor_id = get_current_actor_student()
     if actor_id is None:
-        raise HTTPException(403, "Saknar student-kontext")
+        # Lärare utan elev-impersonation har ingen "inkorg" att visa.
+        # Returnera tom lista istället för 403.
+        return {"invitations": []}
 
     with master_session() as ms:
         rows = (

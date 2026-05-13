@@ -27,10 +27,16 @@ REGION="${REGION:-europe-west1}"
 # Default-projekt — används automatiskt om ingen PROJECT_ID är satt och
 # gcloud config saknar projekt. Överstyrs via env: PROJECT_ID=xxx ./deploy.sh
 DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID:-hembudget}"
-MEMORY="${MEMORY:-1Gi}"
+MEMORY="${MEMORY:-2Gi}"
 CPU="${CPU:-1}"
+# Concurrency 40 var för aggressivt: 40 parallella requests delade
+# en pool på 4+4 connections + bygger upp request-state. Vi körde
+# in i både QueuePool-timeouts OCH 1 GiB-minnetaket. Sänk till 20.
 CONCURRENCY="${CONCURRENCY:-40}"
 TIMEOUT="${TIMEOUT:-300}"
+# Multi-instans + PgBouncer (default på, se HEMBUDGET_ENABLE_PGBOUNCER).
+# 5 inst × 40 concurrency = 200 simultana requests. Conn-budgeten
+# bygger på Cloud SQL db-custom-1-3840 (100 conn cap).
 MAX_INSTANCES="${MAX_INSTANCES:-5}"
 MIN_INSTANCES="${MIN_INSTANCES:-0}"
 
@@ -160,7 +166,12 @@ if [[ "$MODE" == "school" ]]; then
         DB_INSTANCE="${DB_INSTANCE:-hembudget-pg}"
         DB_NAME="${DB_NAME:-hembudget}"
         DB_USER="${DB_USER:-hembudget}"
-        DB_TIER="${DB_TIER:-db-f1-micro}"
+        # db-custom-1-3840 (1 vCPU, 3.75 GB · ~$30/mån i europe-west1)
+        # ger 100 conn-cap → headroom för 5 Cloud Run-inst × 8 PgBouncer-
+        # pool × 2 revisions-overlap = 80 conn under deploy. db-f1-micro
+        # (~25 cap) och db-g1-small (~50) räcker INTE när vi vill ha
+        # multi-instans. Bumpas explicit via DB_TIER=db-g1-small ./deploy.sh.
+        DB_TIER="${DB_TIER:-db-custom-1-3840}"
 
         info "Persistens: Cloud SQL Postgres ($DB_INSTANCE / $DB_NAME)"
 
@@ -168,9 +179,9 @@ if [[ "$MODE" == "school" ]]; then
         gcloud services enable sqladmin.googleapis.com \
             --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
-        # Skapa instansen om den inte finns. db-f1-micro är gratis-
-        # tier-kompatibel för testning. För prod bumpa till db-g1-small
-        # eller större via DB_TIER=db-g1-small ./deploy.sh.
+        # Skapa instansen om den inte finns. För prod-skala kör vi
+        # db-custom-1-3840 (100 conn cap). För prototyp/test kan du
+        # börja på db-f1-micro via DB_TIER=db-f1-micro.
         if ! gcloud sql instances describe "$DB_INSTANCE" \
                 --project="$PROJECT_ID" >/dev/null 2>&1; then
             info "Skapar Cloud SQL-instans $DB_INSTANCE ($DB_TIER) — tar 5-10 min…"
@@ -184,7 +195,22 @@ if [[ "$MODE" == "school" ]]; then
                 --storage-auto-increase \
                 --quiet
         else
-            ok "Cloud SQL-instans $DB_INSTANCE finns"
+            # Auto-uppgradera till önskad tier om befintlig är mindre.
+            # gcloud sql instances patch är online (kort restart, ~1-2 min
+            # nedtid). Hoppas över om DB_TIER redan matchar.
+            CURRENT_TIER=$(gcloud sql instances describe "$DB_INSTANCE" \
+                --project="$PROJECT_ID" \
+                --format='value(settings.tier)' 2>/dev/null || true)
+            if [[ -n "$CURRENT_TIER" && "$CURRENT_TIER" != "$DB_TIER" ]]; then
+                warn "Cloud SQL-tier är $CURRENT_TIER · uppgraderar till $DB_TIER (ger ~1-2 min nedtid)"
+                gcloud sql instances patch "$DB_INSTANCE" \
+                    --project="$PROJECT_ID" \
+                    --tier="$DB_TIER" \
+                    --quiet
+                ok "Cloud SQL uppgraderad till $DB_TIER"
+            else
+                ok "Cloud SQL-instans $DB_INSTANCE finns ($CURRENT_TIER)"
+            fi
         fi
 
         # Skapa databas om saknas
@@ -294,9 +320,79 @@ if [[ "$MODE" == "school" ]]; then
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_NAME=$TEACHER_NAME"
     fi
 
-    # Skol-läge låser till 1 instans — SQLite-filer delas inte över instanser
-    MAX_INSTANCES=1
-    MIN_INSTANCES=1
+    # Skol-läge · PgBouncer-multiplexer mot Cloud SQL.
+    #
+    # Conn-budget på db-custom-1-3840 (100 conn cap):
+    #   - Postgres-internal (autovacuum, replication-slots): ~10
+    #   - Tillgängliga för app: ~90
+    #   - Per Cloud Run-inst: PGBOUNCER_POOL_SIZE = 8 server-conn
+    #   - 5 instanser × 8 = 40 conn vid full last
+    #   - Under deploy: gammal + ny revision överlappar kort →
+    #     2 × 40 = 80 conn (fitsar i 90)
+    #
+    # PgBouncer på som default (HEMBUDGET_ENABLE_PGBOUNCER=1). Stäng av
+    # tillfälligt vid debug:
+    #   HEMBUDGET_ENABLE_PGBOUNCER=0 MAX_INSTANCES=1 ./deploy.sh
+    HEMBUDGET_ENABLE_PGBOUNCER="${HEMBUDGET_ENABLE_PGBOUNCER:-1}"
+    if [[ "${HEMBUDGET_ENABLE_PGBOUNCER}" == "1" ]]; then
+        ENV_VARS+=",HEMBUDGET_ENABLE_PGBOUNCER=1"
+        PGBOUNCER_POOL_SIZE="${PGBOUNCER_POOL_SIZE:-8}"
+        PGBOUNCER_MAX_CLIENT_CONN="${PGBOUNCER_MAX_CLIENT_CONN:-200}"
+        ENV_VARS+=",PGBOUNCER_POOL_SIZE=${PGBOUNCER_POOL_SIZE}"
+        ENV_VARS+=",PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}"
+        info "PgBouncer på · pool=${PGBOUNCER_POOL_SIZE} · max-instances=${MAX_INSTANCES}"
+    else
+        info "PgBouncer av · direct-connect mot Cloud SQL · max-instances=${MAX_INSTANCES}"
+        if [[ "$MAX_INSTANCES" -gt 1 ]]; then
+            warn "MAX_INSTANCES=$MAX_INSTANCES utan PgBouncer riskerar conn-cap. Sätt MAX_INSTANCES=1."
+        fi
+    fi
+
+    # Redis-cache · 30s-aggregat-cache av /v2/hub. Stor win på heavy
+    # endpoints. Två alternativ:
+    #
+    #   1. Upstash (rekommenderat för småstart) · gratis-tier 10 000
+    #      ops/dag = ~333 ops/min = räcker 1-2 klasser. Ingen VPC,
+    #      ingen Memorystore-kostnad. Skapa konto på upstash.com,
+    #      kopiera Redis URL (rediss://default:TOKEN@HOST:PORT) och
+    #      sätt som env-var:
+    #        UPSTASH_REDIS_URL=rediss://... ./deploy.sh
+    #
+    #   2. Memorystore basic (~$30/mån) · skapas via:
+    #        gcloud redis instances create hembudget-cache \
+    #          --size=1 --region=europe-west1 --tier=basic
+    #      Kräver VPC connector — mer setup.
+    #
+    # Utan REDIS_URL faller appen tillbaka till in-memory-cache per
+    # Cloud Run-instans (mindre effektivt med multi-instans men
+    # fungerande).
+    if [[ -n "${UPSTASH_REDIS_URL:-}" ]]; then
+        # Skicka in via Cloud Run-secret så token inte hamnar i
+        # revisionsbeskrivningen plain-text.
+        REDIS_SECRET_NAME="hembudget-redis-url"
+        if ! gcloud secrets describe "$REDIS_SECRET_NAME" \
+                --project="$PROJECT_ID" >/dev/null 2>&1; then
+            printf "%s" "$UPSTASH_REDIS_URL" | gcloud secrets create \
+                "$REDIS_SECRET_NAME" --data-file=- \
+                --project="$PROJECT_ID" --quiet
+        else
+            printf "%s" "$UPSTASH_REDIS_URL" | gcloud secrets versions add \
+                "$REDIS_SECRET_NAME" --data-file=- \
+                --project="$PROJECT_ID" --quiet
+        fi
+        if [[ -n "$SA_EMAIL" ]]; then
+            gcloud secrets add-iam-policy-binding "$REDIS_SECRET_NAME" \
+                --member="serviceAccount:${SA_EMAIL}" \
+                --role="roles/secretmanager.secretAccessor" \
+                --project="$PROJECT_ID" --quiet 2>/dev/null || true
+        fi
+        ok "Redis-cache aktiv via Upstash"
+    elif [[ -n "${HEMBUDGET_REDIS_URL:-}" ]]; then
+        ENV_VARS+=",HEMBUDGET_REDIS_URL=${HEMBUDGET_REDIS_URL}"
+        ok "Redis-cache aktiv via HEMBUDGET_REDIS_URL"
+    else
+        info "Cache: in-memory (per Cloud Run-instans · sätt UPSTASH_REDIS_URL för delad cache)"
+    fi
 
     info "MODE=school: lärare/elev-läge aktiveras"
     info "  Bootstrap-kod: $BOOTSTRAP_SECRET (spara den — behövs för första lärarinlog)"
@@ -337,9 +433,13 @@ DEPLOY_ARGS=(
 # Cloud SQL: koppla in Postgres-instansen + injicera DATABASE_URL
 # som secret så lösenordet inte hamnar i revisionsbeskrivningen
 if [[ "$MODE" == "school" && -n "$CLOUDSQL_INSTANCE_CONN" ]]; then
+    SECRET_BINDS="HEMBUDGET_DATABASE_URL=hembudget-database-url:latest"
+    if [[ -n "${UPSTASH_REDIS_URL:-}" ]]; then
+        SECRET_BINDS="${SECRET_BINDS},HEMBUDGET_REDIS_URL=hembudget-redis-url:latest"
+    fi
     DEPLOY_ARGS+=(
         --add-cloudsql-instances="$CLOUDSQL_INSTANCE_CONN"
-        --update-secrets="HEMBUDGET_DATABASE_URL=hembudget-database-url:latest"
+        --update-secrets="$SECRET_BINDS"
     )
 fi
 

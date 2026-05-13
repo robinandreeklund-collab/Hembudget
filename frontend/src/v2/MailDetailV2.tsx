@@ -19,6 +19,7 @@ import {
 } from "./api";
 import { V2Banner } from "./V2Banner";
 import "./lan.css";
+import "./faktura-shell.css";
 
 const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
@@ -33,15 +34,161 @@ const SHORT_DATE = (iso: string | null): string => {
   });
 };
 
-const TIME_DATE = (iso: string): string => {
-  const d = new Date(iso);
-  return d.toLocaleString("sv-SE", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+// TIME_DATE-helper togs bort när sender_meta-raden ersattes med
+// strukturerad faktura-meta (Org.nr + adress).
+
+// === Avsändar-meta-uppslag · ger fakturalook med riktig org-nr + adress ===
+// Mappar sender_short / sender substring till officiella detaljer som
+// visas i fakturalookens header. Pedagogiskt: eleven ser hur en riktig
+// faktura ser ut med organisationsnummer, adress och kontaktuppgifter.
+type SenderMeta = {
+  fullName: string;
+  orgNumber: string;
+  address: string[];
+  website?: string;
 };
+const SENDER_META: Record<string, SenderMeta> = {
+  // Hyresvärdar (sender innehåller "Bostäder")
+  "Bostäder": {
+    fullName: "Bostadsförvaltning AB",
+    orgNumber: "556421-7892",
+    address: ["Hyrestorget 4", "112 30 Stockholm"],
+    website: "www.bostader.se",
+  },
+  // Försäkringsbolag
+  Folksam: {
+    fullName: "Folksam ömsesidig sakförsäkring",
+    orgNumber: "502006-1619",
+    address: ["106 60 Stockholm"],
+    website: "www.folksam.se",
+  },
+  Trygg: {
+    fullName: "Trygg-Hansa Försäkring AB",
+    orgNumber: "516406-0763",
+    address: ["106 26 Stockholm"],
+    website: "www.trygghansa.se",
+  },
+  // Telekom
+  Telia: {
+    fullName: "Telia Sverige AB",
+    orgNumber: "556430-0142",
+    address: ["169 94 Solna"],
+    website: "www.telia.se",
+  },
+  Bahnhof: {
+    fullName: "Bahnhof AB",
+    orgNumber: "556519-9493",
+    address: ["Box 7702", "103 95 Stockholm"],
+    website: "www.bahnhof.se",
+  },
+  // Energi
+  Tibber: {
+    fullName: "Tibber AB",
+    orgNumber: "559107-0570",
+    address: ["Kungsbron 1", "111 22 Stockholm"],
+    website: "www.tibber.com",
+  },
+  // Kollektivtrafik
+  Västtrafik: {
+    fullName: "Västtrafik AB",
+    orgNumber: "556558-5012",
+    address: ["Box 405", "401 26 Göteborg"],
+    website: "www.vasttrafik.se",
+  },
+  Lokaltrafik: {
+    fullName: "Regionens kollektivtrafik",
+    orgNumber: "232100-0016",
+    address: ["Stora Torget 1"],
+    website: "www.lokaltrafik.se",
+  },
+  // Banker
+  SEB: {
+    fullName: "Skandinaviska Enskilda Banken AB",
+    orgNumber: "502032-9081",
+    address: ["106 40 Stockholm"],
+    website: "www.seb.se",
+  },
+  Nordea: {
+    fullName: "Nordea Bank Abp",
+    orgNumber: "516406-0120",
+    address: ["105 71 Stockholm"],
+    website: "www.nordea.se",
+  },
+  Avanza: {
+    fullName: "Avanza Bank AB",
+    orgNumber: "556573-5668",
+    address: ["Box 1399", "111 93 Stockholm"],
+    website: "www.avanza.se",
+  },
+  // Myndigheter
+  Skatteverket: {
+    fullName: "Skatteverket",
+    orgNumber: "202100-5448",
+    address: ["171 94 Solna"],
+    website: "www.skatteverket.se",
+  },
+  Försäkringskassan: {
+    fullName: "Försäkringskassan",
+    orgNumber: "202100-5521",
+    address: ["103 51 Stockholm"],
+    website: "www.forsakringskassan.se",
+  },
+  Pensionsmyndigheten: {
+    fullName: "Pensionsmyndigheten",
+    orgNumber: "202100-6255",
+    address: ["106 87 Stockholm"],
+    website: "www.pensionsmyndigheten.se",
+  },
+  CSN: {
+    fullName: "Centrala studiestödsnämnden",
+    orgNumber: "202100-1819",
+    address: ["851 82 Sundsvall"],
+    website: "www.csn.se",
+  },
+  // Arbetsgivare
+  Arbetsgivaren: {
+    fullName: "Arbetsgivaren AB",
+    orgNumber: "556xxx-xxxx",
+    address: [],
+  },
+};
+
+function lookupSender(sender: string): SenderMeta {
+  // Prova exakt match först, sen substring
+  if (SENDER_META[sender]) return SENDER_META[sender];
+  for (const key of Object.keys(SENDER_META)) {
+    if (sender.includes(key)) {
+      // För "Linköping Bostäder" → använd "Bostäder"-template men byt namn
+      if (key === "Bostäder") {
+        return {
+          ...SENDER_META[key],
+          fullName: sender + " AB",
+        };
+      }
+      return SENDER_META[key];
+    }
+  }
+  // Fallback för okänd avsändare — generera plausibel meta
+  return {
+    fullName: sender,
+    orgNumber: "—",
+    address: [],
+  };
+}
+
+// Faktura-typ-badge utifrån mail_type + sender_kind
+function fakturaBadge(
+  mail_type: string,
+  sender_kind: string,
+): { label: string; color: string } {
+  if (mail_type === "salary_slip") return { label: "LÖNESPEC", color: "#3b82f6" };
+  if (mail_type === "reminder") return { label: "PÅMINNELSE", color: "#dc2626" };
+  if (mail_type === "authority") return { label: "MYNDIGHETSPOST", color: "#16a34a" };
+  if (mail_type === "info") return { label: "INFORMATION", color: "#64748b" };
+  // invoice — variera baserat på sender_kind
+  if (sender_kind === "cred") return { label: "KREDITKORTSFAKTURA", color: "#6366f1" };
+  return { label: "FAKTURA", color: "#dc4c2b" };
+}
 
 export function MailDetailV2() {
   const { mailId } = useParams<{ mailId: string }>();
@@ -50,7 +197,26 @@ export function MailDetailV2() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
+  // BankID-state har tagits bort eftersom lån-accept nu sker via
+  // /v2/lan-vyn (med separat BankID-modal där). MailDetailV2 visar
+  // bara en länk "Gå till Lånegivaren" för lån-brev.
+  // IDs av lån-erbjudanden som FORTFARANDE är pending (godkända men
+  // ej accepterade). Vi visar "Acceptera lånet"-knappen bara om
+  // brevets _loan_application_id-marker finns i denna mängd. Om
+  // eleven redan accepterat via /v2/lan eller via tidigare brev-
+  // klick gömmer vi knappen för att undvika dubbla accepter.
+  const [pendingLoanIds, setPendingLoanIds] = useState<Set<number>>(
+    new Set(),
+  );
   const navigate = useNavigate();
+
+  function refreshPendingLoanIds() {
+    v2Api.creditPendingOffers()
+      .then((d) =>
+        setPendingLoanIds(new Set(d.offers.map((o) => o.application_id))),
+      )
+      .catch(() => null);
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -58,7 +224,12 @@ export function MailDetailV2() {
       .mailDetail(id)
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
+    refreshPendingLoanIds();
   }, [id]);
+
+  // BankID-polling-useEffect borttagen · lån-accept sker nu i
+  // /v2/lan-vyn istället för i brevet, så ingen modal eller polling
+  // behövs här längre.
 
   async function exportToBank() {
     if (!data) return;
@@ -130,6 +301,72 @@ export function MailDetailV2() {
   const isSalarySlip = data.salary_slip != null;
   const isStructuredInvoice = data.invoice != null;
 
+  // Anställningserbjudande · body innehåller "_employment_id=N"-marker
+  // som vi skickar med vid accept/decline. Marker döljs visuellt.
+  const employmentIdMatch = m.body?.match(/_employment_id=(\d+)/);
+  const employmentOfferId = employmentIdMatch
+    ? parseInt(employmentIdMatch[1], 10)
+    : null;
+  // Lånegodkännande · body innehåller "_loan_application_id=N"-marker.
+  const loanIdMatch = m.body?.match(/_loan_application_id=(\d+)/);
+  const loanApplicationId = loanIdMatch
+    ? parseInt(loanIdMatch[1], 10)
+    : null;
+  const bodyClean = m.body
+    ? m.body
+        .replace(/_employment_id=\d+\n?/g, "")
+        .replace(/_loan_application_id=\d+\n?/g, "")
+        .trim()
+    : "";
+
+  // Lån-acceptans/decline sker nu i /v2/lan-vyn (med BankID-modal).
+  // MailDetailV2 visar bara en länk "Gå till Lånegivaren" eftersom
+  // signering kräver QR-kod-modal som måste återanvändas via samma
+  // entry point.
+
+  async function respondToOffer(accept: boolean) {
+    if (employmentOfferId == null) return;
+    let reason: string | undefined;
+    if (!accept) {
+      const r = prompt(
+        "Skäl till att tacka nej (frivilligt — visas för företagaren)",
+        "",
+      );
+      if (r === null) return;
+      reason = r.trim() || undefined;
+    } else {
+      if (
+        !confirm(
+          "Acceptera anställning?\n\n"
+            + "· Din nuvarande anställning sägs upp automatiskt med 30 dgr varsel (LAS).\n"
+            + "· Din profil byter arbetsgivare direkt och första lönespec utbetalas den 25:e.\n\n"
+            + "Är du säker?",
+        )
+      ) {
+        return;
+      }
+    }
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      if (accept) {
+        await v2Api.employmentAccept(employmentOfferId);
+      } else {
+        await v2Api.employmentDecline(employmentOfferId, reason);
+      }
+      await v2Api.updateMailStatus(id, "handled");
+      const refreshed = await v2Api.mailDetail(id);
+      setData(refreshed);
+      setExportMsg(
+        accept ? "✓ Anställning accepterad — välkommen!" : "Du tackade nej.",
+      );
+    } catch (e) {
+      setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // Avsändar-icon-färg per kind
   const senderColors: Record<string, string> = {
     cred: "linear-gradient(135deg, #6366f1 0%, #818cf8 100%)",
@@ -144,6 +381,12 @@ export function MailDetailV2() {
   };
   const senderBg = senderColors[m.sender_kind] || senderColors.other;
 
+  // Faktura-meta för shellen
+  const senderMeta = lookupSender(m.sender);
+  const badge = fakturaBadge(m.mail_type, m.sender_kind);
+  const fakturaNumber = data.invoice?.invoice_number
+    || (m.ocr_reference ? `#${m.ocr_reference.slice(0, 10)}` : null);
+
   return (
     <div className="v2-lan-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
@@ -153,127 +396,83 @@ export function MailDetailV2() {
           Tillbaka till postlådan
         </Link>
 
-        <article
-          style={{
-            background: "rgba(15,21,37,0.7)",
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-          }}
-        >
-          {/* Header */}
-          <header
-            style={{
-              padding: "24px 28px",
-              borderBottom: "1px solid var(--line)",
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 18,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ minWidth: 260, flex: "1 1 60%" }}>
+        <article className="faktura-shell">
+          {/* === FAKTURA HEADER · avsändare + badge + meta === */}
+          <header className="fs-head">
+            <div className="fs-head-left">
               <div
-                style={{
-                  display: "flex",
-                  gap: 14,
-                  alignItems: "center",
-                  marginBottom: 12,
-                }}
+                className="fs-sender-logo"
+                style={{ background: senderBg }}
               >
-                <div
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 8,
-                    background: senderBg,
-                    display: "grid",
-                    placeItems: "center",
-                    fontFamily: "var(--mono)",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "#fff",
-                    flexShrink: 0,
-                  }}
-                >
-                  {m.sender_short || m.sender.slice(0, 3).toUpperCase()}
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontFamily: "var(--serif)",
-                      fontSize: 16,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {m.sender}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "var(--mono)",
-                      fontSize: 10,
-                      color: "var(--text-mid)",
-                    }}
-                  >
-                    {m.sender_meta || `${m.mail_type} · ${TIME_DATE(m.received_at)}`}
-                  </div>
+                {m.sender_short || m.sender.slice(0, 3).toUpperCase()}
+              </div>
+              <div className="fs-sender-block">
+                <div className="fs-sender-name">{senderMeta.fullName}</div>
+                <div className="fs-sender-meta">
+                  Org.nr {senderMeta.orgNumber}
+                  {senderMeta.address.map((line, i) => (
+                    <span key={i}> · {line}</span>
+                  ))}
+                  {senderMeta.website && <span> · {senderMeta.website}</span>}
                 </div>
               </div>
-              <div
-                style={{
-                  fontFamily: "var(--serif)",
-                  fontSize: 22,
-                  fontWeight: 700,
-                  letterSpacing: "-0.4px",
-                }}
-              >
-                {m.subject}
-              </div>
-              {m.body_meta && (
-                <div
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 11,
-                    color: "var(--text-mid)",
-                    marginTop: 6,
-                  }}
-                >
-                  {m.body_meta}
-                </div>
-              )}
             </div>
-            <div
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 11,
-                color: "var(--text-mid)",
-                lineHeight: 1.7,
-                textAlign: "right",
-                minWidth: 200,
-              }}
-            >
-              {m.due_date && (
-                <>
-                  Förfaller <strong>{SHORT_DATE(m.due_date)}</strong>
-                  <br />
-                </>
-              )}
-              {m.amount != null && (
-                <>
-                  Belopp:{" "}
-                  <strong>
-                    {m.amount > 0 ? "+ " : "− "}
-                    {SEK(Math.abs(m.amount))} kr
-                  </strong>
-                  <br />
-                </>
-              )}
-              {m.ocr_reference && (
-                <>
-                  OCR <strong>{m.ocr_reference}</strong>
-                </>
-              )}
+            <div className="fs-head-right">
+              <span
+                className="fs-badge"
+                style={{
+                  borderColor: badge.color,
+                  color: badge.color,
+                }}
+              >
+                {badge.label}
+              </span>
             </div>
           </header>
+
+          {/* === META-RAD · kund + datum + fakturanr + förfaller === */}
+          <div className="fs-meta-grid">
+            <div className="fs-meta-cell">
+              <div className="fs-meta-eye">Mottagare</div>
+              <div className="fs-meta-val fs-meta-val-name">
+                {(data as { recipient_name?: string }).recipient_name || "Privatperson"}
+              </div>
+            </div>
+            <div className="fs-meta-cell">
+              <div className="fs-meta-eye">
+                {m.mail_type === "salary_slip" ? "Utbetald" : "Fakturadatum"}
+              </div>
+              <div className="fs-meta-val">
+                {SHORT_DATE(m.received_at)}
+              </div>
+            </div>
+            {fakturaNumber && (
+              <div className="fs-meta-cell">
+                <div className="fs-meta-eye">
+                  {m.mail_type === "salary_slip" ? "Lönespec" : "Fakturanr"}
+                </div>
+                <div className="fs-meta-val fs-meta-val-mono">
+                  {fakturaNumber}
+                </div>
+              </div>
+            )}
+            {m.due_date && m.mail_type !== "salary_slip" && (
+              <div className="fs-meta-cell fs-meta-cell-emphasis">
+                <div className="fs-meta-eye">Förfaller</div>
+                <div className="fs-meta-val fs-meta-val-due">
+                  {SHORT_DATE(m.due_date)}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* === SUBJECT (stor) === */}
+          <div className="fs-subject">
+            <h1 className="fs-subject-h">{m.subject}</h1>
+            {m.body_meta && (
+              <div className="fs-subject-meta">{m.body_meta}</div>
+            )}
+          </div>
 
           {/* Body */}
           <div style={{ padding: "24px 28px" }}>
@@ -288,7 +487,7 @@ export function MailDetailV2() {
               <InvoiceLayout inv={data.invoice} />
             )}
             {!isCcInvoice && !isSalarySlip && !isStructuredInvoice
-              && m.body && (
+              && bodyClean && (
               <div
                 style={{
                   fontFamily: "var(--serif)",
@@ -298,7 +497,7 @@ export function MailDetailV2() {
                   color: "var(--text)",
                 }}
               >
-                {m.body}
+                {bodyClean}
               </div>
             )}
 
@@ -323,6 +522,47 @@ export function MailDetailV2() {
               </div>
             )}
 
+            {/* === BETALNINGSBLOCK · pedagogiskt fakturalik ruta === */}
+            {(m.bankgiro || m.ocr_reference) && m.mail_type !== "salary_slip"
+              && m.mail_type !== "info" && (
+              <div className="fs-pay-block">
+                <div className="fs-pay-eye">● Betalning</div>
+                <div className="fs-pay-grid">
+                  {m.bankgiro && (
+                    <div>
+                      <div className="fs-pay-cell-eye">Bankgiro</div>
+                      <div className="fs-pay-cell-val">{m.bankgiro}</div>
+                    </div>
+                  )}
+                  {m.ocr_reference && (
+                    <div>
+                      <div className="fs-pay-cell-eye">OCR / referens</div>
+                      <div className="fs-pay-cell-val fs-pay-cell-mono">
+                        {m.ocr_reference}
+                      </div>
+                    </div>
+                  )}
+                  {m.due_date && (
+                    <div>
+                      <div className="fs-pay-cell-eye">Förfaller</div>
+                      <div className="fs-pay-cell-val fs-pay-cell-due">
+                        {SHORT_DATE(m.due_date)}
+                      </div>
+                    </div>
+                  )}
+                  {m.amount != null && (
+                    <div>
+                      <div className="fs-pay-cell-eye">Att betala</div>
+                      <div className="fs-pay-cell-val fs-pay-cell-amount">
+                        {m.amount > 0 ? "+ " : ""}
+                        {SEK(Math.abs(m.amount))} kr
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
             <div
               style={{
@@ -334,6 +574,51 @@ export function MailDetailV2() {
                 borderTop: "1px solid var(--line)",
               }}
             >
+              {/* Anställningserbjudande · accept / decline · bara om
+                  status fortfarande unhandled OCH employment_id finns. */}
+              {employmentOfferId != null && m.status === "unhandled" && (
+                <>
+                  <button
+                    type="button"
+                    className="cta-btn"
+                    disabled={exporting}
+                    onClick={() => respondToOffer(true)}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    ✓ Acceptera anställning
+                  </button>
+                  <button
+                    type="button"
+                    className="cta-btn ghost"
+                    disabled={exporting}
+                    onClick={() => respondToOffer(false)}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    ✗ Tacka nej
+                  </button>
+                </>
+              )}
+              {/* Lånegodkännande · accept / decline · samma mönster
+                  som employment, bara om status fortfarande unhandled
+                  OCH _loan_application_id finns i body OCH application
+                  fortfarande är pending (har inte redan accepterats
+                  via /v2/lan-vyn). */}
+              {/* Lånegodkännande · ersätter accept/decline-knapparna
+                  med en "Gå till Lånegivaren"-link. Acceptansen sker
+                  nu i /v2/lan med stylad BankID-modal, INTE direkt
+                  i brevet. Detta för att hålla en konsistent flow:
+                  alla lån signeras med BankID via Lånegivaren-vyn. */}
+              {loanApplicationId != null
+                && m.status === "unhandled"
+                && pendingLoanIds.has(loanApplicationId) && (
+                <Link
+                  to="/v2/lan"
+                  className="cta-btn"
+                  style={{ textDecoration: "none" }}
+                >
+                  Gå till Lånegivaren · signera & acceptera →
+                </Link>
+              )}
               {/* Faktura kan exporteras till banken (skapar UpcomingTransaction) */}
               {(m.mail_type === "invoice" || m.mail_type === "reminder") &&
                 m.amount !== null && (
@@ -361,10 +646,37 @@ export function MailDetailV2() {
                   Gå till banken & signera →
                 </button>
               )}
+              {/* Försök igen · för failed autogiro-dragningar (SKV-5) */}
+              {m.status === "failed" && (
+                <button
+                  type="button"
+                  className="cta-btn primary"
+                  disabled={exporting}
+                  onClick={async () => {
+                    try {
+                      const res = await v2Api.retryPayment(m.id);
+                      alert(res.message);
+                      if (res.status === "paid") {
+                        // Reload current page
+                        window.location.reload();
+                      }
+                    } catch (e) {
+                      alert(
+                        "Kunde inte försöka igen: "
+                        + String((e as Error)?.message || e),
+                      );
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  Försök igen →
+                </button>
+              )}
               {/* Markera som betald manuellt (utan att gå via BankID) */}
               {(m.mail_type === "invoice" || m.mail_type === "reminder") &&
                 m.status !== "paid" &&
-                m.status !== "expired" && (
+                m.status !== "expired" &&
+                m.status !== "failed" && (
                   <button
                     type="button"
                     className="cta-btn ghost"
@@ -472,6 +784,9 @@ export function MailDetailV2() {
         {/* Pedagogik */}
         {isCcInvoice && <CcPedaBlock />}
         {isSalarySlip && <SalaryPedaBlock />}
+
+        {/* BankID-modal har flyttats till /v2/lan-vyn · MailDetailV2
+            visar bara en länk "Gå till Lånegivaren" för lån-brev. */}
 
       </div>
     </div>

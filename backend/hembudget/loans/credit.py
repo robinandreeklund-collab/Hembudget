@@ -50,53 +50,93 @@ def _classify_uc_score(
     payment_marks: int,
     running_apps: int,
     annual_income: float,
+    *,
+    age: int | None = None,
+    monthly_net: int | None = None,
+    family_status: str | None = None,
+    housing_type: str | None = None,
+    months_on_platform: int = 0,
+    savings_buffer_months: float = 0.0,
 ) -> tuple[str, int]:
-    """Mappa till UC-stil A-E + numeriskt värde 0-100.
+    """Realistisk UC-stil-bedömning · A-E + 0-100.
 
-    Modellen är förenklad men deterministisk:
-    - 100 baseline
-    - −15 per betalningsanmärkning (max 60)
-    - −5 per pågående ansökan över 1
-    - −10 om debt_ratio > 4.5 (över FI-tak)
-    - −5 om debt_ratio > 3.0
-    - −20 om annual_income < 100 000 (instabil inkomst)
+    Tidigare formel hade base 100 och drog bara små poäng vid problem.
+    Resultat: alla elever fick A (100/100) trots att en 22-årig fresh-
+    graduate utan kreditshistorik IRL skulle få C/D av en bank.
+
+    Ny formel speglar verkliga UC-faktorer:
+    - **Ålder + anställningstid** (proxy via age)
+    - **Inkomstnivå** (band, inte cliff)
+    - **Familjestatus** (stabilitet)
+    - **Boendetyp** (BR/villa = etablerad)
+    - **Befintliga lån / skuldkvot**
+    - **Betalningsanmärkningar** (kraftigt straff)
+    - **Pågående ansökningar** (många = oroande)
+    - **Tid på plattformen** (= "tid sedan ansökan startade IRL")
+
+    Vi använder samma viktning som school/credit_scoring.py::compute_score
+    men exponerar bara A-E + 0-100 till caller eftersom CreditCheck-modellen
+    förväntar det formatet.
     """
-    score = 100
-    score -= min(60, payment_marks * 15)
+    from ..school.credit_scoring import compute_score, MIN_SCORE, MAX_SCORE
+    # Mappa till compute_score-inputs. Bristfälliga args (None) hanteras
+    # av compute_score genom att hoppa över respektive faktor.
+    res = compute_score(
+        late_payments=payment_marks,  # treat marks som late_payments
+        failed_payments=0,
+        reminders_l3_or_higher=payment_marks,  # marks räknas som L3+
+        debt_ratio=debt_ratio,
+        savings_buffer_months=savings_buffer_months,
+        satisfaction_score=70,  # neutralt default
+        months_on_platform=months_on_platform,
+        age=age,
+        monthly_net_income=monthly_net,
+        family_status=family_status,
+        housing_type=housing_type,
+    )
+    # Extra straff för många pågående ansökningar (UC-spår)
+    score_300_850 = res.score
     if running_apps > 1:
-        score -= 5 * (running_apps - 1)
-    if debt_ratio > 4.5:
-        score -= 10
-    elif debt_ratio > 3.0:
-        score -= 5
-    if annual_income < 100_000:
-        score -= 20
-    score = max(0, min(100, score))
+        score_300_850 -= 8 * (running_apps - 1)
+    score_300_850 = max(MIN_SCORE, min(MAX_SCORE, score_300_850))
 
-    # A-E mapping
-    if score >= 80:
+    # Mappa 300-850 → 0-100 (verklig UC-skala)
+    score_0_100 = int(round((score_300_850 - MIN_SCORE) * 100 / (MAX_SCORE - MIN_SCORE)))
+    score_0_100 = max(0, min(100, score_0_100))
+
+    # A-E mapping baserad på 0-100. Mer realistisk än tidigare:
+    # - A: 80+ (utmärkt, etablerad)
+    # - B: 60-79 (bra)
+    # - C: 40-59 (medel — vad de flesta unga vuxna får)
+    # - D: 20-39 (sämre — fresh-graduate ofta hamnar här)
+    # - E: <20 (problematisk)
+    if score_0_100 >= 80:
         cls = "A"
-    elif score >= 60:
+    elif score_0_100 >= 60:
         cls = "B"
-    elif score >= 40:
+    elif score_0_100 >= 40:
         cls = "C"
-    elif score >= 20:
+    elif score_0_100 >= 20:
         cls = "D"
     else:
         cls = "E"
-    return cls, score
+    return cls, score_0_100
 
 
 def compute_credit_check(
     s: Session,
     annual_income: Decimal,
     running_applications: int = 0,
+    *,
+    student_id: int | None = None,
 ) -> CreditCheck:
     """Räkna kreditprövning + spara ny CreditCheck-rad.
 
     annual_income: brutto * 12 från StudentProfile.
-    running_applications: antal pågående LoanApplication
-    (placeholder — alltid 0 tills LoanApplication-modellen finns).
+    running_applications: antal pågående LoanApplication.
+    student_id: om angivet hämtas StudentProfile + Student.created_at
+                från master-DB så ålder/familj/boende/tid-på-platform
+                kan användas i scoring (verkligare UC-bedömning).
     """
     today = date.today()
 
@@ -124,11 +164,83 @@ def compute_credit_check(
         float(total_debt) / float(annual_income)
         if annual_income > 0 else 0.0
     )
+
+    # Sparbuffer = (sparkonto + ISK) / snittutgifter senaste 3 mån
+    # Påverkar UC-score realistiskt: en 22-åring med 1-2 mån buffert
+    # får C/D istället för E.
+    savings_buffer_months = 0.0
+    try:
+        from ..db.models import Account, Transaction
+        from sqlalchemy import func as _sf_uc
+        from datetime import date as _d_uc, timedelta as _td_uc
+        savings_balance = Decimal("0")
+        for acc in s.query(Account).filter(
+            Account.type.in_(("savings", "isk"))
+        ).all():
+            ob = acc.opening_balance or Decimal("0")
+            mv = s.query(
+                _sf_uc.coalesce(_sf_uc.sum(Transaction.amount), 0),
+            ).filter(Transaction.account_id == acc.id).scalar() or Decimal("0")
+            savings_balance += ob + Decimal(str(mv))
+        cutoff = _d_uc.today() - _td_uc(days=90)
+        expenses = s.query(
+            _sf_uc.coalesce(_sf_uc.sum(Transaction.amount), 0),
+        ).filter(
+            Transaction.amount < 0,
+            Transaction.date >= cutoff,
+        ).scalar() or 0
+        avg_monthly_expense = abs(Decimal(str(expenses))) / 3 or Decimal("1")
+        savings_buffer_months = (
+            float(savings_balance / avg_monthly_expense)
+            if avg_monthly_expense > 0 else 0.0
+        )
+    except Exception:
+        pass
+
+    # Hämta livssituations-faktorer för realistisk UC-bedömning
+    age = None
+    monthly_net = None
+    family_status = None
+    housing_type = None
+    months_on_platform = 0
+    if student_id is not None:
+        try:
+            from ..school.engines import master_session
+            from ..school.models import Student, StudentProfile
+            from datetime import datetime as _dt_uc
+            with master_session() as ms:
+                profile = (
+                    ms.query(StudentProfile)
+                    .filter(StudentProfile.student_id == student_id)
+                    .first()
+                )
+                if profile is not None:
+                    age = profile.age
+                    monthly_net = profile.net_salary_monthly
+                    family_status = profile.family_status
+                    housing_type = profile.housing_type
+                stu = ms.get(Student, student_id)
+                if stu is not None and stu.created_at is not None:
+                    months_on_platform = (
+                        _dt_uc.utcnow() - stu.created_at
+                    ).days // 30
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "compute_credit_check: kunde inte hämta profil-data",
+            )
+
     cls, score = _classify_uc_score(
         debt_ratio=debt_ratio,
         payment_marks=int(marks_count),
         running_apps=running_applications,
         annual_income=float(annual_income),
+        age=age,
+        monthly_net=monthly_net,
+        family_status=family_status,
+        housing_type=housing_type,
+        months_on_platform=months_on_platform,
+        savings_buffer_months=savings_buffer_months,
     )
 
     check = CreditCheck(

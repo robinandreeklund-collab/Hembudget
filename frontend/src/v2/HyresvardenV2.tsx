@@ -73,7 +73,17 @@ const NOTICE_TYPE_LABEL: Record<string, string> = {
   ovrig: "Övrigt",
 };
 
-export function HyresvardenV2() {
+/**
+ * Hyresvärden · standalone-vy ELLER inbäddad i Boendemarknad.
+ *
+ * `embedded={true}` används av BoendemarknadV2's "Hyresavtal & värd"-flik
+ * — då rendrar vi INTE eget V2Banner/shell/back-länk/header, så att
+ * tabs-stripen ovanför behålls och eleven kan klicka tillbaka till
+ * "Köpa eller sälja". Tidigare hijack:ade HyresvardenV2 hela layouten
+ * → tabs försvann + back-knappen ledde till pentagonen istället för
+ * tillbaka till Boendemarknad.
+ */
+export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {}) {
   const [data, setData] = useState<V2RentalData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +110,24 @@ export function HyresvardenV2() {
 
   const [housingType, setHousingType] = useState<string | null>(null);
   const [housingMonthly, setHousingMonthly] = useState<number | null>(null);
+  const [pendingApplications, setPendingApplications] = useState<Array<{
+    id: number;
+    listing_id: string;
+    city_key: string;
+    address: string;
+    tier: number;
+    tier_label: string;
+    size_kvm: number;
+    rooms: number;
+    monthly_rent: number;
+    deposit: number;
+    quality_score: number;
+    first_hand: boolean;
+    applied_on: string;
+    ready_on: string;
+    status: string;
+    days_left: number;
+  }>>([]);
 
   useEffect(() => {
     refresh();
@@ -113,21 +141,24 @@ export function HyresvardenV2() {
         setHousingMonthly(h.character.housing_monthly || null);
       })
       .catch(() => null);
+    // Hämta pending RentalApplications · synkar Bostadssökande-kortet
+    // mellan denna flik och "Hyr en lägenhet"-fliken.
+    v2Api.boendemarknadRentalApplications()
+      .then((r) => {
+        setPendingApplications(
+          (r.applications || []).filter(
+            (a) => a.status === "queued" || a.status === "ready",
+          ),
+        );
+      })
+      .catch(() => null);
   }, []);
+
+  const activeApplication = pendingApplications[0] || null;
 
   const ownsHome = housingType === "bostadsratt"
     || housingType === "villa"
     || housingType === "radhus";
-
-  async function terminateContract(id: number) {
-    if (!confirm("Säg upp kontraktet?")) return;
-    try {
-      await v2Api.rentalPatchContract(id, { status: "terminated" });
-      await refresh();
-    } catch (e) {
-      setError(String((e as Error)?.message || e));
-    }
-  }
 
   async function addContract() {
     setAddError(null);
@@ -170,41 +201,46 @@ export function HyresvardenV2() {
   }
 
   if (error && !data) {
+    const inner = (
+      <div className="bank-loading">
+        <div>
+          <div style={{ color: "#fca5a5", marginBottom: 8 }}>
+            Kunde inte ladda hyres-data
+          </div>
+          <pre style={{ fontSize: 11 }}>{error}</pre>
+        </div>
+      </div>
+    );
+    if (embedded) return inner;
     return (
       <div className="v2-lan-root">
         <V2Banner status={{ role: "student", is_super_admin: false }} />
-        <div className="bank-loading">
-          <div>
-            <div style={{ color: "#fca5a5", marginBottom: 8 }}>
-              Kunde inte ladda hyres-data
-            </div>
-            <pre style={{ fontSize: 11 }}>{error}</pre>
-          </div>
-        </div>
+        {inner}
       </div>
     );
   }
   if (!data) {
+    const inner = <div className="bank-loading">Laddar hyresvärden…</div>;
+    if (embedded) return inner;
     return (
       <div className="v2-lan-root">
         <V2Banner status={{ role: "student", is_super_admin: false }} />
-        <div className="bank-loading">Laddar hyresvärden…</div>
+        {inner}
       </div>
     );
   }
 
   const { contract, notices, summary } = data;
 
-  return (
-    <div className="v2-lan-root">
-      <V2Banner status={{ role: "student", is_super_admin: false }} />
-
-      <div className="shell">
+  const body = (
+    <>
+      {!embedded && (
         <Link className="actor-back" to="/v2/hub">
           Tillbaka till pentagonen
         </Link>
+      )}
 
-        <header className="actor-head">
+      <header className="actor-head">
           <div>
             <span className="pill warm">Aktör 08 · Hyresvärden</span>
             <h1 className="actor-name" style={{ marginTop: 14 }}>
@@ -265,6 +301,52 @@ export function HyresvardenV2() {
           </div>
         </header>
 
+        {/* Pending-kö-kort när eleven INTE har kontrakt men står i kö
+           för hyreslägenhet (synkar med "Hyr en lägenhet"-fliken). */}
+        {!contract && pendingApplications.length > 0 && (
+          <div
+            className="acct-grid"
+            style={{ gridTemplateColumns: "1fr" }}
+          >
+            <div className="acct">
+              <div>
+                <div className="acct-eye">
+                  Bostadssökande · {pendingApplications.length} ansökning
+                  {pendingApplications.length === 1 ? "" : "ar"}
+                </div>
+                <div className="acct-name">
+                  {pendingApplications[0].address}
+                </div>
+                <div className="acct-num">
+                  {pendingApplications[0].tier_label}
+                  {" · "}
+                  {pendingApplications[0].size_kvm} m²
+                  {" · "}
+                  {SEK(pendingApplications[0].monthly_rent)} kr/mån
+                </div>
+              </div>
+              <div>
+                <div
+                  className="acct-bal"
+                  style={{
+                    color:
+                      pendingApplications[0].status === "ready"
+                        ? "#6ee7b7"
+                        : "var(--warm, #dc4c2b)",
+                  }}
+                >
+                  {pendingApplications[0].status === "ready"
+                    ? "klar"
+                    : `${pendingApplications[0].days_left} dgr`}
+                </div>
+                <div className="acct-bal-meta">
+                  se Hyr en lägenhet för att flytta in
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 3-KORTS ACCT-GRID (matchar prototyp) */}
         {contract && (
           <div
@@ -301,12 +383,16 @@ export function HyresvardenV2() {
               <div>
                 <div className="acct-eye">Bostadssökande</div>
                 <div className="acct-name">
-                  {contract.queue_priority
+                  {activeApplication
+                    ? activeApplication.address
+                    : contract.queue_priority
                     ? "Stockholm bostadsförmedling"
                     : "Eget kontrakt"}
                 </div>
                 <div className="acct-num">
-                  {contract.queue_years
+                  {activeApplication
+                    ? `${activeApplication.tier_label} · ${activeApplication.size_kvm} m² · ${SEK(activeApplication.monthly_rent)} kr/mån`
+                    : contract.queue_years
                     ? `${contract.queue_years} år i kö`
                     : "ingen aktiv kö"}
                 </div>
@@ -314,12 +400,29 @@ export function HyresvardenV2() {
               <div>
                 <div
                   className="acct-bal"
-                  style={{ color: "var(--text-dim)" }}
+                  style={
+                    activeApplication
+                      ? {
+                          color: activeApplication.status === "ready"
+                            ? "#6ee7b7"
+                            : "var(--warm, #dc4c2b)",
+                          fontSize: 18,
+                        }
+                      : { color: "var(--text-dim)" }
+                  }
                 >
-                  — kö
+                  {activeApplication
+                    ? activeApplication.status === "ready"
+                      ? "klar"
+                      : `${activeApplication.days_left} dgr`
+                    : "— kö"}
                 </div>
                 <div className="acct-bal-meta">
-                  {contract.queue_priority || "—"}
+                  {activeApplication
+                    ? pendingApplications.length > 1
+                      ? `+${pendingApplications.length - 1} till · se Hyr en lägenhet`
+                      : "se Hyr en lägenhet"
+                    : contract.queue_priority || "—"}
                 </div>
               </div>
             </div>
@@ -429,6 +532,12 @@ export function HyresvardenV2() {
                           ? "betald"
                           : n.status === "info"
                           ? "info"
+                          : n.status === "acknowledged"
+                          ? "bekräftad"
+                          : n.status === "action_required"
+                          ? "att hantera"
+                          : n.status === "denied"
+                          ? "nekad"
                           : n.status}
                       </span>
                     )}
@@ -590,15 +699,25 @@ export function HyresvardenV2() {
               </div>
             )}
 
-            {contract && (
-              <div style={{ marginTop: 16 }}>
-                <button
-                  type="button"
-                  className="cta-btn ghost"
-                  onClick={() => terminateContract(contract.id)}
-                >
-                  Säg upp kontraktet
-                </button>
+            {contract && contract.status !== "terminated" && (
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: "12px 16px",
+                  border: "1px solid var(--line)",
+                  borderRadius: 6,
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: "var(--text-mid)",
+                  lineHeight: 1.6,
+                }}
+              >
+                Vill du säga upp kontraktet? Gå till fliken{" "}
+                <strong style={{ color: "var(--accent)" }}>
+                  Köpa eller sälja
+                </strong>
+                {" "}— där hanteras både uppsägning och byte av boende på
+                ett ställe.
               </div>
             )}
           </div>
@@ -745,7 +864,16 @@ export function HyresvardenV2() {
             Fascinerande resultat.
           </div>
         </div>
-      </div>
+    </>
+  );
+
+  if (embedded) {
+    return body;
+  }
+  return (
+    <div className="v2-lan-root">
+      <V2Banner status={{ role: "student", is_super_admin: false }} />
+      <div className="shell">{body}</div>
     </div>
   );
 }

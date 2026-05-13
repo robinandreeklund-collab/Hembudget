@@ -6,6 +6,7 @@ inte elev-data och student-DB:ar innehåller inte lärare/elever.
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -119,6 +121,146 @@ class EmailToken(MasterBase):
     )
 
 
+class AuthToken(MasterBase):
+    """Persistent session-token (lärare/elev) — DB-backat så det
+    funkar över flera Cloud Run-instanser.
+
+    Tidigare lagrat i process-lokal `_ACTIVE_TOKENS`-dict. Det fungerade
+    bara med max-instances=1 — när vi skalar horisontellt måste tokens
+    delas mellan instanser så att login på instans A funkar på instans B.
+
+    Kolumnerna speglar TokenInfo-dataclass i api/deps.py:
+      role: 'teacher' | 'student' | 'demo'
+      teacher_id / student_id: en av dem populerad beroende på role
+      last_seen_at: uppdateras vid varje request → används för
+        sliding-window expiration (settings.session_timeout_minutes)
+    """
+    __tablename__ = "auth_tokens"
+    __table_args__ = (
+        UniqueConstraint("token", name="uq_auth_token"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token: Mapped[str] = mapped_column(
+        String(80), nullable=False, index=True,
+    )
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True,
+    )
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, index=True,
+    )
+    student_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+        nullable=False, index=True,
+    )
+
+
+class BetaCode(MasterBase):
+    """Beta-tillgångskod för stängd registrering.
+
+    Plattformen är i beta — vi vill inte öppna /signup/teacher och
+    /signup/parent helt fritt än. Användare måste maila
+    info@ekonomilabbet.org för att få en kod.
+
+    Lifecycle:
+      - Admin lägger till nya koder via INSERT (eller framtida UI).
+      - Vid signup matchas inputed code (case-insensitive) mot DB.
+      - Vid lyckad signup ökas `uses_count`. När `uses_count >= max_uses`
+        stängs koden (active=False).
+      - `expires_at` (optional) hård gräns även om uses_count < max.
+
+    Designval:
+      - Lagras i klartext (inte hashad) eftersom koderna delas via
+        e-post och lärare/föräldrar ska kunna jämföra ord-för-ord.
+      - `notes` är fri admin-text (vem fick koden, sammanhang etc.).
+    """
+    __tablename__ = "beta_codes"
+    __table_args__ = (
+        UniqueConstraint("code_norm", name="uq_beta_code_norm"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Original-kod (visas i admin-UI med rätt case)
+    code: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Normaliserad kod för uniqueness + lookup (UPPER + strip)
+    code_norm: Mapped[str] = mapped_column(
+        String(40), nullable=False, index=True,
+    )
+    max_uses: Mapped[int] = mapped_column(
+        Integer, default=1, nullable=False,
+    )
+    uses_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+
+class WaitlistEntry(MasterBase):
+    """Intresseanmälan till beta-väntelistan.
+
+    Lagrar e-post + roll (teacher/parent) + tidpunkt så vi kan kontakta
+    dem när vi öppnar upp fler beta-platser. Idempotent på e-posten —
+    om någon registrerar sig flera gånger uppdateras `last_signup_at`
+    istället för att skapa duplicat.
+    """
+    __tablename__ = "waitlist_entries"
+    __table_args__ = (
+        UniqueConstraint("email_norm", name="uq_waitlist_email_norm"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(160), nullable=False)
+    # Lower-cased för uniqueness + lookup
+    email_norm: Mapped[str] = mapped_column(
+        String(160), nullable=False, index=True,
+    )
+    # "teacher" | "parent" | "other" — vilken roll de signade upp för
+    role: Mapped[str] = mapped_column(
+        String(20), default="other", nullable=False,
+    )
+    # Anti-spam: spara IP som hashad värde + user-agent (truncerad).
+    ip_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True,
+    )
+    user_agent: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True,
+    )
+    # När admin kontaktade dem (för att invitera in)
+    contacted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Anti-doublesignup: när hen senast hörde av sig
+    last_signup_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    signup_count: Mapped[int] = mapped_column(
+        Integer, default=1, nullable=False,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class Family(MasterBase):
     """En "familj" = grupp av elever som delar hushållsekonomi (samma
     student-DB). Används pedagogiskt: två elever kan vara sambo/föräldrar
@@ -208,6 +350,19 @@ class Student(MasterBase):
     business_mode_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False,
     )
+    # Seed-livscykel · sätts vid student-skapande till "pending" och
+    # markeras "complete" av background-tasken när initial seed (lön,
+    # postlådan, försäkringar, pension, rental, events) är klar. Frontend
+    # läser detta för att visa "Bygger upp ditt liv..."-overlay tills
+    # statusen är complete — annars ser eleven tomma vyer i 3-5 s medan
+    # background-tasken jobbar (race condition mot v2_create_student som
+    # returnerar direkt och schemalägger seed:en async). "failed" sätts
+    # om seed:en kastat exception så lärar-detaljvyn kan trigga
+    # auto-recovery via _ensure_student_has_initial_data.
+    seed_status: Mapped[str] = mapped_column(
+        String(20), default="complete", nullable=False,
+        server_default="complete",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
@@ -256,6 +411,28 @@ class StudentProfile(MasterBase):
     # så onboardingen inte behöver räkna om varje gång
     net_salary_monthly: Mapped[int] = mapped_column(Integer, nullable=False)
     tax_rate_effective: Mapped[float] = mapped_column(nullable=False)
+
+    # Anställningsstatus · styr om eleven får lön via salary_phase och
+    # hur HubV2/Arbetsgivaren-vyn renderas.
+    #   'employed'      · default · har anställning hos `employer`
+    #   'self_employed' · har sagt upp privat-jobbet, driver eget AB
+    #   'unemployed'    · har inget jobb (uppsagd, konkurs, eller mellan jobb)
+    #
+    # Sätts från startup (employed), uppdateras vid:
+    #   resign-flöde (→ self_employed om eget AB, annars unemployed)
+    #   bankruptcy (→ unemployed)
+    #   hire-classmate-accept (→ employed)
+    #   terminate-classmate (→ unemployed efter last_day)
+    employment_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="employed",
+        server_default="employed",
+    )
+    # När eleven sagt upp sig · sätter sista-dag för LAS-period.
+    # Lön genereras fortfarande fram till detta datum, sedan stoppas
+    # salary_phase. NULL = ingen pågående uppsägning.
+    employment_end_on: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
 
     # Personlighet styr scenario-generatorn
     # "sparsam" | "slosaktig" | "blandad"
@@ -311,6 +488,107 @@ class StudentProfile(MasterBase):
     # Backstory som visas i onboardingen
     backstory: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # === Bil + pendling (Feature SKV-3 · realistisk vardag) ===
+    # Sätts av car_picker.pick_car() vid profilgenerering. Driver
+    # bilförsäkring + drivmedelskostnader + bil-events + Skatteverket-
+    # reseavdrag. Alla fält deferred() så lazy-load inte kraschar
+    # innan migrationen kört på prod-Postgres.
+    has_car: Mapped[bool] = deferred(mapped_column(
+        Boolean, nullable=False, default=False,
+    ))
+    # "car" | "public" | "bike" | "remote"
+    commute_transport: Mapped[Optional[str]] = deferred(mapped_column(
+        String(20), nullable=True,
+    ))
+    commute_km: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0,
+    ))
+    car_brand: Mapped[Optional[str]] = deferred(mapped_column(
+        String(40), nullable=True,
+    ))
+    car_model: Mapped[Optional[str]] = deferred(mapped_column(
+        String(60), nullable=True,
+    ))
+    car_year: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    car_fuel_type: Mapped[Optional[str]] = deferred(mapped_column(
+        String(20), nullable=True,
+    ))
+    car_market_value_sek: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    car_license_plate: Mapped[Optional[str]] = deferred(mapped_column(
+        String(10), nullable=True,
+    ))
+    car_insurance_provider: Mapped[Optional[str]] = deferred(mapped_column(
+        String(40), nullable=True,
+    ))
+    car_insurance_premium_monthly: Mapped[Optional[int]] = deferred(
+        mapped_column(Integer, nullable=True),
+    )
+    # "cash" | "loan" | "leasing"
+    car_financing: Mapped[Optional[str]] = deferred(mapped_column(
+        String(20), nullable=True,
+    ))
+    car_loan_principal: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    car_loan_monthly_payment: Mapped[Optional[int]] = deferred(
+        mapped_column(Integer, nullable=True),
+    )
+    car_leasing_monthly: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    car_monthly_fuel_cost: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0,
+    ))
+    car_monthly_electric_extra: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0,
+    ))
+    car_monthly_public_transport: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0,
+    ))
+
+    # === Frisktandvård (SKV-4 · realistisk tandförsäkring) ===
+    # ~40 % av karaktärerna har frisktandvårdsavtal. Tier 1-10 baseras
+    # på tandhälsa · premie skalas med ålder (ATB 20-23/67+ vs normal
+    # 24-66). När tandhälsa-event triggas (karieskontroll, lagning)
+    # täcker frisktandvården 100 % om policy är aktiv.
+    has_frisktandvard: Mapped[bool] = deferred(mapped_column(
+        Boolean, nullable=False, default=False,
+    ))
+    frisktandvard_tier: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    # "atb" (20-23 eller 67+) | "normal" (24-66)
+    frisktandvard_age_category: Mapped[Optional[str]] = deferred(
+        mapped_column(String(10), nullable=True),
+    )
+    frisktandvard_premium_monthly: Mapped[Optional[int]] = deferred(
+        mapped_column(Integer, nullable=True),
+    )
+
+    # === Sprint 8 · företag-vs-jobb-balans ===
+    # Veckotid på det vanliga jobbet · default 40h heltid. Eleven kan
+    # gå ner till 50% (20h) eller säga upp helt (0h) som beslut när
+    # företaget växer. Lön justeras proportionerligt nästa månadstick.
+    weekly_hours_employed: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=40, server_default="40",
+    ))
+    # Anställnings-status: "employed" (heltid/deltid · lön kommer)
+    # | "unemployed" (uppsagd) | "freelance_only" (egen företagare som
+    # sagt upp jobbet helt). Driver lönespec-generation.
+    employment_status: Mapped[str] = deferred(mapped_column(
+        String(20), nullable=False, default="employed",
+        server_default="employed",
+    ))
+    # Konsekutiva veckor över 50h totalt (anställd+biz). Spåras av
+    # combined_weekly_tick · driver Maria-säg-upp-prompt vid 4+.
+    consecutive_overload_weeks: Mapped[int] = deferred(mapped_column(
+        Integer, nullable=False, default=0, server_default="0",
+    ))
+
     # Lönesamtals-resultat: ny lön committas inte direkt — den lagras
     # här tills lönespec-generatorn körs för en månad >= effective_from,
     # då skrivs gross_salary_monthly om och pending-fälten nollas. Det
@@ -351,7 +629,8 @@ class V2OnboardingEvent(MasterBase):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(
-        ForeignKey("students.id"), nullable=False, index=True,
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
     )
     step: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -1103,6 +1382,476 @@ class StudentActivity(MasterBase):
     )
 
 
+class ClassCompanyShare(MasterBase):
+    """Klass-skopig spegling av en elev-ägd Company.
+
+    Företaget bor i elevens scope-DB (per-tenant Postgres-rader eller
+    per-fil SQLite). Den här raden är en cache i master-DB:n så att
+    /v2/allabolag-aktören kan lista ALLA klassens företag i en query
+    utan att fan-out:a läsningar över N elever.
+
+    Cachen uppdateras av `sync_class_company_share` som anropas från
+    auto_tick_if_due (varje gång företaget tickas) + från
+    annual_report_submit-flow. Stale-tolerance ~1 timme — Allabolag
+    är ingen realtidsvy.
+
+    Privacy: bara aggregat (omsättning, vinst, antal anställda)
+    speglas hit. Aldrig transaktionslistor eller kund-namn.
+    """
+    __tablename__ = "class_company_shares"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_student_id", "company_id_in_scope",
+            name="uq_class_company_share_owner_company",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    owner_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Klass-filter (om läraren har flera klasser)
+    class_label: Mapped[Optional[str]] = mapped_column(
+        String(60), nullable=True, index=True,
+    )
+    # Lokal id i ägarens scope-DB · för djuplänk vid behov
+    company_id_in_scope: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Speglade fält (läraren ser alltid namn/bransch oavsett publish-status)
+    company_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    industry_label: Mapped[Optional[str]] = mapped_column(
+        String(120), nullable=True,
+    )
+    industry_key: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    city_key: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    form: Mapped[str] = mapped_column(
+        String(20), default="enskild_firma", nullable=False,
+    )
+    started_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    # Publish-toggle: ägaren kan dölja företaget från klasskompisar.
+    # Lärare ser ALLTID alla. Default True — kollegial transparens.
+    is_published: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+
+    # Aggregat-cache (uppdateras vid varje auto-tick)
+    revenue_4w: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    profit_4w: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    margin_pct: Mapped[float] = mapped_column(
+        Float, default=0.0, nullable=False,
+    )
+    kassa: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    n_employees: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    n_invoices_open: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    n_invoices_overdue: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    reputation: Mapped[int] = mapped_column(
+        Integer, default=50, nullable=False,
+    )
+    week_no: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Bolagsverket-status (Fas B: deklaration)
+    annual_report_status: Mapped[str] = mapped_column(
+        String(20), default="not_due", nullable=False,
+    )  # not_due | draft | submitted | reviewing | approved | rejected
+    annual_report_year: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    annual_report_decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+    # Fas G · företags-UC + nivå-progression
+    uc_score: Mapped[int] = mapped_column(
+        Integer, default=50, nullable=False,
+    )  # 0-100 · företagets kreditvärdighet
+    uc_rating: Mapped[str] = mapped_column(
+        String(4), default="B", nullable=False,
+    )  # AAA | A | B | C | D
+    company_level: Mapped[str] = mapped_column(
+        String(20), default="startup", nullable=False,
+    )  # startup | vaxande | etablerat | marknadsledare
+    level_unlocked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+    last_synced_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class SharedOpportunity(MasterBase):
+    """Klass-skopig offertförfrågan · delas mellan flera elev-företag.
+
+    Spec: dev/feature-allabolag.md (Fas C)
+
+    Genereras periodiskt per (teacher_id, industry_key) — alla elever
+    med matchande bransch ser samma förfrågan och tävlar med varsin
+    SharedQuote. När deadline_at passerar väljer AI vinnare baserat
+    på pris + pitch + leveranstid + rykte. Förlorarna får pedagogisk
+    förklaring varför.
+
+    Detta är pedagogiskt mycket starkare än per-elev-opps eftersom
+    eleven ser KONKRET varför AI valde någon annans offert — och
+    kan iaktta hur klasskompisar prissätter."""
+    __tablename__ = "shared_opportunities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    class_label: Mapped[Optional[str]] = mapped_column(
+        String(60), nullable=True, index=True,
+    )
+    industry_key: Mapped[str] = mapped_column(
+        String(40), nullable=False, index=True,
+    )
+    customer_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    customer_segment: Mapped[str] = mapped_column(
+        String(20), default="privat", nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    market_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_delivery_days: Mapped[int] = mapped_column(
+        Integer, default=14, nullable=False,
+    )
+    deadline_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True,
+    )
+    # Status: open | decided | expired
+    status: Mapped[str] = mapped_column(
+        String(20), default="open", nullable=False,
+    )
+    winner_student_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("students.id", ondelete="SET NULL"), nullable=True,
+    )
+    decision_explanation: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class SharedQuote(MasterBase):
+    """En elevs offert till en SharedOpportunity. Max ETT bud per elev
+    och förfrågan."""
+    __tablename__ = "shared_quotes"
+    __table_args__ = (
+        UniqueConstraint(
+            "shared_opportunity_id", "student_id",
+            name="uq_shared_quote_opp_student",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shared_opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("shared_opportunities.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    company_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    offered_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    offered_delivery_days: Mapped[int] = mapped_column(
+        Integer, nullable=False,
+    )
+    pitch_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pitch_quality: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True,
+    )
+    is_winner: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class CompanyJobAd(MasterBase):
+    """Jobbannons från ett klass-företag · syns på Arbetsförmedlingen
+    för andra elever att söka.
+
+    Spec: dev/feature-allabolag.md (Fas D)
+
+    Företagsägaren publicerar jobb. Andra elever i samma klass kan söka
+    via /v2/arbetsformedlingen/klass-jobb. Vid anställning skapas en
+    CompanyEmployment-rad och eleven får 'klass-företag · {bolagsnamn}'-
+    badge i sin arbetsmarknad-vy."""
+    __tablename__ = "company_job_ads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_share_id: Mapped[int] = mapped_column(
+        ForeignKey("class_company_shares.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    posted_by_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    monthly_salary: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Status: open | filled | closed
+    status: Mapped[str] = mapped_column(
+        String(20), default="open", nullable=False,
+    )
+    hired_student_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("students.id", ondelete="SET NULL"), nullable=True,
+    )
+    posted_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    filled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+
+class CompanyJobApplication(MasterBase):
+    """Elevs ansökan till en CompanyJobAd."""
+    __tablename__ = "company_job_applications"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_ad_id", "applicant_student_id",
+            name="uq_company_job_app",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_ad_id: Mapped[int] = mapped_column(
+        ForeignKey("company_job_ads.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    applicant_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    cover_letter: Mapped[str] = mapped_column(Text, nullable=False)
+    # Status: pending | accepted | rejected
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False,
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class CompanyEmployment(MasterBase):
+    """Aktiv anställning: en elev jobbar i en annan elevs klass-företag."""
+    __tablename__ = "company_employments"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_share_id", "employee_student_id",
+            name="uq_company_employment",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_share_id: Mapped[int] = mapped_column(
+        ForeignKey("class_company_shares.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    employee_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    monthly_salary: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[date] = mapped_column(
+        Date, server_default=func.current_date(),
+    )
+    ended_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Status: active | terminated
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", nullable=False,
+    )
+
+
+class ClassSeasonEvent(MasterBase):
+    """Säsong-event aktiverat av läraren · Black Friday, kris osv.
+
+    Spec: Fas J"""
+    __tablename__ = "class_season_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    event_kind: Mapped[str] = mapped_column(
+        String(40), nullable=False,
+    )  # black_friday | recruitment_crisis | sustainability | bankruptcy_chain
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+    ends_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+
+
+class CompanyMentorship(MasterBase):
+    """Mentor-relation · framgångsrikt bolag hjälper svagare.
+
+    Båda bolagen får poäng. Mentorn får 'mentor_helps'-räknare,
+    mentee:n får tillfällig +rykte-boost.
+    Spec: Fas I"""
+    __tablename__ = "company_mentorships"
+    __table_args__ = (
+        UniqueConstraint(
+            "mentor_share_id", "mentee_share_id",
+            name="uq_company_mentorship",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mentor_share_id: Mapped[int] = mapped_column(
+        ForeignKey("class_company_shares.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    mentee_share_id: Mapped[int] = mapped_column(
+        ForeignKey("class_company_shares.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    ended_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+
+
+class StudentEntrepreneurScore(MasterBase):
+    """Elevens entreprenörspoäng + badges. Beräknas av compute helper
+    från ClassCompanyShare-data + relevanta events.
+
+    Spec: Fas H · multi-leaderboard"""
+    __tablename__ = "student_entrepreneur_scores"
+
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    total_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    badges: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True,
+    )  # {badge_key: earned_at_iso}
+    last_recomputed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class ClassWeeklyAward(MasterBase):
+    """Veckans vinnare per kategori. Skapas av compute helper.
+
+    Spec: Fas H"""
+    __tablename__ = "class_weekly_awards"
+    __table_args__ = (
+        UniqueConstraint(
+            "teacher_id", "category", "iso_year", "iso_week",
+            name="uq_class_weekly_award",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    iso_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    iso_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    winner_student_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("students.id", ondelete="SET NULL"), nullable=True,
+    )
+    winner_company_name: Mapped[Optional[str]] = mapped_column(
+        String(160), nullable=True,
+    )
+    metric_value: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 4), nullable=True,
+    )
+    awarded_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class TeacherAiPrompt(MasterBase):
+    """Lärares anpassning av en AI-system-prompt.
+
+    Varje lärare kan skriva sin egen variant av Marias HR-prompt,
+    Mats Arbetsförmedlings-prompt, pitch-bedömaren osv. Vid
+    AI-anrop letas first lärar-id → custom-text upp via
+    `resolve_prompt(prompt_key, teacher_id, default)`. Saknas rad
+    eller är `is_active=False` används default-prompten från koden.
+
+    `prompt_key` mappar mot konstanter i `school/ai_prompt_registry.py`
+    (en katalog över alla prompts som får anpassas). Inte alla AI-
+    anrop exponeras — tekniska klassificerare (kategori-match,
+    klasskompis-bjudningar) hålls hårdkodade i koden.
+
+    Nivåer: en lärare = en uppsättning prompts. Familje-konton räknas
+    som lärare med is_family_account=True. Super-admin kan i
+    nästa fas publicera mallar som blir tillgängliga för alla lärare.
+    """
+    __tablename__ = "teacher_ai_prompts"
+    __table_args__ = (
+        UniqueConstraint(
+            "teacher_id", "prompt_key", name="uq_teacher_ai_prompt",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    prompt_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    # Lärarens custom-text. Tom sträng tillåten · betyder "stäng av
+    # AI för denna prompt" om is_active=True. Använd hellre is_active
+    # för on/off så att texten kan bevaras mellan av/på-cykler.
+    custom_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # is_active=False → fall tillbaka till default-prompten utan att
+    # läraren behöver radera sin text. Bra för A/B-testning.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
 # Aktie-master-modeller (StockMaster, StockQuote, LatestStockQuote,
 # MarketCalendar) — importeras här så att MasterBase.metadata känner
 # till dem vid create_all.
@@ -1127,3 +1876,7 @@ from . import bank_models as _bank_models  # noqa: E402, F401
 # Spelmotor-tabeller (ClassCalendar driver Monthly Engine-tickarna).
 # Spec: dev/game-motor/12-data-modeller.md
 from . import game_engine_models as _game_engine_models  # noqa: E402, F401
+
+# Klasskompis-anställning (Fas C) · ClassmateEmployment binder ägare +
+# anställd i olika scope-DB:s via master-DB-tabellen classmate_employments.
+from . import employment_models as _employment_models  # noqa: E402, F401

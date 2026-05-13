@@ -1,0 +1,253 @@
+/**
+ * Huvudbok V2 · klassisk bokföringsvy med KPI:er, avstämning,
+ * balansrapport och resultaträkning.
+ */
+
+.v2-lan-root .huv-periodbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 20px 0;
+  padding: 14px 18px;
+  background: rgba(15, 21, 37, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+.v2-lan-root .huv-period-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.v2-lan-root .huv-period-select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-strong);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+.v2-lan-root .huv-period-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.v2-lan-root .huv-related-link {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+.v2-lan-root .huv-related-link:hover {
+  color: var(--warm);
+}
+
+.v2-lan-root .huv-error,
+.v2-lan-root .huv-loading {
+  margin: 18px 0;
+  padding: 12px 16px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.v2-lan-root .huv-error {
+  color: #fca5a5;
+  background: rgba(220, 38, 38, 0.06);
+  border-left: 3px solid #dc2626;
+}
+.v2-lan-root .huv-loading {
+  color: var(--text-mid);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* === KPI-rad === */
+.v2-lan-root .huv-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 24px 0 32px;
+}
+.v2-lan-root .huv-kpi {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(15, 21, 37, 0.5);
+}
+.v2-lan-root .huv-kpi-emphasis {
+  border-color: var(--accent);
+  background: rgba(220, 76, 43, 0.04);
+}
+.v2-lan-root .huv-kpi-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  margin-bottom: 8px;
+}
+.v2-lan-root .huv-kpi-value {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+}
+.v2-lan-root .huv-kpi.tone-positive .huv-kpi-value { color: #6ee7b7; }
+.v2-lan-root .huv-kpi.tone-negative .huv-kpi-value { color: #fca5a5; }
+.v2-lan-root .huv-kpi.tone-neutral .huv-kpi-value { color: #fff; }
+.v2-lan-root .huv-kpi-meta {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* === Sektioner === */
+.v2-lan-root .huv-section {
+  margin: 36px 0;
+}
+.v2-lan-root .huv-h2 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  margin: 0 0 6px;
+  color: #fff;
+}
+.v2-lan-root .huv-sub {
+  font-family: var(--serif);
+  font-size: 13.5px;
+  color: var(--text-mid);
+  margin: 0 0 18px;
+}
+
+/* === Avstämnings-checks === */
+.v2-lan-root .huv-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.v2-lan-root .huv-check {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 4px;
+  background: rgba(15, 21, 37, 0.4);
+}
+.v2-lan-root .huv-check-ok    { border-left-color: #6ee7b7; }
+.v2-lan-root .huv-check-warn  { border-left-color: var(--warm); }
+.v2-lan-root .huv-check-fail  { border-left-color: #fca5a5; }
+.v2-lan-root .huv-check-status {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+.v2-lan-root .huv-check-ok    .huv-check-status { color: #6ee7b7; }
+.v2-lan-root .huv-check-warn  .huv-check-status { color: var(--warm); }
+.v2-lan-root .huv-check-fail  .huv-check-status { color: #fca5a5; }
+.v2-lan-root .huv-check-label {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+.v2-lan-root .huv-check-msg {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-mid);
+  margin-top: 2px;
+}
+.v2-lan-root .huv-check-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 99px;
+}
+.v2-lan-root .huv-empty {
+  padding: 28px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  text-align: center;
+  color: var(--text-dim);
+  font-family: var(--serif);
+  font-size: 13.5px;
+}
+
+/* === Tabeller === */
+.v2-lan-root .huv-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow-x: auto;
+  background: rgba(15, 21, 37, 0.4);
+}
+.v2-lan-root .huv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.v2-lan-root .huv-table thead th {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  font-weight: 700;
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+.v2-lan-root .huv-table thead th.num {
+  text-align: right;
+}
+.v2-lan-root .huv-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.v2-lan-root .huv-table tbody tr:last-child td { border-bottom: 0; }
+.v2-lan-root .huv-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.v2-lan-root .huv-table .num { text-align: right; }
+.v2-lan-root .huv-table .positive { color: #6ee7b7; }
+.v2-lan-root .huv-table .negative { color: #fca5a5; }
+.v2-lan-root .huv-cell-name {
+  font-family: var(--serif);
+  font-size: 14px;
+  color: #fff;
+}
+.v2-lan-root .huv-cell-type {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+}
+.v2-lan-root .huv-cell-emphasis {
+  font-weight: 700;
+  color: #fff;
+}
+.v2-lan-root .huv-cell-dim {
+  color: var(--text-dim);
+  font-size: 11px;
+}

@@ -10,6 +10,8 @@ export type SpendProfile = "sparsam" | "balanserad" | "slosa";
 export type FairnessChoice = "50_50" | "proportionellt" | "pool";
 export type PartnerModel = "solo" | "ai" | "klasskompis";
 
+export type SeedStatus = "pending" | "complete" | "failed";
+
 export type V2Status = {
   role: "student" | "teacher" | "demo";
   v2_eligible: boolean;
@@ -19,6 +21,14 @@ export type V2Status = {
   v2_fairness_choice: FairnessChoice | null;
   v2_partner_model: PartnerModel;
   is_super_admin: boolean;
+  /** "pending" tills BackgroundTask seedat all initial-data
+   * (lön, postlådan, försäkringar, pension, rental, events). Frontend
+   * visar overlay tills "complete" så eleven inte ser tomma vyer. */
+  seed_status?: SeedStatus;
+  /** Eleven-id · används för att cacha seed-complete per id i
+   * sessionStorage så overlayn inte flashar vid efterföljande
+   * navigation. NULL för lärare/demo. */
+  student_id?: number | null;
 };
 
 export type OnboardingComplete = {
@@ -44,6 +54,15 @@ export type HubCharacter = {
   gross_salary_monthly: number | null;
   net_salary_monthly: number | null;
   personality: string | null;
+  /** 'employed' (default) | 'self_employed' | 'unemployed' · styr
+   * HubV2-rendering: 'Anställd · X' / 'Egenföretagare · {company}'
+   * / 'Söker jobb'. */
+  housing_legacy_monthly?: number | null;
+  housing_legacy_until?: string | null;
+  employment_status?: "employed" | "self_employed" | "unemployed";
+  /** Datum då pågående anställning upphör (LAS uppsägningstid).
+   * Lön genereras tills detta datum, sedan stoppas salary_phase. */
+  employment_end_on?: string | null;
 };
 
 export type HubPentagon = {
@@ -62,6 +81,32 @@ export type HubMonthSummary = {
   saved: number;
   save_rate_pct: number | null;
   transactions_count: number;
+  start_of_month_balance: number;
+};
+
+export type HubEventItem = {
+  id: number;
+  kind: "event" | "invite";
+  title: string;
+  category: string;
+  cost: number;
+  deadline: string;
+  source: string;
+  from_name: string | null;
+  days_until_deadline: number;
+  declinable: boolean;
+};
+
+export type HubGameTime = {
+  iso_date: string;
+  weekday_label: string;
+  full_label: string;
+  short_label: string;
+  year_month: string;
+  real_anchor_at: string;
+  seconds_per_game_day: number;
+  seconds_into_current_day: number;
+  seconds_until_next_day: number;
 };
 
 export type HubData = {
@@ -75,6 +120,67 @@ export type HubData = {
   month_summary: HubMonthSummary;
   total_balance: number;
   accounts_count: number;
+  pending_events: HubEventItem[];
+  game_time: HubGameTime | null;
+};
+
+// === Events / sociala händelser (V2) ===
+
+export type V2EventItem = {
+  id: number;
+  event_code: string;
+  title: string;
+  description: string;
+  category: string;
+  cost: number;
+  proposed_date: string | null;
+  deadline: string;
+  source: string;
+  status: string;
+  social_invite_allowed: boolean;
+  declinable: boolean;
+  created_at: string;
+};
+
+export type V2InviteItem = {
+  id: number;
+  from_student_id: number;
+  from_name: string;
+  event_code: string;
+  event_title: string;
+  proposed_date: string | null;
+  deadline: string;
+  cost: number;
+  cost_split_model: string;
+  swish_amount: number | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type V2ClassmateItem = {
+  student_id: number;
+  display_name: string;
+  class_label: string | null;
+};
+
+export type V2EventAcceptResponse = {
+  event_id: number;
+  status: string;
+  transaction_id: number | null;
+  cost_applied: number;
+  income_applied: number;
+  impact_applied: Record<string, number>;
+  pedagogical_note: string;
+};
+
+export type V2EventDeclineResponse = {
+  event_id: number;
+  status: string;
+  impact_applied: Record<string, number>;
+  pedagogical_note: string;
+  current_decline_streak: number;
+  show_streak_nudge: boolean;
 };
 
 export type BankAccount = {
@@ -85,6 +191,8 @@ export type BankAccount = {
   account_number: string | null;
   current_balance: number;
   fund_value: number;
+  /** Aktievärde · quantity × senaste kurs. 0 om kontot inte har aktier. */
+  stock_value?: number;
   total_value: number;
   incognito: boolean;
 };
@@ -114,6 +222,10 @@ export type BankUpcoming = {
   is_paid: boolean;
   mail_id: number | null;
   is_signed: boolean;
+  // Spel-dagar tills förfall · negativa = förfluten. Räknas backend-
+  // side mot current_game_date() så frontend slipper jämföra mot
+  // real-tid (= maj 2026 medan spel-tid är jan).
+  days_until_expected: number;
 };
 
 export type BankSummary = {
@@ -126,6 +238,9 @@ export type BankSummary = {
   transactions_count: number;
   next_release_at: string | null;
   pending_count: number;
+  // Spel-tid · ISO. Frontend använder detta som "today" för
+  // datum-jämförelser (DAYS_UNTIL etc.) istället för new Date().
+  today_game: string | null;
 };
 
 export type BankData = {
@@ -211,7 +326,8 @@ export type V2MailStatus =
   | "exported"
   | "paid"
   | "expired"
-  | "handled";
+  | "handled"
+  | "failed";
 export type V2MailSenderKind =
   | "bank"
   | "cred"
@@ -442,6 +558,70 @@ export type V2CreditFactor = {
   severity: "good" | "warn" | "bad" | "neutral";
 };
 
+// === Huvudbok / Ledger (V2) =============================================
+// Rapporterar balansrapport per konto + resultaträkning per kategori +
+// avstämningskontroller. Svarar på GET /v2/ledger/?month=YYYY-MM eller ?year=YYYY.
+
+export type LedgerAccount = {
+  id: number;
+  name: string;
+  type: string;
+  opening: number;
+  income: number;
+  expense: number;
+  transfer_in: number;
+  transfer_out: number;
+  closing: number;
+  fund_value?: number | null;
+  total_value?: number | null;
+  tx_count: number;
+};
+
+export type LedgerCategoryRow = {
+  id: number | null;
+  name: string;
+  income: number;
+  expense: number;
+  net: number;
+  tx_count: number;
+};
+
+export type LedgerCheck = {
+  type: string;
+  label: string;
+  status: "ok" | "warn" | "fail";
+  message: string;
+  detail_count?: number;
+};
+
+export type LedgerData = {
+  period: {
+    label: string;
+    start: string;
+    end: string;
+  };
+  locked_months: string[];
+  accounts: LedgerAccount[];
+  categories: LedgerCategoryRow[];
+  loans?: Array<{
+    name: string;
+    expected_balance: number;
+    matched_balance: number;
+    delta: number;
+  }>;
+  upcoming_summary?: Record<string, unknown>;
+  totals: {
+    income: number;
+    expenses: number;
+    net_result: number;
+    assets: number;
+    liabilities: number;
+    net_worth: number;
+    uncategorized_count: number;
+  };
+  checks: LedgerCheck[];
+};
+
 export type LoanData = {
   student_id: number;
   total_debt: number;
@@ -454,6 +634,42 @@ export type LoanData = {
 };
 
 // === Fas 2A · Lånegivaren ===
+
+export type V2LoanKind = "privatlan" | "billan" | "bolan" | "smslan";
+
+export type V2LoanApplyRequest = {
+  loan_kind: V2LoanKind;
+  amount: number;
+  term_months: number;
+  purpose?: string;
+  debit_account_id?: number;
+  accept_offer?: boolean;
+};
+
+export type V2WellbeingImpact = {
+  axis: string;
+  delta: number;
+  explanation: string;
+};
+
+export type V2LoanApplyResponse = {
+  application_id: number;
+  approved: boolean;
+  decline_reason?: string | null;
+  loan_kind: string;
+  score: number;
+  grade: string;
+  score_components: Record<string, number>;
+  kalp_passed: boolean;
+  kalp_left_after_all: number;
+  offered_rate?: number | null;
+  offered_monthly_payment?: number | null;
+  offered_total_repay?: number | null;
+  lender?: string | null;
+  loan_id?: number | null;
+  wellbeing_impact: V2WellbeingImpact[];
+  warnings: string[];
+};
 
 export type V2KALPResponse = {
   id: number;
@@ -517,6 +733,7 @@ export type V2InsurancePolicyKind =
   | "bostadsrattsforsakring"
   | "bilforsakring"
   | "djur"
+  | "frisktandvard"
   | "ovrig";
 
 export type V2InsuranceClaimKind =
@@ -685,6 +902,30 @@ export type V2ArbetsformedlingenJob = {
   education_level: string;
   match_score: number;
   description: string;
+  // Sprint 7 · utökad annons-data
+  company_blurb: string;
+  job_description: string[];
+  requirements: string[];
+  meriter: string[];
+  benefits: string[];
+  employment_type: string;
+  application_deadline: string;
+  work_hours: string;
+  start_date: string;
+};
+
+export type V2CoverLetterPreviewIn = {
+  text: string;
+  yrke_display: string;
+  employer_name: string;
+  job_description?: string;
+  requirements?: string[];
+};
+
+export type V2CoverLetterPreviewOut = {
+  score: number;
+  feedback_md: string;
+  highlights: string[];
 };
 
 export type V2ArbetsformedlingenJobsResponse = {
@@ -711,6 +952,11 @@ export type V2ArbetsformedlingenApplication = {
   rounds_data: Record<string, unknown> | null;
   started_on: string;
   completed_on: string | null;
+  // Sprint 7 · läses av elev + lärar-vy
+  cover_letter_text: string | null;
+  case_answer_text: string | null;
+  ai_feedback_md: string | null;
+  job_ad_data: Record<string, unknown> | null;
 };
 
 export type V2ArbetsformedlingenRoundOut = {
@@ -2339,6 +2585,67 @@ export type OnboardingEventType =
 export const v2Api = {
   status: () => api<V2Status>("/v2/status"),
   hub: () => api<HubData>("/v2/hub"),
+  gameTime: () => api<HubGameTime>("/v2/game-time"),
+  // === Events / sociala händelser ===
+  eventsPending: () =>
+    api<{ events: V2EventItem[]; count: number }>("/v2/events/pending"),
+  eventsHistory: (limit: number = 30) =>
+    api<{ events: V2EventItem[]; count: number }>(
+      `/v2/events/history?limit=${limit}`,
+    ),
+  eventAccept: (id: number, accountId?: number, decisionReason?: string) =>
+    api<V2EventAcceptResponse>(`/v2/events/${id}/accept`, {
+      method: "POST",
+      body: JSON.stringify({
+        account_id: accountId,
+        decision_reason: decisionReason,
+      }),
+    }),
+  eventDecline: (id: number, decisionReason?: string) =>
+    api<V2EventDeclineResponse>(`/v2/events/${id}/decline`, {
+      method: "POST",
+      body: JSON.stringify({ decision_reason: decisionReason }),
+    }),
+  eventClassmates: () =>
+    api<{ classmates: V2ClassmateItem[]; invites_enabled: boolean }>(
+      "/v2/events/classmates",
+    ),
+  eventInviteClassmates: (
+    eventId: number,
+    classmateIds: number[],
+    message?: string,
+  ) =>
+    api<{ created: number; invite_ids: number[] }>(
+      "/v2/events/invite-classmates",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          event_id: eventId,
+          classmate_ids: classmateIds,
+          message,
+        }),
+      },
+    ),
+  eventInvitations: () =>
+    api<{ invitations: V2InviteItem[]; count: number }>(
+      "/v2/events/invitations",
+    ),
+  eventInviteRespond: (
+    inviteId: number,
+    accept: boolean,
+    decisionReason?: string,
+  ) =>
+    api<{ status: string; resulting_event_id: number | null }>(
+      "/v2/events/invitations/respond",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          invite_id: inviteId,
+          accept,
+          decision_reason: decisionReason,
+        }),
+      },
+    ),
   bank: (limitTransactions: number = 30) =>
     api<BankData>(`/v2/bank?limit_transactions=${limitTransactions}`),
   budget: (month?: string) =>
@@ -2443,6 +2750,28 @@ export const v2Api = {
   insuranceDeletePolicy: (policyId: number) =>
     api<void>(`/v2/forsakringar/policies/${policyId}`, {
       method: "DELETE",
+    }),
+  /** Hämta elevens personliga frisktandvård-offert (SKV-4). */
+  frisktandvardOffer: () =>
+    api<{
+      tier: number;
+      age_category: "atb" | "normal";
+      premium_monthly: number;
+      explanation: string;
+      tier_prices_atb: Record<number, number>;
+      tier_prices_normal: Record<number, number>;
+      already_active: boolean;
+    }>("/v2/forsakringar/frisktandvard-offert"),
+  /** Retry-betalning för en failed-mail (SKV-5). */
+  retryPayment: (mailId: number) =>
+    api<{
+      status: "paid" | "rescheduled" | "still_insufficient";
+      message: string;
+      new_expected_date?: string;
+      shortfall_kr?: number;
+    }>(`/v2/postladan/${mailId}/retry-payment`, {
+      method: "POST",
+      body: "{}",
     }),
   /** Lärar-API · seedа default-katalog. */
   teacherSeedDefaultInsurance: (studentId: number) =>
@@ -2708,6 +3037,103 @@ export const v2Api = {
       "/v2/boendemarknad/sell",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  boendemarknadListRentals: (
+    ym: string,
+    minTier?: number,
+    maxTier?: number,
+  ) =>
+    api<{
+      city_key: string;
+      city_display: string;
+      year_month: string;
+      listings: Array<{
+        listing_id: string;
+        city_key: string;
+        city_display: string;
+        tier: number;
+        tier_label: string;
+        address: string;
+        size_kvm: number;
+        rooms: number;
+        monthly_rent: number;
+        deposit: number;
+        first_hand: boolean;
+        queue_months: number;
+        quality_score: number;
+        description: string;
+      }>;
+    }>(
+      `/v2/boendemarknad/rentals?ym=${encodeURIComponent(ym)}`
+      + (minTier ? `&min_tier=${minTier}` : "")
+      + (maxTier ? `&max_tier=${maxTier}` : ""),
+    ),
+  boendemarknadRentalApply: (listingId: string, ym: string) =>
+    api<{
+      id: number;
+      listing_id: string;
+      city_key: string;
+      address: string;
+      tier: number;
+      tier_label: string;
+      size_kvm: number;
+      rooms: number;
+      monthly_rent: number;
+      deposit: number;
+      quality_score: number;
+      first_hand: boolean;
+      applied_on: string;
+      ready_on: string;
+      status: string;
+      days_left: number;
+    }>(
+      `/v2/boendemarknad/rentals/${encodeURIComponent(listingId)}/apply?ym=${encodeURIComponent(ym)}`,
+      { method: "POST", body: "{}" },
+    ),
+  boendemarknadRentalApplications: () =>
+    api<{
+      applications: Array<{
+        id: number;
+        listing_id: string;
+        city_key: string;
+        address: string;
+        tier: number;
+        tier_label: string;
+        size_kvm: number;
+        rooms: number;
+        monthly_rent: number;
+        deposit: number;
+        quality_score: number;
+        first_hand: boolean;
+        applied_on: string;
+        ready_on: string;
+        status: string;
+        days_left: number;
+      }>;
+    }>("/v2/boendemarknad/rentals/applications"),
+  boendemarknadRentalApplicationCancel: (id: number) =>
+    api<void>(
+      `/v2/boendemarknad/rentals/applications/${id}`,
+      { method: "DELETE" },
+    ),
+  boendemarknadRentalMoveIn: (listingId: string, ym: string) =>
+    api<{
+      home: {
+        id: number;
+        home_type: string;
+        status: string;
+        city_key: string;
+        address: string | null;
+        size_kvm: number;
+        rooms: number;
+        monthly_cost: number;
+      };
+      pentagon_deltas: Record<string, number>;
+      deposit_charged: number;
+      welcome_message: string;
+    }>(
+      `/v2/boendemarknad/rentals/${encodeURIComponent(listingId)}/move-in?ym=${encodeURIComponent(ym)}`,
+      { method: "POST", body: "{}" },
+    ),
   boendemarknadTerminate: (body: { year_month: string }) =>
     api<V2BoendemarknadTerminateResult>(
       "/v2/boendemarknad/terminate-rental",
@@ -2736,7 +3162,10 @@ export const v2Api = {
   // === /v2/arbetsformedlingen (Sprint 6 · A1-A5) ===
   arbetsformedlingenJobs: (ym: string, n = 6) =>
     api<V2ArbetsformedlingenJobsResponse>(
-      `/v2/arbetsformedlingen/jobs?ym=${encodeURIComponent(ym)}&n=${n}`,
+      // Tom ym → backend default = innevarande spel-månad
+      ym
+        ? `/v2/arbetsformedlingen/jobs?ym=${encodeURIComponent(ym)}&n=${n}`
+        : `/v2/arbetsformedlingen/jobs?n=${n}`,
     ),
   arbetsformedlingenApply: (opening: V2ArbetsformedlingenJob) =>
     api<V2ArbetsformedlingenApplication>(
@@ -2764,6 +3193,18 @@ export const v2Api = {
     api<V2ArbetsformedlingenApplication>(
       `/v2/arbetsformedlingen/applications/${appId}/abandon`,
       { method: "POST" },
+    ),
+  /** AI-feedback på personligt brev INNAN submit. Hjälper eleven
+   *  iterera utan att förbruka rond 1-tillfället. */
+  arbetsformedlingenCoverLetterPreview: (
+    body: V2CoverLetterPreviewIn,
+  ) =>
+    api<V2CoverLetterPreviewOut>(
+      "/v2/arbetsformedlingen/cover-letter-preview",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
     ),
   teacherAFApplications: (studentId: number) =>
     api<V2ArbetsformedlingenApplication[]>(
@@ -3105,7 +3546,13 @@ export const v2Api = {
     upcomingId: number,
     body: { expected_date?: string; debit_account_id?: number },
   ) =>
-    api<unknown>(`/upcoming/${upcomingId}`, {
+    api<{
+      id: number;
+      expected_date: string;
+      debit_account_id: number | null;
+      autogiro: boolean;
+      is_paid: boolean;
+    }>(`/v2/upcoming/${upcomingId}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
@@ -3277,6 +3724,35 @@ export const v2Api = {
     api<void>(`/v2/teacher/students/${studentId}`, {
       method: "DELETE",
     }),
+  /** Status för pågående/nyligen klara student-raderingar. UI pollar
+   * denna under pågående delete för att visa 'Raderar…' / 'Klar' / 'Fel'. */
+  teacherDeleteJobs: () =>
+    api<{
+      rows: Array<{
+        student_id: number;
+        student_name: string;
+        status: "queued" | "running" | "done" | "failed";
+        started_at: number;
+        finished_at: number | null;
+        error: string | null;
+      }>;
+      pending_count: number;
+    }>(`/v2/teacher/delete-jobs`),
+  /** Starta bakgrunds-radering av alla mina elever. Returnerar omedelbart. */
+  teacherDeleteAllMyStudents: () =>
+    api<{ status: string; teacher_id: number }>(
+      `/v2/teacher/bulk-delete-all-my-students`,
+      { method: "DELETE" },
+    ),
+  /** Polla status på pågående bulk-delete. */
+  teacherBulkDeleteStatus: () =>
+    api<{
+      status: "idle" | "queued" | "running" | "done" | "failed";
+      deleted_count?: number;
+      failed_count?: number;
+      failed_ids?: number[];
+      error?: string;
+    }>(`/v2/teacher/bulk-delete-status`),
   // === /v2/teacher/students/{id}/activity-log (Fas 2Y) ===
   teacherStudentHistory: (studentId: number, limit = 100) =>
     api<V2HistoryResponse>(
@@ -3466,6 +3942,29 @@ export const v2Api = {
       `/teacher/modules/${moduleId}/steps/${stepId}`,
       { method: "DELETE" },
     ),
+  /** AI-skiss · genererar modul-utkast (titel + summary + steg) från en
+   *  beskrivning. Kräver att lärarens ai_enabled=true. Lärar-vyn visar
+   *  utkastet i en modal innan modul + steg sparas via separata POSTs. */
+  teacherAIGenerateModuleDraft: (prompt: string) =>
+    api<{
+      raw: string;
+      parsed: {
+        title: string;
+        summary: string;
+        steps: {
+          kind: "read" | "watch" | "reflect" | "task" | "quiz";
+          title: string;
+          body?: string;
+          sort_order?: number;
+        }[];
+      };
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+    }>("/ai/modules/generate", {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
+    }),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{
@@ -3500,8 +3999,46 @@ export const v2Api = {
     }>(
       `/stocks/ledger?limit=${limit}${ticker ? `&ticker=${ticker}` : ""}`,
     ),
-  stocksMarket: () =>
-    api<{
+  iskHistory: (days = 30) => {
+    const ts = Date.now();
+    return api<{
+      days: number;
+      points: Array<{ ts: string; total_value: number }>;
+    }>(`/v2/avanza/isk-history?days=${days}&_=${ts}`);
+  },
+  stocksActivity: () => {
+    const ts = Date.now();
+    return api<{
+      recent_trades: Array<{
+        id: number;
+        ticker: string;
+        side: "buy" | "sell";
+        quantity: number;
+        price: number;
+        courtage: number;
+        total_amount: number;
+        realized_pnl: number | null;
+        executed_at: string;
+        student_rationale: string | null;
+      }>;
+      pending_orders: Array<{
+        id: number;
+        ticker: string;
+        side: "buy" | "sell";
+        quantity: number;
+        reference_price: number;
+        status: string;
+        requested_at: string;
+        student_rationale: string | null;
+      }>;
+    }>(`/v2/aktier/activity?_=${ts}`);
+  },
+  stocksMarket: () => {
+    // Cache-buster · samma URL utan query-string riskerar att cachas
+    // av browser/CDN → 'Kurser uppdaterade 2 h sedan' fastnar trots
+    // att backenden har färska kurser. Lägg till monoton timestamp.
+    const ts = Date.now();
+    return api<{
       stocks: Array<{
         ticker: string;
         name: string;
@@ -3514,7 +4051,9 @@ export const v2Api = {
       }>;
       count: number;
       market_open: boolean;
-    }>("/v2/aktier/market"),
+      last_updated_at: string | null;
+    }>(`/v2/aktier/market?_=${ts}`);
+  },
   stocksBuy: (ticker: string, body: {
     account_id: number;
     quantity: number;
@@ -3641,7 +4180,27 @@ export const v2Api = {
       locked: boolean;
       final_tax: number;
       diff: number;
+      // SKV-2 · pipeline-info för UI-banner
+      status?: string;
+      besked_due_on?: string;
+      payout_wave?: number;
+      payout_due_on?: string;
+      late_fee?: number;
+      wave_message?: string;
+      case_no?: string;
     }>(`/v2/skatten/${year}/submit`, { method: "POST", body: "{}" }),
+  /** Skatteverket-fönsterstatus · för låsning/banner i SkattenV2. */
+  skattenWindow: () =>
+    api<{
+      phase: "off_season" | "granska" | "inlamna" | "stangd";
+      tax_year: number;
+      can_read: boolean;
+      submit_open: boolean;
+      today_game: string;
+      opens_on: string | null;
+      closes_on: string | null;
+      description: string;
+    }>(`/v2/skatten/window`),
   /** Lärar-API · skapa förslag manuellt. */
   teacherCreateTaxProposal: (
     studentId: number,
@@ -3679,6 +4238,12 @@ export const v2Api = {
       }`,
     ),
   lan: () => api<LoanData>("/v2/lan"),
+  /** Huvudbok / Ledger · period kan vara YYYY-MM eller YYYY. */
+  huvudbok: (period: string) => {
+    const isMonth = period.length === 7 && period.includes("-");
+    const qs = isMonth ? `month=${period}` : `year=${period}`;
+    return api<LedgerData>(`/v2/ledger/?${qs}`);
+  },
   /** Räkna KALP för ett tänkt lånebelopp (sparas i scope-DB). */
   kalp: (loanAmount: number, loanTermMonths: number = 300) =>
     api<V2KALPResponse>("/v2/lan/kalp", {
@@ -3688,6 +4253,99 @@ export const v2Api = {
         loan_term_months: loanTermMonths,
       }),
     }),
+  /** Eleven ansöker om lån. accept_offer=false = bara prövning. */
+  loanApply: (req: V2LoanApplyRequest) =>
+    api<V2LoanApplyResponse>("/v2/lan/apply", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  /** Lista alla godkända men ej accepterade låneerbjudanden (Fas 2). */
+  creditPendingOffers: () =>
+    api<{
+      offers: Array<{
+        application_id: number;
+        kind: string;
+        requested_amount: number;
+        requested_months: number;
+        offered_rate: number | null;
+        offered_monthly_payment: number | null;
+        simulated_lender: string | null;
+        score_value: number | null;
+        created_at: string;
+      }>;
+    }>("/credit/pending-offers"),
+  /** Acceptera ett pending privatlån direkt från postlådan
+   * (auto-default till första checking-konto). Stödjer optional
+   * BankID-session-token för signering (Fas 4). */
+  creditAcceptFromMail: (applicationId: number, bankSessionToken?: string) =>
+    api<{
+      loan_id: number;
+      transaction_id: number;
+      deposited_amount: number;
+      monthly_payment: number;
+      interest_rate: number;
+      months: number;
+      pedagogical_note: string;
+    }>("/credit/private/accept-from-mail", {
+      method: "POST",
+      body: JSON.stringify({
+        application_id: applicationId,
+        bank_session_token: bankSessionToken,
+      }),
+    }),
+  /** Initiera en BankID-session för lån-signering. */
+  bankSessionInit: (purpose: string) =>
+    api<{
+      token: string;
+      qr_url: string;
+      expires_at: string;
+      purpose: string;
+    }>("/bank/session/init", {
+      method: "POST",
+      body: JSON.stringify({ purpose }),
+    }),
+  /** Polla BankID-sessionens status (confirmed/pending/expired). */
+  bankSessionStatus: (token: string) =>
+    api<{
+      token: string;
+      purpose: string;
+      status: string;
+      confirmed_at: string | null;
+      expires_at: string;
+    }>(`/bank/session/${encodeURIComponent(token)}`),
+  /** Bekräfta BankID-sessionen lokalt (förenklat dev-flöde:
+   * frontend ber användaren mata in PIN direkt i samma fönster). */
+  bankSessionConfirm: (token: string, pin: string) =>
+    api<{ ok: boolean }>(
+      `/bank/session/${encodeURIComponent(token)}/confirm`,
+      {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      },
+    ),
+  /** Slutför ett pending lån som redan har en bekräftad BankID-
+   * signering (för fall där polling-flödet i frontend brutits). */
+  creditFinalize: (applicationId: number) =>
+    api<{
+      loan_id: number;
+      transaction_id: number;
+      deposited_amount: number;
+      monthly_payment: number;
+      interest_rate: number;
+      months: number;
+      pedagogical_note: string;
+    }>("/credit/private/finalize", {
+      method: "POST",
+      body: JSON.stringify({ application_id: applicationId }),
+    }),
+  creditDecline: (applicationId: number) =>
+    api<{ ok: boolean; application_id: number; result: string }>(
+      "/credit/private/decline",
+      {
+        method: "POST",
+        body: JSON.stringify({ application_id: applicationId }),
+      },
+    ),
   /** Lärar-API · seedа default-katalog (5 produkter). */
   teacherSeedDefaultLoanProducts: (studentId: number) =>
     api<{ student_id: number; products_created: number }>(
@@ -3746,8 +4404,20 @@ export const v2Api = {
     api<V2TeacherCreditOverview>(
       `/v2/teacher/students/${studentId}/credit-overview`,
     ),
-  postladan: (filter?: V2MailType | "unhandled" | "other") =>
-    api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
+  postladan: (
+    filter?: V2MailType | "unhandled" | "other",
+    month?: string,
+  ) => {
+    // month · "YYYY-MM" begränsar till en spel-månad, "all" visar hela
+    // historiken, undefined = backend defaultar till aktuell spel-månad.
+    // Cache-buster `_=ts` förhindrar browser/CDN att cacha samma URL.
+    const ts = Date.now();
+    const params = new URLSearchParams();
+    if (filter) params.set("filter", filter);
+    if (month) params.set("month", month);
+    params.set("_", String(ts));
+    return api<MailData>(`/v2/postladan?${params.toString()}`);
+  },
   updateMailStatus: (mailId: number, status: V2MailStatus) =>
     api<V2MailItem>(`/v2/postladan/${mailId}/status`, {
       method: "PATCH",
@@ -3806,4 +4476,77 @@ export const v2Api = {
     ),
   roster: () =>
     api<V2RosterRow[]>("/v2/teacher/students/v2-roster"),
+
+  // === Klasskompis-anställning (Fas C-E) ===
+  employmentList: () =>
+    api<{ employments: EmploymentOut[] }>("/v2/employment/employments"),
+  employmentOffers: () =>
+    api<{ employments: EmploymentOut[] }>("/v2/employment/offers"),
+  employmentHireOffer: (body: {
+    classmate_student_id: number;
+    role: string;
+    monthly_gross: number;
+  }) =>
+    api<EmploymentOut>("/v2/employment/hire-offer", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  employmentAccept: (employmentId: number) =>
+    api<EmploymentOut>(`/v2/employment/offers/${employmentId}/accept`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  employmentDecline: (employmentId: number, reason?: string) =>
+    api<EmploymentOut>(`/v2/employment/offers/${employmentId}/decline`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason ?? null }),
+    }),
+  employmentPayrollRun: (yearMonth?: string) =>
+    api<PayrollRunOut>(
+      "/v2/employment/payroll/run"
+        + (yearMonth ? `?year_month=${yearMonth}` : ""),
+      { method: "POST", body: JSON.stringify({}) },
+    ),
+  employmentTerminate: (employmentId: number, reason: string) =>
+    api<EmploymentOut>(
+      `/v2/employment/employments/${employmentId}/terminate`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+};
+
+export type PayrollRunOut = {
+  year_month: string;
+  paid_on: string;
+  n_paid: number;
+  n_skipped: number;
+  total_gross: number;
+  total_net: number;
+  total_employer_fee: number;
+  total_cost: number;
+  details: Array<{
+    employment_id: number;
+    status: string;
+    gross?: number;
+    net?: number;
+    employer_fee?: number;
+  }>;
+};
+
+export type EmploymentOut = {
+  id: number;
+  company_id: number;
+  company_name: string;
+  owner_student_id: number;
+  employee_student_id: number;
+  role: string;
+  monthly_gross: number;
+  status:
+    | "pending_offer"
+    | "active"
+    | "declined"
+    | "terminated";
+  offer_sent_on: string;
+  accepted_on: string | null;
+  last_day: string | null;
+  termination_reason: string | null;
 };

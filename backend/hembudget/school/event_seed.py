@@ -1038,6 +1038,207 @@ EVENT_TEMPLATES: list[dict] = [
         "triggers": {"random_weight": 0.2},
         "social_invite_allowed": False,
     },
+
+    # === SKV-3 · Bil-händelser ===
+    # Bara bilägare träffas (requires_has_car=True), från vecka 18+
+    # så eleven hinner sätta upp ekonomin innan första bil-bombsen
+    # smäller. Pedagogiskt: visar att bilägande har dolda kostnader
+    # bortom månadsfasta poster.
+    {
+        "code": "car_winter_tires",
+        "title": "Vinterdäcken behöver bytas",
+        "description": (
+            "Du måste byta till vinterdäck innan första halkan. "
+            "Verkstaden tar 1 800 kr för bytet inkl. förvaring."
+        ),
+        "category": "unexpected",
+        "brand": "Däckverkstaden",
+        "cost_min": 1200, "cost_max": 2400,
+        "impact_economy": -1, "impact_safety": 1,  # billig trygghet
+        "duration_days": 14,
+        "triggers": {
+            "requires_has_car": True,
+            "min_week": 18,
+            "season": "october",
+            "random_weight": 0.85,
+        },
+        "social_invite_allowed": False,
+        "declinable": False,  # vinterdäck är lag · måste betalas
+    },
+    {
+        "code": "car_summer_tires",
+        "title": "Sommardäcken på igen",
+        "description": (
+            "April: dags att byta från vinter- till sommardäck. "
+            "Lugnare körning och bättre bränsleekonomi."
+        ),
+        "category": "unexpected",
+        "brand": "Däckverkstaden",
+        "cost_min": 800, "cost_max": 1600,
+        "impact_economy": -1,
+        "duration_days": 21,
+        "triggers": {
+            "requires_has_car": True,
+            "min_week": 18,
+            "season": "april",
+            "random_weight": 0.85,
+        },
+        "social_invite_allowed": False,
+        "declinable": False,  # Trafikverket: vinterdäck förbjudna efter
+                              # 15 april om inte vinterväglag · måste bytas
+    },
+    {
+        "code": "car_service",
+        "title": "Service-intervall · 2 000 mil",
+        "description": (
+            "Din bil signalerar att service behövs. Verkstaden gör "
+            "olje- och filterbyte, kollar bromsar, däck och vätskor."
+        ),
+        "category": "unexpected",
+        "brand": "Bilverkstaden",
+        "cost_min": 2500, "cost_max": 5500,
+        "impact_economy": -2, "impact_safety": 1,
+        "duration_days": 14,
+        "triggers": {
+            "requires_has_car": True,
+            "min_week": 22,
+            "random_weight": 0.30,
+        },
+        "social_invite_allowed": False,
+        "declinable": False,  # service vid milgräns · bilen blir farlig
+                               # att köra om man skippar (besiktning failar)
+    },
+    {
+        "code": "car_brakes",
+        "title": "Bromsbeläggen är slut",
+        "description": (
+            "Verkstadens kontroll: bromsbeläggen behöver bytas, "
+            "annars rist i ratten + längre bromssträcka. Ej försäkring."
+        ),
+        "category": "unexpected",
+        "brand": "Bilverkstaden",
+        "cost_min": 4000, "cost_max": 8000,
+        "impact_economy": -2, "impact_safety": -2,  # tills åtgärdat
+        "duration_days": 10,
+        "triggers": {
+            "requires_has_car": True,
+            "min_week": 30,
+            "random_weight": 0.18,
+        },
+        "social_invite_allowed": False,
+        "declinable": False,  # bromsar är säkerhet · obligatoriskt
+    },
+    {
+        "code": "car_windshield",
+        "title": "Sten i vindrutan · spricka",
+        "description": (
+            "En sten flög upp och gjorde en spricka. Glasförsäkringen "
+            "täcker reparation efter självrisk 1 500 kr. Större spricka "
+            "= byte (~4 500 kr brutto, varav 1 500 självrisk)."
+        ),
+        "category": "unexpected",
+        "brand": "Glasmästarn",
+        "cost_min": 1500, "cost_max": 1500,  # bara självrisken
+        "impact_economy": -1,
+        "duration_days": 30,
+        "triggers": {
+            "requires_has_car": True,
+            "min_week": 25,
+            "random_weight": 0.10,
+        },
+        "social_invite_allowed": False,
+        "declinable": False,  # sprickan växer · besiktning failar utan
+                               # åtgärd · måste betalas i längden
+    },
+
+    # === SKV-4 · Tandhälsa-events ===
+    # Folktandvården-besök. Om eleven har aktiv frisktandvård
+    # (insurance_kind='frisktandvard') reduceras cost till 0 i
+    # tick_for_student-flödet. Annars full kostnad enligt fast
+    # prislista. Pedagogisk poäng: eleven inser värdet av frisktandvård
+    # över tid när stora ingrepp (rotfyllning ~5 000 kr) plötsligt
+    # täcks gratis.
+    {
+        "code": "dental_check",
+        "title": "Tid till karieskontroll · Folktandvården",
+        "description": (
+            "Tid för halvårskontroll hos tandläkaren. Snabb undersökning "
+            "med röntgen vid behov. Frisktandvårdspatienter betalar 0 kr."
+        ),
+        "category": "unexpected",
+        "brand": "Folktandvården",
+        "cost_min": 700, "cost_max": 900,
+        "impact_health": 1,
+        "duration_days": 14,
+        "triggers": {
+            "min_week": 4,  # tidigt OK · alla har tänder från start
+            "random_weight": 0.45,
+            "insurance_covers": "frisktandvard",  # gratis om aktiv policy
+        },
+        "social_invite_allowed": False,
+        "declinable": False,  # hälsa · obligatoriskt
+    },
+    {
+        "code": "dental_filling",
+        "title": "Lagning av karies",
+        "description": (
+            "Vid senaste kontrollen upptäcktes ett hål som behöver lagas. "
+            "Lagning med komposit · 1 besök ca 45 min."
+        ),
+        "category": "unexpected",
+        "brand": "Folktandvården",
+        "cost_min": 1800, "cost_max": 2800,
+        "impact_health": 1, "impact_economy": -1,
+        "duration_days": 21,
+        "triggers": {
+            "min_week": 8,
+            "random_weight": 0.18,
+            "insurance_covers": "frisktandvard",
+        },
+        "social_invite_allowed": False,
+        "declinable": False,
+    },
+    {
+        "code": "dental_scaling",
+        "title": "Tandstensborttagning",
+        "description": (
+            "Tandhygienisten rekommenderar tandstensborttagning. "
+            "Förebygger karies + tandköttsproblem."
+        ),
+        "category": "unexpected",
+        "brand": "Folktandvården",
+        "cost_min": 900, "cost_max": 1400,
+        "impact_health": 1,
+        "duration_days": 21,
+        "triggers": {
+            "min_week": 14,
+            "random_weight": 0.20,
+            "insurance_covers": "frisktandvard",
+        },
+        "social_invite_allowed": False,
+        "declinable": False,  # hälsa · ej valbart att skippa
+    },
+    {
+        "code": "dental_root_canal",
+        "title": "Rotfyllning · stor tandbehandling",
+        "description": (
+            "En tand har djup karies som kräver rotbehandling. "
+            "Flera besök · ca 4-7 tim totalt. Utan frisktandvård "
+            "blir det 4 000-7 000 kr ur egen ficka."
+        ),
+        "category": "unexpected",
+        "brand": "Folktandvården",
+        "cost_min": 4000, "cost_max": 7000,
+        "impact_health": -1, "impact_economy": -3, "impact_safety": -1,
+        "duration_days": 14,
+        "triggers": {
+            "min_week": 30,
+            "random_weight": 0.08,
+            "insurance_covers": "frisktandvard",
+        },
+        "social_invite_allowed": False,
+        "declinable": False,
+    },
 ]
 
 

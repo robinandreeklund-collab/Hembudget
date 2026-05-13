@@ -171,16 +171,76 @@ def _period_dates(year_month: str) -> tuple[date, date]:
     return start, end - _td(days=1)
 
 
+def _prev_year_month(year_month: str) -> str:
+    """'2026-05' → '2026-04'. Wrappar januari→föregående år."""
+    y, m = map(int, year_month.split("-"))
+    if m == 1:
+        return f"{y - 1:04d}-12"
+    return f"{y:04d}-{m - 1:02d}"
+
+
+def _prev_period_dates(year_month: str) -> tuple[date, date]:
+    """Period för föregående månad — används av konsumtionsbaserade
+    fakturor (el, bredband, mobil, bolåneränta) som fakturerar
+    efterskotts. Eleven kan inte få faktura för maj-förbrukning den
+    5:e maj eftersom månaden inte ens är slut.
+    """
+    return _period_dates(_prev_year_month(year_month))
+
+
+def _get_car_facts(student_id: Optional[int]) -> dict:
+    """Slå upp bil-data från StudentProfile (master DB) för SKV-3-flödet.
+    Returnerar tom dict om student_id är None eller profil saknas.
+    """
+    if student_id is None:
+        return {}
+    try:
+        from ...school.engines import master_session
+        from ...school.models import StudentProfile
+        with master_session() as ms:
+            prof = (
+                ms.query(StudentProfile)
+                .filter(StudentProfile.student_id == student_id)
+                .first()
+            )
+            if prof is None:
+                return {}
+            return {
+                "has_car": bool(getattr(prof, "has_car", False)),
+                "commute_transport": getattr(prof, "commute_transport", None),
+                "fuel_type": getattr(prof, "car_fuel_type", None),
+                "fuel_cost": int(getattr(prof, "car_monthly_fuel_cost", 0) or 0),
+                "electric_extra": int(getattr(
+                    prof, "car_monthly_electric_extra", 0,
+                ) or 0),
+                "leasing_monthly": getattr(prof, "car_leasing_monthly", None),
+                "car_brand": getattr(prof, "car_brand", None),
+                "car_model": getattr(prof, "car_model", None),
+                "license_plate": getattr(prof, "car_license_plate", None),
+                "financing": getattr(prof, "car_financing", None),
+                "loan_principal": int(
+                    getattr(prof, "car_loan_principal", 0) or 0
+                ),
+                "loan_monthly": int(
+                    getattr(prof, "car_loan_monthly_payment", 0) or 0
+                ),
+            }
+    except Exception:
+        return {}
+
+
 def _build_bills(
     rng: random.Random,
     profile: GeneratedProfile,
     year_month: str,
+    student_id: Optional[int] = None,
 ) -> list[FixedBill]:
     """Bygg lista över fakturor för månaden — sorterade på dag.
 
     Varje faktura kan ha invoice_data med strukturerade rader, moms,
     OCR och period — som sedan renderas i MailDetailV2.InvoiceLayout.
     """
+    car_facts = _get_car_facts(student_id)
     city = STAD_BY_KEY.get(profile.city_key)
     bills: list[FixedBill] = []
     period_start, period_end = _period_dates(year_month)
@@ -286,6 +346,11 @@ def _build_bills(
                 },
             ))
         if profile.housing.monthly_amortering or profile.housing.monthly_interest:
+            # Efterskotts: ränta beräknas på saldot under den
+            # passerade månaden — inte den vi går in i. Faktura i maj
+            # → ränta för aprils saldo.
+            bolan_period_ym = _prev_year_month(year_month)
+            bolan_period_start, bolan_period_end = _prev_period_dates(year_month)
             ranta = int(profile.housing.monthly_interest or 0)
             amort = int(profile.housing.monthly_amortering or 0)
             loan_total = ranta + amort
@@ -295,7 +360,7 @@ def _build_bills(
                 sender="Spelbanken Bolån",
                 sender_short="BANK",
                 sender_kind="bank",
-                subject=f"Bolån · ränta + amortering {year_month}",
+                subject=f"Bolån · ränta + amortering {bolan_period_ym}",
                 body_meta=(
                     f"Lån {profile.housing.loan_amount or 0:,} kr · "
                     "ränta 3,75 %"
@@ -307,8 +372,8 @@ def _build_bills(
                     "invoice_number": (
                         f"BL-{year_month}-{profile.seed % 9999:04d}"
                     ),
-                    "period_start": period_start.isoformat(),
-                    "period_end": period_end.isoformat(),
+                    "period_start": bolan_period_start.isoformat(),
+                    "period_end": bolan_period_end.isoformat(),
                     "rows": [
                         {
                             "label": "Ränta (3,75 % p.a.)",
@@ -337,6 +402,10 @@ def _build_bills(
                 },
             ))
         if profile.housing.monthly_drift:
+            # Efterskotts: kommunala driftavgifter (sopor, snöröjning)
+            # avser passerad månads förbrukning.
+            drift_period_ym = _prev_year_month(year_month)
+            drift_period_start, drift_period_end = _prev_period_dates(year_month)
             drift = profile.housing.monthly_drift
             sopor = int(drift * 0.30)
             forsakring = int(drift * 0.40)
@@ -347,7 +416,7 @@ def _build_bills(
                 sender=f"{profile.city_display} kommun",
                 sender_short="VILLA",
                 sender_kind="util",
-                subject=f"Driftavi villa {year_month}",
+                subject=f"Driftavi villa {drift_period_ym}",
                 body_meta="Sopor + försäkring + snöröjning",
                 amount=drift,
                 bankgiro="7521-0814",
@@ -356,8 +425,8 @@ def _build_bills(
                     "invoice_number": (
                         f"DR-{year_month}-{profile.seed % 9999:04d}"
                     ),
-                    "period_start": period_start.isoformat(),
-                    "period_end": period_end.isoformat(),
+                    "period_start": drift_period_start.isoformat(),
+                    "period_end": drift_period_end.isoformat(),
                     "rows": [
                         {"label": "Sophämtning + återvinning",
                          "amount": sopor},
@@ -379,8 +448,12 @@ def _build_bills(
             ))
 
     # === DAG 3 · EL (Tibber) · kWh × spot + nät, moms 25 % ===
+    # Efterskotts: el-räkningen som inkommer i maj avser april-
+    # förbrukningen. Förbrukningen mäts först — sedan faktureras.
+    el_period_ym = _prev_year_month(year_month)
+    el_period_start, el_period_end = _prev_period_dates(year_month)
     kwh, spot = _seasonal_electricity_kwh(
-        rng, year_month, profile.housing.size_kvm,
+        rng, el_period_ym, profile.housing.size_kvm,
     )
     grid_fee = 250  # elnätsavgift fast/mån (genomsnitt 2026)
     spot_cost = int(kwh * spot)
@@ -396,15 +469,15 @@ def _build_bills(
         sender="Tibber",
         sender_short="EL",
         sender_kind="util",
-        subject=f"Elräkning {year_month}",
+        subject=f"Elräkning {el_period_ym}",
         body_meta=f"{kwh} kWh · {profile.housing.size_kvm} kvm",
         amount=el_amount,
         bankgiro="5050-1144",
         invoice_data={
             "kind": "el",
             "invoice_number": f"TB-{year_month}-{profile.seed % 99999:05d}",
-            "period_start": period_start.isoformat(),
-            "period_end": period_end.isoformat(),
+            "period_start": el_period_start.isoformat(),
+            "period_end": el_period_end.isoformat(),
             "rows": [
                 {
                     "label": "Förbrukning",
@@ -444,6 +517,9 @@ def _build_bills(
     ))
 
     # === DAG 5 · BREDBAND (Bahnhof) · 100/100 fiber, moms 25 % ===
+    # Efterskotts: fakturan i maj täcker föregående månads abonnemang.
+    bb_period_ym = _prev_year_month(year_month)
+    bb_period_start, bb_period_end = _prev_period_dates(year_month)
     bb_net = 311  # 311 kr ex moms
     bb_moms = int(bb_net * 0.25)
     bb_total = bb_net + bb_moms
@@ -453,15 +529,15 @@ def _build_bills(
         sender="Bahnhof",
         sender_short="NET",
         sender_kind="util",
-        subject=f"Bredband {year_month}",
+        subject=f"Bredband {bb_period_ym}",
         body_meta="100/100 Mbit/s fiber · obegränsat",
         amount=bb_total,
         bankgiro="5995-0312",
         invoice_data={
             "kind": "bredband",
             "invoice_number": f"BH-{year_month}-{profile.seed % 99999:05d}",
-            "period_start": period_start.isoformat(),
-            "period_end": period_end.isoformat(),
+            "period_start": bb_period_start.isoformat(),
+            "period_end": bb_period_end.isoformat(),
             "rows": [
                 {"label": "Bahnhof Fiber 100/100 Mbit/s",
                  "amount": int(bb_net * 0.85)},
@@ -486,6 +562,9 @@ def _build_bills(
     ))
 
     # === DAG 7 · MOBIL (Telia) · surfpaket + samtal, moms 25 % ===
+    # Efterskotts: fakturan i maj täcker föregående månads samtal+surf.
+    mob_period_ym = _prev_year_month(year_month)
+    mob_period_start, mob_period_end = _prev_period_dates(year_month)
     mobile_subtotal = rng.choice([95, 119, 159, 199, 239, 319])
     mobile_data_gb = {95: 5, 119: 15, 159: 30, 199: 60, 239: 100, 319: 1000}
     surf_gb = mobile_data_gb.get(mobile_subtotal, 30)
@@ -497,15 +576,15 @@ def _build_bills(
         sender="Telia",
         sender_short="TEL",
         sender_kind="util",
-        subject=f"Mobilabonnemang {year_month}",
+        subject=f"Mobilabonnemang {mob_period_ym}",
         body_meta=f"{surf_gb} GB surf · obegränsade samtal",
         amount=mobile_total,
         bankgiro="5050-2299",
         invoice_data={
             "kind": "mobil",
             "invoice_number": f"TEL-{year_month}-{profile.seed % 99999:05d}",
-            "period_start": period_start.isoformat(),
-            "period_end": period_end.isoformat(),
+            "period_start": mob_period_start.isoformat(),
+            "period_end": mob_period_end.isoformat(),
             "rows": [
                 {"label": f"Surfpaket {surf_gb} GB",
                  "amount": int(mobile_subtotal * 0.65)},
@@ -536,7 +615,14 @@ def _build_bills(
     # nedan (efter att session öppnats).
 
     # === DAG 10 · LOKALTRAFIK · månadskort om städer med koll-trafik ===
-    if city and city.job_density >= 1.0:
+    # Gate på car_facts: bilägare får INTE SL-faktura, bara kollektiv-
+    # transport-pendlare. Verkligheten: man äger inte både bil OCH har
+    # månadskort för dagspendling (väldigt få gör det).
+    skip_public_transport = bool(
+        car_facts.get("has_car")
+        and car_facts.get("commute_transport") == "car"
+    )
+    if city and city.job_density >= 1.0 and not skip_public_transport:
         sl_amount = 970 if city.key == "stockholm" else 850
         sl_provider = "SL"
         sl_bg = "5012-0145"
@@ -586,6 +672,195 @@ def _build_bills(
             },
         ))
 
+    # === DAG 12 · DRIVMEDEL (SKV-3) · bilägare ===
+    # Bensin/diesel som månadsfaktura från drivmedelsbolag. El-bilar
+    # får INGEN separat drivmedelsfaktura — el-laddningen läggs som
+    # tillägg på el-räkningen istället (lägg till på första utility-
+    # raden om den finns, annars separat rad).
+    if car_facts.get("has_car") and car_facts.get("fuel_type") in (
+        "bensin", "diesel", "hybrid",
+    ):
+        fuel_cost = car_facts.get("fuel_cost", 0)
+        if fuel_cost > 0:
+            fuel_type = car_facts["fuel_type"]
+            station = (
+                "OKQ8" if fuel_type == "diesel" else
+                "Circle K" if fuel_type == "bensin" else "Preem"
+            )
+            plate = car_facts.get("license_plate", "—")
+            # Bensin/diesel-faktura · moms 25 %
+            fuel_net = int(fuel_cost / 1.25)
+            fuel_moms = fuel_cost - fuel_net
+            ocr_fuel = _ocr(f"fuel-{year_month}")
+            bills.append(FixedBill(
+                day=12,
+                sender=station,
+                sender_short=station[:3].upper(),
+                sender_kind="util",
+                subject=(
+                    f"{fuel_type.title()}-faktura · "
+                    f"företagsavtal {year_month}"
+                ),
+                body_meta=(
+                    f"~{fuel_cost} kr · pendling med "
+                    f"{car_facts.get('car_brand')} "
+                    f"{car_facts.get('car_model')}"
+                ),
+                amount=fuel_cost,
+                bankgiro="5800-2233",
+                invoice_data={
+                    "kind": "drivmedel",
+                    "invoice_number": f"FUEL-{year_month}-{plate}",
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                    "rows": [
+                        {
+                            "label": (
+                                f"{fuel_type.title()} · regnr {plate}"
+                            ),
+                            "amount": fuel_net,
+                        },
+                    ],
+                    "subtotal": fuel_net,
+                    "moms": fuel_moms,
+                    "moms_rate": 25,
+                    "total": fuel_cost,
+                    "ocr": ocr_fuel,
+                    "bankgiro": "5800-2233",
+                    "extra": {
+                        "moms_note": (
+                            "Drivmedel har full moms 25 % · "
+                            "som privatperson är denna momsen "
+                            "INTE avdragsgill."
+                        ),
+                    },
+                },
+            ))
+
+    # El-bil får tilläggsladdning som ren expense-rad om hemladdning
+    # > 0 kr (matchar privat-elräkningen). Ingen egen faktura — pengarna
+    # går via elbolagets vanliga räkning. Detta hanteras i variable_
+    # expenses / utility-flödet · vi flaggar inte här utan låter
+    # utility_phase plocka upp electric_extra-fältet.
+
+    # === DAG 27 · BILLÅN (SKV-3) ===
+    # Om financing=loan · separat månadsavi från långivaren. Ränta +
+    # rak amortering (5 år = principal/60 per månad). Matchas mot Loan
+    # via LoanMatcher som splittar transaktionen i ränta + amortering,
+    # så outstanding_balance i huvudboken sjunker varje månad.
+    if (
+        car_facts.get("has_car")
+        and car_facts.get("financing") == "loan"
+        and (car_facts.get("loan_monthly") or 0) > 0
+        and (car_facts.get("loan_principal") or 0) > 0
+    ):
+        loan_monthly_total = int(car_facts["loan_monthly"])
+        loan_principal_orig = int(car_facts["loan_principal"])
+        # Rak amortering · 5 år = principal/60 per månad. Matchar
+        # car_seed.py där Loan.amortization_monthly sätts till samma
+        # värde. Räntan = total - amortering (varierar lite men håller
+        # totalbeloppet konstant så autogiro-matchningen funkar).
+        amort_part = max(1, loan_principal_orig // 60)
+        interest_part = max(0, loan_monthly_total - amort_part)
+        ocr_billan = _ocr(f"billan-{year_month}")
+        lender_name = "Spelbanken Bil"
+        car_label = (
+            f"{car_facts.get('car_brand') or ''} "
+            f"{car_facts.get('car_model') or ''}"
+        ).strip() or "billån"
+        bills.append(FixedBill(
+            day=27,
+            sender=lender_name,
+            sender_short="SB",
+            sender_kind="fin",
+            subject=f"Billån · ränta + amortering {year_month}",
+            body_meta=(
+                f"{car_label} · {loan_monthly_total} kr/mån (annuitet)"
+            ),
+            amount=loan_monthly_total,
+            bankgiro="5503-2197",
+            invoice_data={
+                "kind": "billan",
+                "invoice_number": (
+                    f"BILL-{year_month}-{profile.seed % 9999:04d}"
+                ),
+                "period_start": period_start.isoformat(),
+                "period_end": period_end.isoformat(),
+                "rows": [
+                    {
+                        "label": "Ränta (6,0 % p.a.)",
+                        "amount": interest_part,
+                    },
+                    {
+                        "label": "Amortering (rak, 5 år)",
+                        "amount": amort_part,
+                    },
+                ],
+                "subtotal": loan_monthly_total,
+                "moms": 0,
+                "moms_rate": 0,
+                "total": loan_monthly_total,
+                "ocr": ocr_billan,
+                "bankgiro": "5503-2197",
+                "extra": {
+                    "loan_amount": loan_principal_orig,
+                    "interest_rate_pct": 6.0,
+                    "moms_note": (
+                        "Billåneränta är momsfri och INTE avdragsgill "
+                        "(till skillnad från bolåneränta)."
+                    ),
+                },
+            },
+        ))
+
+    # === DAG 28 · BILLEASING (SKV-3) ===
+    # Om financing=leasing · separat månadsfaktura från leasingbolaget.
+    if car_facts.get("has_car") and car_facts.get("leasing_monthly"):
+        leasing_amt = int(car_facts["leasing_monthly"])
+        if leasing_amt > 0:
+            leas_net = int(leasing_amt / 1.25)
+            leas_moms = leasing_amt - leas_net
+            ocr_leas = _ocr(f"leas-{year_month}")
+            bills.append(FixedBill(
+                day=28,
+                sender="Spelbanken Bil-leasing",
+                sender_short="SBL",
+                sender_kind="fin",
+                subject=f"Leasingavgift {year_month}",
+                body_meta=(
+                    f"{car_facts.get('car_brand')} "
+                    f"{car_facts.get('car_model')} · "
+                    f"{leasing_amt} kr/mån"
+                ),
+                amount=leasing_amt,
+                bankgiro="5900-3344",
+                invoice_data={
+                    "kind": "leasing",
+                    "invoice_number": (
+                        f"LEAS-{year_month}-"
+                        f"{car_facts.get('license_plate', '')}"
+                    ),
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                    "rows": [
+                        {
+                            "label": (
+                                f"Leasingavgift · "
+                                f"{car_facts.get('car_brand')} "
+                                f"{car_facts.get('car_model')}"
+                            ),
+                            "amount": leas_net,
+                        },
+                    ],
+                    "subtotal": leas_net,
+                    "moms": leas_moms,
+                    "moms_rate": 25,
+                    "total": leasing_amt,
+                    "ocr": ocr_leas,
+                    "bankgiro": "5900-3344",
+                },
+            ))
+
     return sorted(bills, key=lambda b: b.day)
 
 
@@ -595,6 +870,7 @@ def generate_fixed_expenses(
     profile: GeneratedProfile,
     year_month: str,
     student_scope: str,
+    student_id: Optional[int] = None,
     rng: Optional[random.Random] = None,
     release_base: Optional[datetime] = None,
 ) -> dict:
@@ -607,7 +883,7 @@ def generate_fixed_expenses(
     """
     rng = rng or random.Random(f"{student_scope}|{year_month}|fixed")
 
-    bills = _build_bills(rng, profile, year_month)
+    bills = _build_bills(rng, profile, year_month, student_id=student_id)
     period_start, period_end = _period_dates(year_month)
 
     def _ocr(seed_extra: str) -> str:
@@ -719,11 +995,28 @@ def generate_fixed_expenses(
             due=due,
         )
 
+        # Releasa fakturan när den ANLÄNDER (~14 dgr innan due), inte
+        # när den FÖRFALLER. Tidigare buggen: bill.day=3 (Tibber Jan 3)
+        # gav release_at = release_base + 2 dgr → mailet syntes först
+        # på Jan 3 (= förfallodagen) i spel-tid. Eleven hade ingen tid
+        # att betala. Nu släpps på receive_day = max(1, due_day - 14)
+        # så mail om Jan-3-faktura är synligt redan vid start (Jan 1).
+        receive_day = max(1, bill.day - 14)
         released_at = (
-            release_at_for_day(release_base, bill.day)
+            release_at_for_day(release_base, receive_day)
             if release_base is not None
             else None
         )
+        # received_at = SPEL-datetime så postlådan visar "20 dec" inte
+        # "7 maj" (real-tid när seed kördes). Använder due_date - 14d
+        # som "fakturadatum" (svensk standard: kund får 14-30 dgr).
+        from datetime import (
+            datetime as _dt_fe, timedelta as _td_fe,
+        )
+        receive_d = due - _td_fe(days=14)
+        receive_at_spel = _dt_fe.combine(
+            receive_d, _dt_fe.min.time(),
+        ).replace(hour=8)
         mail = MailItem(
             sender=bill.sender,
             sender_short=bill.sender_short,
@@ -741,11 +1034,57 @@ def generate_fixed_expenses(
             ocr_reference=ocr_val,
             invoice_data=inv,
             released_at=released_at,
+            received_at=receive_at_spel,
         )
         s.add(mail)
         s.flush()
         created_ids.append(mail.id)
         total += bill.amount
+
+        # Skapa motsvarande UtilityReading för el/bredband/mobil/vatten
+        # så /v2/forbrukning kan visa historik. Annars syns bara
+        # fakturan i postlådan men förbrukning-aktören är tom.
+        if bill.invoice_data and bill.invoice_data.get("kind") in (
+            "el", "bredband", "mobil", "vatten",
+        ):
+            try:
+                from ...db.models import UtilityReading
+                _kind_map = {
+                    "el": ("electricity", "kWh", "energy"),
+                    "bredband": ("internet", None, "energy"),
+                    "mobil": ("mobile", None, "energy"),
+                    "vatten": ("water", "m3", "energy"),
+                }
+                meter_type, default_unit, meter_role = _kind_map[
+                    bill.invoice_data["kind"]
+                ]
+                extra = bill.invoice_data.get("extra") or {}
+                period_start_str = bill.invoice_data.get("period_start")
+                period_end_str = bill.invoice_data.get("period_end")
+                if period_start_str and period_end_str:
+                    consumption = None
+                    consumption_unit = default_unit
+                    if bill.invoice_data["kind"] == "el":
+                        consumption = Decimal(
+                            str(extra.get("kwh_total") or 0)
+                        )
+                        consumption_unit = "kWh"
+                    s.add(UtilityReading(
+                        supplier=bill.sender,
+                        meter_type=meter_type,
+                        meter_role=meter_role,
+                        period_start=date.fromisoformat(period_start_str),
+                        period_end=date.fromisoformat(period_end_str),
+                        consumption=consumption,
+                        consumption_unit=consumption_unit,
+                        cost_kr=Decimal(str(bill.amount)),
+                        source="seed",
+                        notes=f"Auto-skapad från {bill.subject}",
+                    ))
+            except Exception:
+                # UtilityReading är best-effort · ingen krasch
+                # om modellen saknar kolumn / annan miljö-skillnad.
+                pass
 
     return {
         "items_created": len(created_ids),

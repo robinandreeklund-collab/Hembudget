@@ -20,11 +20,12 @@
  */
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { api } from "@/api/client";
+import { api, clearRole, clearToken, getToken, setAsStudent } from "@/api/client";
 import { GuideDropdown } from "./guides/GuideDropdown";
 import { NotifBell } from "./NotifBell";
 import { ClassPicker } from "./ClassPicker";
 import "./topbar.css";
+import "./v2-mode-flip.css";
 
 type Status = { role: string; is_super_admin: boolean };
 
@@ -118,7 +119,29 @@ function writeMode(m: Mode) {
   window.dispatchEvent(new CustomEvent(MODE_EVENT, { detail: { mode: m } }));
 }
 
+// === Singleton-mönster · bara EN V2Topbar renderas oavsett hur många
+// platser som anropar <V2Topbar />. App-nivå-instansen är persistent
+// över route-byten · per-page-instanser blir no-ops så topbar inte
+// re-mountas vid mode-switch (vilket skulle kollapsa flip-animationen).
+let _topbarMountedCount = 0;
+
 export function V2Topbar({ status }: { status: Status }) {
+  // Singleton-check vid första render
+  const [isPrimary] = useState(() => {
+    if (_topbarMountedCount === 0) {
+      _topbarMountedCount = 1;
+      return true;
+    }
+    return false;
+  });
+  useEffect(() => {
+    if (!isPrimary) return;
+    return () => {
+      // Bara primary-instansen kan släppa låset
+      _topbarMountedCount = 0;
+    };
+  }, [isPrimary]);
+
   const location = useLocation();
   const navigate = useNavigate();
   const crumbs = getCrumbs(location.pathname);
@@ -157,8 +180,9 @@ export function V2Topbar({ status }: { status: Status }) {
     return () => window.removeEventListener(MODE_EVENT, onChange);
   }, []);
 
-  // Hämta AI-token-status (visas i meter)
+  // Hämta AI-token-status (visas i meter) · bara primary-instansen
   useEffect(() => {
+    if (!isPrimary) return;
     api<{
       ai_enabled: boolean;
       available: boolean;
@@ -189,37 +213,69 @@ export function V2Topbar({ status }: { status: Status }) {
         .catch(() => undefined);
     }, 30000);
     return () => clearInterval(t);
-  }, []);
+  }, [isPrimary]);
 
-  // Hämta elevens karaktärs-info för level-badge + biz-badge
+  // Hämta elevens karaktärs-info för level-badge + biz-badge ·
+  // bara primary-instansen
   useEffect(() => {
+    if (!isPrimary) return;
     if (isTeacher) {
       setStudentInfo(null);
       return;
     }
-    api<{
-      v2_level: number;
-      v2_spend_profile: string;
-    }>("/v2/status")
-      .then((r) =>
+    Promise.all([
+      api<{
+        v2_level: number;
+        v2_spend_profile: string;
+      }>("/v2/status"),
+      // Biz-summary · null om eleven inte har företag (fail-soft)
+      api<{
+        has_company: boolean;
+        company_name: string | null;
+        industry_label: string | null;
+      }>("/v2/foretag/private-summary").catch(() => null),
+    ])
+      .then(([r, biz]) =>
         setStudentInfo({
           name: "",
           level: r.v2_level,
           spend: r.v2_spend_profile,
-          biz_company_name: null,
+          biz_company_name:
+            biz && biz.has_company ? biz.company_name : null,
         }),
       )
       .catch(() => setStudentInfo(null));
-  }, [isTeacher]);
+  }, [isTeacher, isPrimary]);
 
   function toggleMode() {
     const next: Mode = mode === "private" ? "business" : "private";
-    writeMode(next);
-    setMode(next);
-    // Bug 12 · navigera till hubben så aktörsmenyerna växlar
-    if (location.pathname !== "/v2/hub") {
-      navigate("/v2/hub");
+    const target = document.getElementById("v2-flip-target");
+
+    // Reduced-motion-användare slipper rotation. Vi byter ändå
+    // mode + navigerar.
+    const reducedMotion = window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // Steg 1 · flip-out (hela main-areen roterar bort)
+    if (target && !reducedMotion) {
+      target.classList.add("flip-out");
     }
+
+    // Steg 2 · efter flip-out: byt mode + navigera till hub
+    setTimeout(() => {
+      writeMode(next);
+      setMode(next);
+      if (location.pathname !== "/v2/hub") {
+        navigate("/v2/hub");
+      }
+
+      // Steg 3 · flip-in (hela main-areen roterar in)
+      if (target && !reducedMotion) {
+        target.classList.remove("flip-out");
+        target.classList.add("flip-in");
+        setTimeout(() => target.classList.remove("flip-in"), 550);
+      }
+    }, reducedMotion ? 0 : 460);
   }
 
   function handleEcho() {
@@ -234,6 +290,11 @@ export function V2Topbar({ status }: { status: Status }) {
   const tokensRemaining =
     tokens && tokens.limit > 0 ? Math.max(0, tokens.limit - tokens.used) : 0;
 
+  // Singleton · bara primary-instansen renderar. Per-page-instanser
+  // blir no-ops så topbar inte re-mountas vid route-byte · viktigt
+  // för att flip-animationen ska se clean ut (topbar persistent).
+  if (!isPrimary) return null;
+
   return (
     <header
       className={`v2-topbar${mobileOpen ? " v2-topbar-mobile-open" : ""}`}
@@ -242,13 +303,20 @@ export function V2Topbar({ status }: { status: Status }) {
       <Link to={isTeacher ? "/teacher/v2" : "/v2/hub"} className="tb-brand">
         Ekonomilabbet
         <span className="tb-brand-meta">Forskning · 2026</span>
+        <span className="beta-pill" title="Plattformen är i beta">
+          Beta
+        </span>
       </Link>
 
-      {/* Privat / Företag badge — visas exklusivt baserat på data-mode */}
+      {/* Privat / Företag badge — visas exklusivt baserat på data-mode.
+       * Vi håller dem korta för att inte trycka ut topbaren · biz-mode-
+       * badge:n visar bara företagets namn (eller 'Företag' fallback). */}
       {!isTeacher && (
         <>
           <span className="priv-badge">Privatekonomi</span>
-          <span className="biz-badge">Företag</span>
+          <span className="biz-badge">
+            {studentInfo?.biz_company_name || "Företag"}
+          </span>
           {/* Level-badge — fast nivå-meta för eleven */}
           {studentInfo && (
             <span
@@ -370,13 +438,19 @@ async function handleLogout() {
     await fetch("/logout", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
+        Authorization: `Bearer ${getToken() || ""}`,
       },
     }).catch(() => undefined);
   } finally {
-    sessionStorage.removeItem("hembudget_token");
-    sessionStorage.removeItem("hembudget_role");
-    sessionStorage.removeItem("hembudget_as_student");
+    // KRITISKT: rensa via centrala helpers så BÅDE localStorage och
+    // legacy sessionStorage töms. Tidigare rensade vi bara sessionStorage
+    // direkt → efter token-migrationen till localStorage stannade token
+    // kvar och nästa "logga in" hittade gammal token = direktinlog utan
+    // kod. Det förklarar bug-rapporten "logga ut → logga in → kommer
+    // direkt in på eleven".
+    clearToken();
+    clearRole();
+    setAsStudent(null);
     window.location.href = "/";
   }
 }

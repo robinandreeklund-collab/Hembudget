@@ -67,8 +67,25 @@ def ensure_scope_accounts(
 
         opening = Decimal("0")
         if spec["type"] == "checking":
-            # Buffer = halv månadsnetto för att undvika "fakturakaos dag 1"
-            opening = Decimal(profile.monthly_net // 2)
+            # Lönekonto-buffer = ~2 hushålls-månadsnetto. Tidigare
+            # baserades det på main.monthly_net vilket gjorde att
+            # sambo-karaktärer med låg main-lön (t.ex. Gymnasie-elev
+            # deltid 4 446 kr) startade på minus i 1:a månaden trots
+            # att partnern drog in 21 000 kr. Använder nu
+            # household_net_monthly som speglar verkligt cashflow.
+            household_net = (
+                profile.household_net_monthly
+                if profile.household_net_monthly
+                else profile.monthly_net
+            )
+            opening = Decimal(household_net * 2)
+        elif spec["type"] == "savings":
+            household_net = (
+                profile.household_net_monthly
+                if profile.household_net_monthly
+                else profile.monthly_net
+            )
+            opening = Decimal(household_net)
 
         acc = Account(
             name=spec["name"],

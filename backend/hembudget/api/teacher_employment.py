@@ -1,0 +1,361 @@
+"""Lärar-API · Klassens anställnings-ekosystem (Fas H).
+
+Spec: dev/employment-flows.md (Fas H)
+
+Visar en lärar-översikt över ALLA klasskompis-anställningar i klassen:
+  · Vem äger ett bolag (företagare)
+  · Vem är anställd hos vem (klasskompis-anställningar)
+  · Total payroll-volym i klassen senaste månaden
+  · Antal aktiva / konkurser / uppsägningar
+
+Endpointen kräver lärar-token. Returnerar graph-data lämplig för
+nodes+edges-rendering i frontend.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+
+from ..school.engines import master_session
+from ..school.employment_models import ClassmateEmployment
+from ..school.models import Student, StudentActivity
+from .deps import TokenInfo, require_teacher
+
+
+router = APIRouter(prefix="/v2/teacher/employment", tags=["teacher-employment"])
+
+
+# ===========================================================
+# Schemas
+# ===========================================================
+
+
+class StudentNode(BaseModel):
+    student_id: int
+    display_name: str
+    class_label: Optional[str] = None
+    is_employer: bool
+    company_name: Optional[str] = None
+    n_employees: int = 0
+    employed_at: Optional[str] = None  # company-namn där de är anställda
+
+
+class EmploymentEdge(BaseModel):
+    employment_id: int
+    owner_student_id: int
+    employee_student_id: int
+    company_name: str
+    role: str
+    monthly_gross: int
+    status: str
+    accepted_on: Optional[str] = None
+    last_day: Optional[str] = None
+
+
+class EcosystemOut(BaseModel):
+    students: list[StudentNode]
+    employments: list[EmploymentEdge]
+    stats: dict
+
+
+# ===========================================================
+# Endpoints
+# ===========================================================
+
+
+@router.get("/ecosystem", response_model=EcosystemOut)
+def class_employment_ecosystem(
+    class_label: Optional[str] = None,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Returnera alla anställnings-relationer i klassen som
+    nodes (elever) + edges (anställningar)."""
+    teacher_id = info.teacher_id
+    if teacher_id is None:
+        raise HTTPException(403, "Lärar-token utan teacher_id")
+
+    with master_session() as s:
+        q = s.query(Student).filter(Student.teacher_id == teacher_id)
+        if class_label:
+            q = q.filter(Student.class_label == class_label)
+        students = q.order_by(Student.display_name).all()
+        student_ids = [st.id for st in students]
+
+        # Alla employments där ANTINGEN owner eller employee finns i
+        # klassen (vanligtvis båda).
+        all_emps = (
+            s.query(ClassmateEmployment)
+            .filter(
+                (ClassmateEmployment.owner_student_id.in_(student_ids))
+                | (ClassmateEmployment.employee_student_id.in_(student_ids)),
+            )
+            .order_by(ClassmateEmployment.offer_sent_on.desc())
+            .all()
+        )
+
+        # Bygg upp employer/employee-tillstånd per student
+        n_employees_per_owner: dict[int, int] = {}
+        owner_company: dict[int, str] = {}
+        employee_company: dict[int, str] = {}
+        for e in all_emps:
+            if e.status == "active":
+                n_employees_per_owner[e.owner_student_id] = (
+                    n_employees_per_owner.get(e.owner_student_id, 0) + 1
+                )
+                owner_company[e.owner_student_id] = e.company_name
+                employee_company[e.employee_student_id] = e.company_name
+
+        nodes = [
+            StudentNode(
+                student_id=st.id,
+                display_name=st.display_name,
+                class_label=st.class_label,
+                is_employer=n_employees_per_owner.get(st.id, 0) > 0,
+                company_name=owner_company.get(st.id),
+                n_employees=n_employees_per_owner.get(st.id, 0),
+                employed_at=employee_company.get(st.id),
+            )
+            for st in students
+        ]
+
+        edges = [
+            EmploymentEdge(
+                employment_id=e.id,
+                owner_student_id=e.owner_student_id,
+                employee_student_id=e.employee_student_id,
+                company_name=e.company_name,
+                role=e.role,
+                monthly_gross=e.monthly_gross,
+                status=e.status,
+                accepted_on=(
+                    e.accepted_on.isoformat() if e.accepted_on else None
+                ),
+                last_day=(
+                    e.last_day.isoformat() if e.last_day else None
+                ),
+            )
+            for e in all_emps
+        ]
+
+        # Statistik — senaste 30 dgr
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        recent_payroll = (
+            s.query(StudentActivity)
+            .filter(
+                StudentActivity.student_id.in_(student_ids),
+                StudentActivity.kind == "biz.payroll_run",
+                StudentActivity.created_at >= cutoff,
+            )
+            .all()
+        )
+        total_payroll_30d = 0
+        for act in recent_payroll:
+            pl = act.payload or {}
+            total_payroll_30d += int(pl.get("total_cost") or 0)
+
+        n_active = sum(1 for e in all_emps if e.status == "active")
+        n_pending = sum(1 for e in all_emps if e.status == "pending_offer")
+        n_terminated = sum(1 for e in all_emps if e.status == "terminated")
+        n_declined = sum(1 for e in all_emps if e.status == "declined")
+        n_employers = sum(1 for n in nodes if n.is_employer)
+
+        return EcosystemOut(
+            students=nodes,
+            employments=edges,
+            stats={
+                "n_students_total": len(students),
+                "n_employers": n_employers,
+                "n_active_employments": n_active,
+                "n_pending_offers": n_pending,
+                "n_terminated": n_terminated,
+                "n_declined": n_declined,
+                "total_payroll_paid_30d": total_payroll_30d,
+            },
+        )
+
+
+# ===========================================================
+# Career timeline (Fas I)
+# ===========================================================
+
+
+CAREER_TIMELINE_KINDS = (
+    "private.resigned",
+    "private.employment_offer_received",
+    "private.employment_accepted",
+    "private.employment_declined",
+    "private.terminated_by_employer",
+    "private.terminated_by_bankruptcy",
+    "biz.employee_hire_offered",
+    "biz.employee_hired",
+    "biz.employee_offer_declined",
+    "biz.employee_terminated",
+    "biz.employments_auto_terminated",
+    "biz.payroll_run",
+    "biz.company_created",
+    "biz.company_closed",
+)
+
+
+class CareerTimelineRow(BaseModel):
+    id: int
+    kind: str
+    summary: str
+    payload: Optional[dict] = None
+    occurred_at: str
+
+
+class CareerTimelineOut(BaseModel):
+    student_id: int
+    items: list[CareerTimelineRow]
+
+
+# ===========================================================
+# Stats-trend (Fas J) · veckovis aggregering över klassen
+# ===========================================================
+
+
+class StatsTrendBucket(BaseModel):
+    week_start: str  # "2026-05-04"
+    n_hire_offered: int = 0
+    n_accepted: int = 0
+    n_declined: int = 0
+    n_terminated: int = 0
+    n_bankrupted: int = 0
+    payroll_paid: int = 0
+
+
+class StatsTrendOut(BaseModel):
+    weeks: list[StatsTrendBucket]
+
+
+@router.get("/stats-trend", response_model=StatsTrendOut)
+def employment_stats_trend(
+    weeks: int = 12,
+    class_label: Optional[str] = None,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Veckovis aggregering av employment-händelser för klassen.
+
+    Returnerar `weeks` (max 52) buckets med antal hire/accept/decline/
+    terminate/bankruptcy + total payroll-volym per vecka.
+    """
+    from datetime import date as _date
+
+    weeks = max(1, min(weeks, 52))
+    teacher_id = info.teacher_id
+    if teacher_id is None:
+        raise HTTPException(403, "Lärar-token utan teacher_id")
+
+    today_utc = datetime.utcnow()
+    cutoff = today_utc - timedelta(days=weeks * 7)
+
+    with master_session() as s:
+        q = s.query(Student).filter(Student.teacher_id == teacher_id)
+        if class_label:
+            q = q.filter(Student.class_label == class_label)
+        student_ids = [r.id for r in q.all()]
+
+        rows = (
+            s.query(StudentActivity)
+            .filter(
+                StudentActivity.student_id.in_(student_ids),
+                StudentActivity.kind.in_(CAREER_TIMELINE_KINDS),
+                StudentActivity.created_at >= cutoff,
+            )
+            .all()
+        )
+
+    # Bygg buckets · monday som vecko-start
+    def week_start_for(dt: datetime) -> _date:
+        d = dt.date()
+        # ISO weekday: Mon=1..Sun=7. Offset till måndag.
+        return d - timedelta(days=d.weekday())
+
+    buckets: dict[_date, StatsTrendBucket] = {}
+    # Förallokera buckets · annars saknas tomma veckor
+    earliest_week = week_start_for(cutoff)
+    for i in range(weeks + 1):
+        w = earliest_week + timedelta(days=7 * i)
+        buckets[w] = StatsTrendBucket(week_start=w.isoformat())
+
+    for act in rows:
+        w = week_start_for(act.created_at)
+        b = buckets.get(w)
+        if b is None:
+            b = StatsTrendBucket(week_start=w.isoformat())
+            buckets[w] = b
+        k = act.kind
+        if k == "biz.employee_hire_offered":
+            b.n_hire_offered += 1
+        elif k == "private.employment_accepted":
+            b.n_accepted += 1
+        elif k == "private.employment_declined":
+            b.n_declined += 1
+        elif k in (
+            "private.terminated_by_employer",
+            "biz.employee_terminated",
+        ):
+            b.n_terminated += 1
+        elif k == "private.terminated_by_bankruptcy":
+            b.n_bankrupted += 1
+        elif k == "biz.payroll_run":
+            payload = act.payload or {}
+            b.payroll_paid += int(payload.get("total_cost") or 0)
+
+    sorted_weeks = sorted(buckets.values(), key=lambda b: b.week_start)
+    return StatsTrendOut(weeks=sorted_weeks)
+
+
+@router.get(
+    "/career-timeline/{student_id}",
+    response_model=CareerTimelineOut,
+)
+def career_timeline(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Returnera kronologisk lista av elevens karriär-händelser
+    (anställning, uppsägning, lön, konkurs).
+
+    Filtrerar StudentActivity.kind till bara employment-relaterade.
+    """
+    teacher_id = info.teacher_id
+    if teacher_id is None:
+        raise HTTPException(403, "Lärar-token utan teacher_id")
+
+    with master_session() as s:
+        stu = s.get(Student, student_id)
+        if stu is None or stu.teacher_id != teacher_id:
+            raise HTTPException(404, "Elev finns ej eller tillhör inte dig")
+
+        rows = (
+            s.query(StudentActivity)
+            .filter(
+                StudentActivity.student_id == student_id,
+                StudentActivity.kind.in_(CAREER_TIMELINE_KINDS),
+            )
+            .order_by(
+                StudentActivity.occurred_at.desc(),
+                StudentActivity.id.desc(),
+            )
+            .limit(200)
+            .all()
+        )
+
+        return CareerTimelineOut(
+            student_id=student_id,
+            items=[
+                CareerTimelineRow(
+                    id=r.id,
+                    kind=r.kind,
+                    summary=r.summary,
+                    payload=r.payload,
+                    occurred_at=r.occurred_at.isoformat(),
+                )
+                for r in rows
+            ],
+        )

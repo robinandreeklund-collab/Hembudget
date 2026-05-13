@@ -8,9 +8,7 @@
  * BizBolagsskatt · /v2/foretag/bolagsskatt (årsprognos)
  * BizInstallningar · /v2/foretag/installningar
  */
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { V2Banner } from "../V2Banner";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   bizApi,
   type Company,
@@ -21,6 +19,7 @@ import {
   type CorporateTax,
   type VatPeriod,
 } from "./api";
+import { BizActorShell } from "./BizActorShell";
 import "./biz.css";
 
 
@@ -30,34 +29,19 @@ const SEK = (n: number) =>
 const TODAY = () => new Date().toISOString().slice(0, 10);
 
 
-// === Shared shell · matchar BizGameMotorPages stil ===
+// === Shared compact-shell wrapper med actor-shell-defaults ===
+// (för sub-pages som inte har en dedikerad actor-vy med custom title/meta)
 
 function BizShell({ title, eye, children }: {
-  title: string; eye: string; children: React.ReactNode;
+  title: string; eye: string; children: ReactNode;
 }) {
-  // Säkerställ att body[data-mode="business"] sätts (indigo topbar)
-  useEffect(() => {
-    const prev = document.body.getAttribute("data-mode");
-    document.body.setAttribute("data-mode", "business");
-    return () => {
-      document.body.setAttribute("data-mode", prev || "private");
-    };
-  }, []);
-
   return (
-    <div className="v2-biz-root">
-      <V2Banner status={{ role: "student", is_super_admin: false }} />
-      <div className="biz-shell">
-        <Link to="/v2/hub" className="biz-back">
-          ← Bolag · översikt
-        </Link>
-        <header style={{ marginBottom: 24 }}>
-          <div className="biz-eye">{eye}</div>
-          <h1 className="biz-h1">{title}</h1>
-        </header>
-        {children}
-      </div>
-    </div>
+    <BizActorShell
+      pillLabel={eye}
+      title={title}
+    >
+      {children}
+    </BizActorShell>
   );
 }
 
@@ -78,22 +62,263 @@ export function BizBokforing() {
     .reduce((acc, t) => acc + t.amount_excl_vat, 0);
   const expenseSum = txs.filter((t) => t.kind === "expense" || t.kind === "salary")
     .reduce((acc, t) => acc + t.amount_excl_vat, 0);
+  const result = incomeSum - expenseSum;
+  const margin = incomeSum > 0 ? Math.round((result / incomeSum) * 100) : 0;
+
+  // Pedagogiskt: t-konto-mappning från transaction-kategori till BAS-kontoplan
+  function basAccounts(t: CompanyTransaction): string {
+    if (t.kind === "income") return "1510 D / 3000 + 2611 K";
+    if (t.kind === "salary") return "7210 D / 1930 + 2710 K";
+    if (t.kind === "vat_payment") return "2650 D / 1930 K";
+    if (t.kind === "tax_payment") return "2510 D / 1930 K";
+    // expense
+    const cat = (t.category || "").toLowerCase();
+    if (cat.includes("hyra") || cat.includes("lokal")) return "5010 D / 1930 K";
+    if (cat.includes("telefon") || cat.includes("internet")) return "6212 D / 1930 K";
+    if (cat.includes("kontor") || cat.includes("material")) return "6110 D / 1930 K";
+    if (cat.includes("dator") || cat.includes("möbler") || cat.includes("inventari"))
+      return "1220 D + 2641 D / 1930 K";
+    return "5610 D + 2641 D / 1930 K";
+  }
 
   return (
-    <BizShell eye="Bolag · 01" title="Bokföring">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 18 }}>
-        <Card label="Intäkter" value={`${SEK(incomeSum)} kr`} color="#34d399" />
-        <Card label="Utgifter" value={`${SEK(expenseSum)} kr`} color="#fda594" />
-        <Card
-          label="Resultat"
-          value={`${incomeSum - expenseSum >= 0 ? "+" : ""}${SEK(incomeSum - expenseSum)} kr`}
-          color={incomeSum - expenseSum >= 0 ? "#6ee7b7" : "#fda594"}
-        />
+    <BizActorShell
+      pillLabel="Verktyg · biz · Bokföring"
+      title={
+        <>
+          Verifikat <em>just nu</em>.
+        </>
+      }
+      subtitle={
+        txs.length === 0
+          ? "Inga verifikat ännu — börja med att lägga till en transaktion"
+          : `Dubbel bokföring · BAS 2024 förenklad (~30 konton) · ${txs.length} verifikat`
+      }
+      meta={
+        <>
+          Verifikat totalt: <strong>{txs.length}</strong>
+          <br />
+          Intäkter: <strong>{SEK(incomeSum)} kr</strong>
+          <br />
+          Senaste:{" "}
+          <strong>
+            {txs[0] ? `A${txs[0].id} · ${txs[0].occurred_on}` : "—"}
+          </strong>
+        </>
+      }
+    >
+      {err && <ErrorBanner msg={err} />}
+
+      <div className="cc-summary" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Intäkter</div>
+          <div className="cc-stat-num">
+            <em style={{ color: "#6ee7b7" }}>{SEK(incomeSum)}</em> kr
+          </div>
+          <div className="cc-stat-sub">3000 Försäljning ex moms</div>
+        </div>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Kostnader</div>
+          <div className="cc-stat-num">−{SEK(expenseSum)} kr</div>
+          <div className="cc-stat-sub">5610 · 1220 · 6991 · …</div>
+        </div>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Resultat</div>
+          <div
+            className="cc-stat-num warm"
+            style={{ color: result >= 0 ? "#6ee7b7" : "#fda594" }}
+          >
+            <em>
+              {result >= 0 ? "+ " : "− "}
+              {SEK(Math.abs(result))}
+            </em>{" "}
+            kr
+          </div>
+          <div className="cc-stat-sub">marginal {margin} %</div>
+        </div>
       </div>
 
-      <button onClick={() => setShowAdd(true)} style={btnPrimary()}>
-        + Ny transaktion
-      </button>
+      <div className="section-eye" style={{ color: "#c7d2fe" }}>
+        Senaste verifikat (T-konton)
+      </div>
+      {txs.length === 0 ? (
+        <div className="biz-empty">
+          Inga transaktioner än. Lägg till intäkter/utgifter med
+          knappen nedan.
+        </div>
+      ) : (
+        <div className="biz-table-grid">
+          <div
+            className="biz-table-grid-row head"
+            style={{
+              gridTemplateColumns: "60px 80px 1.4fr 1.2fr 100px 80px 32px",
+            }}
+          >
+            <span>Ver</span>
+            <span>Datum</span>
+            <span>Berör</span>
+            <span>Konton (D / K)</span>
+            <span>Belopp</span>
+            <span>Status</span>
+            <span></span>
+          </div>
+          {txs.slice(0, 30).map((t) => (
+            <div
+              key={t.id}
+              className="biz-table-grid-row"
+              style={{
+                gridTemplateColumns: "60px 80px 1.4fr 1.2fr 100px 80px 32px",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10,
+                }}
+              >
+                A{t.id}
+              </span>
+              <span
+                style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                {t.occurred_on}
+              </span>
+              <div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#fff",
+                    fontFamily: "Source Serif 4, Georgia, serif",
+                  }}
+                >
+                  {t.description || t.category}
+                </div>
+                <div
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 9,
+                    color: "rgba(255,255,255,0.4)",
+                    marginTop: 2,
+                  }}
+                >
+                  {t.kind === "income" ? "Intäkt"
+                    : t.kind === "expense" ? "Utgift"
+                    : t.kind === "salary" ? "Lön"
+                    : t.kind === "vat_payment" ? "Moms in"
+                    : "Skatt"}
+                  {t.category ? ` · ${t.category}` : ""}
+                </div>
+              </div>
+              <span
+                style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                {basAccounts(t)}
+              </span>
+              <span
+                style={{
+                  fontFamily: "Source Serif 4, Georgia, serif",
+                  fontStyle: "italic",
+                  color: t.kind === "income" ? "#6ee7b7" : "#fff",
+                  fontWeight: 700,
+                }}
+              >
+                {SEK(t.amount_excl_vat + (t.vat_amount || 0))}
+              </span>
+              <span className="biz-status paid">Klar</span>
+              <button
+                onClick={async () => {
+                  if (!confirm("Radera verifikat A" + t.id + "?")) return;
+                  await bizApi.deleteTransaction(t.id);
+                  refresh();
+                }}
+                className="biz-btn"
+                style={{
+                  padding: "2px 6px",
+                  fontSize: 10,
+                  color: "#fda594",
+                  borderColor: "rgba(248,113,113,0.3)",
+                }}
+                title="Radera"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <article className="biz-cta-card">
+        <div className="biz-cta-eye">Bokför nytt</div>
+        <div className="biz-cta-h">
+          Lägg till en <em>transaktion</em>.
+        </div>
+        <p className="biz-cta-prose">
+          Välj kategori (intäkt, utgift, lön, skatte/moms-betalning) och
+          summa exkl moms. Systemet räknar moms automatiskt och föreslår
+          BAS-konton enligt kategorin.
+        </p>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="biz-btn solid"
+          style={{ marginTop: 4 }}
+        >
+          + Ny transaktion
+        </button>
+      </article>
+
+      <div className="peda">
+        <div className="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div className="peda-h">
+          Bokföring är <em>språk</em>, inte aritmetik.
+        </div>
+        <p className="peda-prose">
+          Varje affärshändelse skrivs i två konton (debet + kredit) som
+          balanserar. Faktura skickad: <strong>1510 Kundfordran D · 3000
+          Försäljning K · 2611 Moms ut K</strong>. Pengarna kommer in:{" "}
+          <strong>1930 Bank D · 1510 Kundfordran K</strong>. Du <em>ser</em>{" "}
+          alla händelser samlade — det är där du faktiskt förstår var
+          pengarna går.
+        </p>
+        <ul className="peda-bullets">
+          <li>
+            <strong>Debet / kredit</strong>Inte +/−. Konto-typ avgör.
+            Tillgång ↑ = D. Skuld ↑ = K.
+          </li>
+          <li>
+            <strong>BAS-kontoplan</strong>Standard i Sverige · ~ 30 konton
+            räcker för en ung firma.
+          </li>
+          <li>
+            <strong>T-konto</strong>Ett konto har två sidor. Saldo = D − K
+            (eller K − D).
+          </li>
+          <li>
+            <strong>Resultat</strong>Intäkter − kostnader. Visas i
+            resultaträkning.
+          </li>
+        </ul>
+        <div className="peda-concepts">
+          <span className="peda-concept">Debet</span>
+          <span className="peda-concept">Kredit</span>
+          <span className="peda-concept">T-konto</span>
+          <span className="peda-concept">Verifikat</span>
+          <span className="peda-concept">Balansräkning</span>
+          <span className="peda-concept">Resultaträkning</span>
+        </div>
+        <div className="peda-tip">
+          Lärare bedömer din portfolio inte för enskilda kontoval — utan
+          helheten. Att du klassar konsekvent över tid är värt mer än att
+          alltid hitta exakt rätt BAS-konto.
+        </div>
+      </div>
 
       {showAdd && (
         <AddTransactionModal
@@ -101,54 +326,7 @@ export function BizBokforing() {
           onAdded={() => { setShowAdd(false); refresh(); }}
         />
       )}
-
-      {err && <ErrorBanner msg={err} />}
-
-      <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 6 }}>
-        {txs.length === 0 ? (
-          <Empty msg="Inga transaktioner än. Lägg till intäkter/utgifter." />
-        ) : (
-          txs.map((t) => (
-            <article key={t.id} style={txRow()}>
-              <div style={{ minWidth: 90, color: "rgba(255,255,255,0.5)", fontFamily: "JetBrains Mono, monospace", fontSize: "0.8rem" }}>
-                {t.occurred_on}
-              </div>
-              <div style={{ flex: 1 }}>
-                <strong style={{ color: "white" }}>{t.description}</strong>
-                <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.78rem" }}>
-                  {t.category} · {t.kind === "income" ? "Intäkt" : t.kind === "expense" ? "Utgift" : t.kind === "salary" ? "Lön" : "Skatt"}
-                </div>
-              </div>
-              <div style={{ textAlign: "right", minWidth: 120 }}>
-                <strong
-                  style={{
-                    color: t.kind === "income" ? "#34d399" : "#fda594",
-                    fontFamily: "JetBrains Mono, monospace",
-                  }}
-                >
-                  {t.kind === "income" ? "+" : "−"}{SEK(t.amount_excl_vat)} kr
-                </strong>
-                {t.vat_amount > 0 && (
-                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.75rem" }}>
-                    moms {SEK(t.vat_amount)} kr
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={async () => {
-                  if (!confirm("Radera transaktionen?")) return;
-                  await bizApi.deleteTransaction(t.id);
-                  refresh();
-                }}
-                style={{ ...btnSm(), color: "#fda594" }}
-              >
-                ✕
-              </button>
-            </article>
-          ))
-        )}
-      </div>
-    </BizShell>
+    </BizActorShell>
   );
 }
 
@@ -228,33 +406,413 @@ export function BizFakturor() {
   };
   useEffect(() => { refresh(); }, []);
 
-  const total = invoices.reduce((acc, i) => acc + i.total_incl_vat, 0);
-  const open = invoices.filter((i) => i.status === "sent").length;
+  const totalNet = invoices.reduce((acc, i) => acc + i.amount_excl_vat, 0);
+  const totalIncl = invoices.reduce((acc, i) => acc + i.total_incl_vat, 0);
+  const sent = invoices.filter((i) => i.status === "sent").length;
   const paid = invoices.filter((i) => i.status === "paid").length;
+  const drafts = invoices.filter((i) => i.status === "draft").length;
+  // Använd backend:s spel-tid-jämförelse (is_overdue / days_until_due)
+  // i stället för real-tid `new Date()`. Annars markeras nya fakturor
+  // som "sen" innan spel-tiden ens nått förfallodagen.
+  const overdue = invoices.filter(
+    (i) => i.status === "sent" && i.is_overdue,
+  );
+  const dueToday = invoices.filter(
+    (i) => i.status === "sent" && !i.is_overdue && i.days_until_due === 0,
+  );
+  const outstanding = invoices
+    .filter((i) => i.status === "sent")
+    .reduce((acc, i) => acc + i.total_incl_vat, 0);
+  const paidTotal = invoices
+    .filter((i) => i.status === "paid")
+    .reduce((acc, i) => acc + i.total_incl_vat, 0);
 
   return (
-    <BizShell eye="Bolag · 02" title="Kunder & fakturor">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 18 }}>
-        <Card label="Total fakturerat" value={`${SEK(total)} kr`} color="#c7d2fe" />
-        <Card label="Öppna" value={`${open} st`} color="#fbbf24" />
-        <Card label="Betalda" value={`${paid} st`} color="#34d399" />
-        <Card label="Kunder" value={`${customers.length} st`} color="#a78bfa" />
-      </div>
+    <BizActorShell
+      pillLabel="Aktör · biz · Kundfakturor"
+      title={
+        <>
+          Fakturera <em>kunden</em>.
+        </>
+      }
+      subtitle={
+        invoices.length === 0
+          ? "Skapa din första kund och faktura"
+          : `${sent} utskickade · ${paid} betalda${
+              dueToday.length > 0 ? ` · ${dueToday.length} förfaller idag` : ""
+            }${drafts > 0 ? ` · ${drafts} utkast` : ""}`
+      }
+      meta={
+        <>
+          {dueToday.length > 0 ? (
+            <>
+              Förfaller idag:{" "}
+              <strong style={{ color: "#dc4c2b" }}>
+                {dueToday.length} st
+              </strong>
+              <br />
+            </>
+          ) : (
+            <>
+              Förfaller idag: <strong>0</strong>
+              <br />
+            </>
+          )}
+          Total utestående: <strong>{SEK(outstanding)} kr</strong>
+          <br />
+          Inbetalt: <strong>{SEK(paidTotal)} kr</strong>
+        </>
+      }
+    >
+      {err && <ErrorBanner msg={err} />}
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-        <button onClick={() => setShowAddInv(true)} style={btnPrimary()} disabled={customers.length === 0}>
-          + Ny faktura
-        </button>
-        <button onClick={() => setShowAddCust(true)} style={btnSecondary()}>
-          + Ny kund
-        </button>
+      <div className="cc-summary">
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Fakturerat hittills</div>
+          <div className="cc-stat-num">
+            <em>{SEK(totalNet)}</em> kr
+          </div>
+          <div className="cc-stat-sub">{invoices.length} fakturor</div>
+        </div>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Inbetalt</div>
+          <div className="cc-stat-num" style={{ color: "#6ee7b7" }}>
+            {SEK(paidTotal)} kr
+          </div>
+          <div className="cc-stat-sub">
+            {paid} av {invoices.length} fakturor
+          </div>
+        </div>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Utestående</div>
+          <div className="cc-stat-num" style={{ color: "#fbbf24" }}>
+            {SEK(outstanding)} kr
+          </div>
+          <div className="cc-stat-sub">{sent} öppna</div>
+        </div>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Försenade</div>
+          <div className="cc-stat-num warm">
+            <em>{overdue.length}</em>
+          </div>
+          <div className="cc-stat-sub">
+            {overdue.length === 0
+              ? "ingen försening"
+              : `total ${SEK(overdue.reduce((a, i) => a + i.total_incl_vat, 0))} kr`}
+          </div>
+        </div>
       </div>
 
       {customers.length === 0 && (
-        <div style={{ padding: 14, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 8, marginBottom: 14, color: "#fbbf24" }}>
+        <div
+          style={{
+            padding: 14,
+            background: "rgba(251,191,36,0.1)",
+            border: "1px solid rgba(251,191,36,0.3)",
+            borderRadius: 8,
+            marginBottom: 14,
+            color: "#fbbf24",
+            fontFamily: "Source Serif 4, Georgia, serif",
+          }}
+        >
           Skapa minst en kund innan du kan fakturera.
         </div>
       )}
+
+      <div
+        className="section-eye"
+        style={{ color: "#c7d2fe", marginTop: 8 }}
+      >
+        Alla fakturor
+      </div>
+      {invoices.length === 0 ? (
+        <div className="biz-empty">
+          Inga fakturor än. Skapa din första nedan.
+        </div>
+      ) : (
+        <div className="biz-table-grid">
+          <div
+            className="biz-table-grid-row head"
+            style={{
+              gridTemplateColumns:
+                "60px 80px 1.6fr 100px 110px 100px 80px",
+            }}
+          >
+            <span>#</span>
+            <span>Datum</span>
+            <span>Kund / specifikation</span>
+            <span>Belopp</span>
+            <span>Förfaller</span>
+            <span>Status</span>
+            <span></span>
+          </div>
+          {invoices.map((inv) => {
+            // Backend räknar is_overdue mot SPEL-tid (synkat med privat).
+            // Vi får INTE räkna med real-tid (`new Date()`) här — då
+            // markeras en faktura som förfaller 5 mars som "sen" trots
+            // att spelaren är på 3 februari.
+            const isOverdue = inv.status === "sent" && inv.is_overdue;
+            const isDueToday = (
+              inv.status === "sent"
+              && !inv.is_overdue
+              && inv.days_until_due === 0
+            );
+            return (
+              <div
+                key={inv.id}
+                className={`biz-table-grid-row${isOverdue || isDueToday ? " alert" : ""}`}
+                style={{
+                  gridTemplateColumns:
+                    "60px 80px 1.6fr 100px 110px 100px 80px",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: isOverdue || isDueToday
+                      ? "#dc4c2b"
+                      : "rgba(255,255,255,0.4)",
+                  }}
+                >
+                  {inv.invoice_number || "—"}
+                </span>
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.55)",
+                  }}
+                >
+                  {inv.status === "draft"
+                    ? "— · utkast"
+                    : inv.issued_on}
+                </span>
+                <div>
+                  <div
+                    style={{
+                      fontFamily: "Source Serif 4, Georgia, serif",
+                      fontSize: 14,
+                      color: inv.status === "draft"
+                        ? "rgba(255,255,255,0.55)"
+                        : "#fff",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {inv.customer_name}
+                    {inv.status === "draft" && (
+                      <em
+                        style={{
+                          color: "rgba(255,255,255,0.4)",
+                          fontSize: 11,
+                          fontStyle: "italic",
+                          marginLeft: 6,
+                        }}
+                      >
+                        (utkast — ej utskickad)
+                      </em>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 9,
+                      color: "rgba(255,255,255,0.4)",
+                      marginTop: 2,
+                    }}
+                  >
+                    {inv.description}
+                    {inv.amount_excl_vat > 0 && (
+                      <>
+                        {" · "}
+                        {SEK(inv.amount_excl_vat)} ex moms
+                        {inv.vat_amount > 0 && (
+                          <> · {SEK(inv.vat_amount)} moms</>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontFamily: "Source Serif 4, Georgia, serif",
+                    fontStyle: "italic",
+                    color: inv.status === "paid"
+                      ? "#6ee7b7"
+                      : inv.status === "draft"
+                      ? "rgba(255,255,255,0.4)"
+                      : isOverdue
+                      ? "#dc4c2b"
+                      : "#fbbf24",
+                    fontWeight: 700,
+                  }}
+                >
+                  {inv.total_incl_vat > 0
+                    ? `${SEK(inv.total_incl_vat)} kr`
+                    : "— kr"}
+                </span>
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: isDueToday
+                      ? "#dc4c2b"
+                      : isOverdue
+                      ? "#dc4c2b"
+                      : inv.status === "paid"
+                      ? "rgba(255,255,255,0.55)"
+                      : "rgba(255,255,255,0.55)",
+                    fontWeight: isDueToday ? 700 : 400,
+                  }}
+                >
+                  {inv.status === "paid"
+                    ? `betald ${inv.paid_on || ""}`
+                    : inv.status === "draft"
+                    ? "—"
+                    : isDueToday
+                    ? "förfaller IDAG"
+                    : isOverdue
+                    ? `${inv.due_on} (sen)`
+                    : `förfaller ${inv.due_on}`}
+                </span>
+                <span
+                  className={`biz-status ${
+                    inv.status === "paid" ? "paid"
+                      : inv.status === "sent" ? (isOverdue ? "overdue" : "sent")
+                      : "draft"
+                  }`}
+                >
+                  {inv.status === "paid"
+                    ? "Betald"
+                    : inv.status === "sent"
+                    ? isOverdue ? "Sen" : "Skickad"
+                    : "Utkast"}
+                </span>
+                {inv.status === "sent" && (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {isOverdue && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const r = await bizApi.sendInvoiceReminder(inv.id);
+                            alert(r.summary);
+                            refresh();
+                          } catch (e) {
+                            alert(String((e as Error).message || e));
+                          }
+                        }}
+                        className="biz-btn"
+                        style={{
+                          padding: "4px 8px",
+                          fontSize: 10,
+                          background: "rgba(220,76,43,0.15)",
+                          borderColor: "#dc4c2b",
+                          color: "#dc4c2b",
+                        }}
+                        title={
+                          `Skicka påminnelse · ${inv.days_overdue} d försenad`
+                        }
+                      >
+                        Påminn
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        await bizApi.markInvoicePaid(inv.id);
+                        refresh();
+                      }}
+                      className="biz-btn"
+                      style={{ padding: "4px 8px", fontSize: 10 }}
+                    >
+                      Betald ✓
+                    </button>
+                  </div>
+                )}
+                {inv.status !== "sent" && <span></span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* CTA-card · skapa ny faktura / ny kund */}
+      <article className="biz-cta-card">
+        <div className="biz-cta-eye">Skapa nytt</div>
+        <div className="biz-cta-h">
+          {customers.length === 0
+            ? <>Lägg till första <em>kunden</em>.</>
+            : <>Fakturera nästa <em>kund</em>.</>}
+        </div>
+        <p className="biz-cta-prose">
+          Fakturan får automatiskt fakturanummer + OCR + förfallodatum 30
+          dgr framåt. PDF skapas automatiskt och kan postlådas till kunden.
+        </p>
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button
+            onClick={() => setShowAddInv(true)}
+            className="biz-btn solid"
+            disabled={customers.length === 0}
+          >
+            + Ny faktura
+          </button>
+          <button
+            onClick={() => setShowAddCust(true)}
+            className="biz-btn"
+          >
+            + Ny kund
+          </button>
+        </div>
+      </article>
+
+      {/* Pedagogik */}
+      <div className="peda">
+        <div className="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div className="peda-h">
+          Faktura är ett <em>juridiskt dokument</em>.
+        </div>
+        <p className="peda-prose">
+          Det är inte ett mejl med belopp. Den måste innehålla{" "}
+          <strong>fakturanummer</strong>, <strong>fakturadatum</strong>,{" "}
+          <strong>förfallodatum</strong>, <strong>F-skatt-uppgift</strong>,{" "}
+          <strong>OCR-nummer</strong>, specifikation av tjänsten, ev.{" "}
+          <strong>moms 25 %</strong> (på tjänster). Saknas något kan kunden
+          bestrida. Allt registreras hos Skatteverket via{" "}
+          <em>kontrolluppgift</em> nästa år.
+        </p>
+        <ul className="peda-bullets">
+          <li>
+            <strong>Moms in vs ut</strong>Du tar ut 25 % på faktura,
+            redovisar månadsvis. Skillnaden = nettomoms.
+          </li>
+          <li>
+            <strong>Påminnelse</strong>Efter 14 dagar skicka påminnelse + 60
+            kr avgift. Efter 30 dgr → inkasso.
+          </li>
+          <li>
+            <strong>Dröjsmålsränta</strong>Referensränta + 8 % på obetalt
+            belopp. Du har rätt — men måste fakturera den.
+          </li>
+          <li>
+            <strong>Bokföringspost</strong>Faktura skickad → kundfordran ↑,
+            ej intäkt än. Betald → bank ↑, fordran ↓.
+          </li>
+        </ul>
+        <div className="peda-concepts">
+          <span className="peda-concept">Kundfordran</span>
+          <span className="peda-concept">Moms-redovisning</span>
+          <span className="peda-concept">F-skatt</span>
+          <span className="peda-concept">OCR-nummer</span>
+          <span className="peda-concept">Periodisering</span>
+          <span className="peda-concept">Inkasso</span>
+        </div>
+        <div className="peda-tip">
+          När en kund betalar — bokningen sker automatiskt: kundfordran ↓,
+          företagskonto ↑. Pentagon-axeln "Likviditet" tippar upp samtidigt.
+          Total fakturerat exkl moms är{" "}
+          <em>{SEK(totalNet)} kr</em>; inkl moms{" "}
+          <em>{SEK(totalIncl)} kr</em>.
+        </div>
+      </div>
 
       {showAddInv && (
         <AddInvoiceModal
@@ -269,74 +827,7 @@ export function BizFakturor() {
           onAdded={() => { setShowAddCust(false); refresh(); }}
         />
       )}
-
-      {err && <ErrorBanner msg={err} />}
-
-      <h2 style={{ color: "white", fontSize: "1.1rem", marginTop: 18, marginBottom: 8 }}>Fakturor</h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {invoices.length === 0 ? (
-          <Empty msg="Inga fakturor än." />
-        ) : (
-          invoices.map((inv) => (
-            <article key={inv.id} style={txRow()}>
-              <div style={{ minWidth: 100, color: "rgba(255,255,255,0.6)", fontFamily: "JetBrains Mono, monospace", fontSize: "0.8rem" }}>
-                {inv.invoice_number}
-              </div>
-              <div style={{ flex: 1 }}>
-                <strong style={{ color: "white" }}>{inv.customer_name}</strong>
-                <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.85rem" }}>
-                  {inv.description}
-                </div>
-                <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.78rem" }}>
-                  Skickad {inv.issued_on} · Förfaller {inv.due_on}
-                  {inv.paid_on ? ` · Betald ${inv.paid_on}` : ""}
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <strong style={{ color: "white", fontFamily: "JetBrains Mono, monospace" }}>
-                  {SEK(inv.total_incl_vat)} kr
-                </strong>
-                <div>
-                  <span
-                    style={{
-                      fontSize: "0.7rem",
-                      padding: "2px 8px",
-                      borderRadius: 100,
-                      fontWeight: 700,
-                      background:
-                        inv.status === "paid"
-                          ? "rgba(110,231,183,0.18)"
-                          : inv.status === "sent"
-                            ? "rgba(251,191,36,0.18)"
-                            : "rgba(255,255,255,0.06)",
-                      color:
-                        inv.status === "paid"
-                          ? "#6ee7b7"
-                          : inv.status === "sent"
-                            ? "#fbbf24"
-                            : "rgba(255,255,255,0.5)",
-                    }}
-                  >
-                    {inv.status.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-              {inv.status === "sent" && (
-                <button
-                  onClick={async () => {
-                    await bizApi.markInvoicePaid(inv.id);
-                    refresh();
-                  }}
-                  style={{ ...btnSm(), color: "#34d399" }}
-                >
-                  Betald ✓
-                </button>
-              )}
-            </article>
-          ))
-        )}
-      </div>
-    </BizShell>
+    </BizActorShell>
   );
 }
 
@@ -605,67 +1096,314 @@ export function BizMoms() {
     finally { setBusy(false); }
   };
 
+  // Hitta nästa öppna period (= "att betala")
+  const nextOpen = periods.find((p) => p.status === "open");
+  const nextDue = nextOpen?.due_date || null;
+  const nextOutVat = nextOpen?.output_vat || preview?.output_vat || 0;
+  const nextInVat = nextOpen?.input_vat || preview?.input_vat || 0;
+  const nextNetVat = nextOpen?.net_vat
+    ?? preview?.net_vat
+    ?? 0;
+
   return (
-    <BizShell eye="Bolag · 04" title="Momsdeklaration">
+    <BizActorShell
+      pillLabel="Aktör · biz · Skatteverket"
+      title={
+        <>
+          {nextDue ? (
+            <>Moms <em>{nextDue}</em> · F-skatt löpande.</>
+          ) : (
+            <>Moms &amp; F-skatt — <em>aktuellt läge</em>.</>
+          )}
+        </>
+      }
+      subtitle={
+        nextOpen
+          ? `Period ${nextOpen.start_date.slice(0, 7)} → ${nextOpen.end_date.slice(0, 7)} · F-skatt månadsvis baserat på prognos`
+          : "Inga öppna momsperioder · använd förhandsvisning nedan"
+      }
+      meta={
+        <>
+          Moms ut: <strong>{SEK(nextOutVat)} kr</strong>
+          <br />
+          Moms in: <strong>−{SEK(nextInVat)} kr</strong>
+          <br />
+          {nextDue ? (
+            <>
+              Att betala {nextDue}:{" "}
+              <strong style={{ color: "#fbbf24" }}>
+                {SEK(Math.max(0, nextNetVat))} kr
+              </strong>
+            </>
+          ) : (
+            <>
+              Senaste period: <strong>{periods.length} st inlämnade</strong>
+            </>
+          )}
+        </>
+      }
+    >
       {err && <ErrorBanner msg={err} />}
 
-      <section style={{ marginBottom: 24, padding: 16, background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 10 }}>
-        <strong style={{ color: "white" }}>Förhandsvisa period</strong>
-        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <input type="date" value={previewStart} onChange={(e) => setPreviewStart(e.target.value)} style={input()} />
-          <span style={{ color: "rgba(255,255,255,0.5)" }}>→</span>
-          <input type="date" value={previewEnd} onChange={(e) => setPreviewEnd(e.target.value)} style={input()} />
-          <button onClick={runPreview} style={btnSecondary()}>Räkna ut</button>
+      <div className="cc-summary" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Utgående moms (period)</div>
+          <div className="cc-stat-num">
+            <em>{SEK(nextOutVat)}</em> kr
+          </div>
+          <div className="cc-stat-sub">25 % på din försäljning</div>
+        </div>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">Ingående moms (period)</div>
+          <div className="cc-stat-num">−{SEK(nextInVat)} kr</div>
+          <div className="cc-stat-sub">25 % på leverantörsfakturor</div>
+        </div>
+        <div className="cc-stat">
+          <div className="cc-stat-eye">
+            {nextNetVat >= 0 ? "Att betala" : "Att få tillbaka"}
+          </div>
+          <div
+            className="cc-stat-num warm"
+            style={{ color: nextNetVat >= 0 ? "#fbbf24" : "#6ee7b7" }}
+          >
+            <em>{SEK(Math.abs(nextNetVat))}</em> kr
+          </div>
+          <div className="cc-stat-sub">utgående minus ingående</div>
+        </div>
+      </div>
+
+      {/* Förhandsvisa period · CTA-card */}
+      <article className="biz-cta-card">
+        <div className="biz-cta-eye">Förhandsvisa period</div>
+        <div className="biz-cta-h">
+          Räkna fram ny moms-period.
+        </div>
+        <p className="biz-cta-prose">
+          Välj start- och slutdatum för perioden — vi summerar utgående
+          (försäljning) och ingående (inköp) moms från bokföringen och
+          visar nettot. Du kan sedan lämna in deklarationen.
+        </p>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            marginTop: 12,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <input
+            type="date"
+            value={previewStart}
+            onChange={(e) => setPreviewStart(e.target.value)}
+            style={input()}
+          />
+          <span style={{ color: "rgba(255,255,255,0.55)" }}>→</span>
+          <input
+            type="date"
+            value={previewEnd}
+            onChange={(e) => setPreviewEnd(e.target.value)}
+            style={input()}
+          />
+          <button onClick={runPreview} className="biz-btn">
+            Räkna ut
+          </button>
         </div>
         {preview && (
-          <div style={{ marginTop: 14, padding: 12, background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
+          <div
+            style={{
+              marginTop: 14,
+              padding: 12,
+              background: "rgba(255,255,255,0.04)",
+              borderRadius: 8,
+              fontFamily: "Source Serif 4, Georgia, serif",
+            }}
+          >
             <div style={{ color: "rgba(255,255,255,0.85)" }}>
-              Utgående moms (försäljning): <strong>{SEK(preview.output_vat)} kr</strong><br />
-              Ingående moms (inköp): <strong>{SEK(preview.input_vat)} kr</strong><br />
-              <strong style={{ color: preview.net_vat >= 0 ? "#fda594" : "#34d399", fontSize: "1.1rem" }}>
-                Netto att {preview.net_vat >= 0 ? "betala in" : "få tillbaka"}: {SEK(Math.abs(preview.net_vat))} kr
+              Utgående moms (försäljning):{" "}
+              <strong>{SEK(preview.output_vat)} kr</strong>
+              <br />
+              Ingående moms (inköp):{" "}
+              <strong>{SEK(preview.input_vat)} kr</strong>
+              <br />
+              <strong
+                style={{
+                  color: preview.net_vat >= 0 ? "#fbbf24" : "#6ee7b7",
+                  fontSize: "1.1rem",
+                }}
+              >
+                Netto att{" "}
+                {preview.net_vat >= 0 ? "betala in" : "få tillbaka"}:{" "}
+                {SEK(Math.abs(preview.net_vat))} kr
               </strong>
-              <span style={{ color: "rgba(255,255,255,0.5)", marginLeft: 8 }}>({preview.n_transactions} txns)</span>
+              <span
+                style={{
+                  color: "rgba(255,255,255,0.55)",
+                  marginLeft: 8,
+                  fontSize: "0.85rem",
+                }}
+              >
+                ({preview.n_transactions} txns)
+              </span>
             </div>
-            <button onClick={fileNow} disabled={busy} style={{ ...btnPrimary(), marginTop: 14 }}>
+            <button
+              onClick={fileNow}
+              disabled={busy}
+              className="biz-btn solid"
+              style={{ marginTop: 14 }}
+            >
               {busy ? "Lämnar in…" : "Lämna in deklaration"}
             </button>
           </div>
         )}
-      </section>
+      </article>
 
-      <h2 style={{ color: "white", fontSize: "1.1rem", marginBottom: 8 }}>Inlämnade deklarationer</h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {periods.length === 0 ? (
-          <Empty msg="Inga deklarationer inlämnade än." />
-        ) : (
-          periods.map((p) => (
-            <article key={p.id} style={txRow()}>
-              <div style={{ minWidth: 130, color: "rgba(255,255,255,0.7)", fontFamily: "JetBrains Mono, monospace", fontSize: "0.85rem" }}>
-                {p.period_label}
-              </div>
-              <div style={{ flex: 1 }}>
-                <strong style={{ color: "white" }}>
-                  {p.start_date} → {p.end_date}
-                </strong>
-                <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.8rem" }}>
-                  Förfaller {p.due_date}
-                  {p.filed_on ? ` · Inlämnad ${p.filed_on}` : ""}
-                </div>
-              </div>
-              <div style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace" }}>
-                <strong style={{ color: p.net_vat >= 0 ? "#fda594" : "#34d399" }}>
-                  {p.net_vat >= 0 ? "−" : "+"}{SEK(Math.abs(p.net_vat))} kr
-                </strong>
-                <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.75rem" }}>
-                  Ut {SEK(p.output_vat)} · In {SEK(p.input_vat)}
-                </div>
-              </div>
-            </article>
-          ))
-        )}
+      <div className="section-eye" style={{ color: "#fbbf24", marginTop: 22 }}>
+        Inlämnade deklarationer
       </div>
-    </BizShell>
+      {periods.length === 0 ? (
+        <div className="biz-empty">
+          Inga deklarationer inlämnade än. Använd förhandsvisning ovan när
+          du är redo.
+        </div>
+      ) : (
+        <div className="biz-table-grid">
+          <div
+            className="biz-table-grid-row head"
+            style={{
+              gridTemplateColumns: "120px 1.5fr 110px 110px 100px",
+            }}
+          >
+            <span>Period</span>
+            <span>Datumspann</span>
+            <span>Netto</span>
+            <span>Förfaller</span>
+            <span>Status</span>
+          </div>
+          {periods.map((p) => (
+            <div
+              key={p.id}
+              className="biz-table-grid-row"
+              style={{
+                gridTemplateColumns: "120px 1.5fr 110px 110px 100px",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10,
+                }}
+              >
+                {p.period_label}
+              </span>
+              <div>
+                <div
+                  style={{
+                    fontFamily: "Source Serif 4, Georgia, serif",
+                    fontSize: 13.5,
+                    color: "#fff",
+                  }}
+                >
+                  {p.start_date} → {p.end_date}
+                </div>
+                <div
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 9,
+                    color: "rgba(255,255,255,0.4)",
+                  }}
+                >
+                  Ut {SEK(p.output_vat)} · In {SEK(p.input_vat)}
+                  {p.filed_on && ` · inlämnad ${p.filed_on}`}
+                </div>
+              </div>
+              <span
+                style={{
+                  fontFamily: "Source Serif 4, Georgia, serif",
+                  fontStyle: "italic",
+                  color: p.net_vat >= 0 ? "#fbbf24" : "#6ee7b7",
+                  fontWeight: 700,
+                }}
+              >
+                {p.net_vat >= 0 ? "−" : "+"}
+                {SEK(Math.abs(p.net_vat))} kr
+              </span>
+              <span
+                style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                {p.due_date}
+              </span>
+              <span
+                className={`biz-status ${
+                  p.status === "paid"
+                    ? "paid"
+                    : p.status === "filed"
+                    ? "sent"
+                    : "open"
+                }`}
+              >
+                {p.status === "paid"
+                  ? "Betald"
+                  : p.status === "filed"
+                  ? "Inlämnad"
+                  : "Öppen"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="peda">
+        <div className="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div className="peda-h">
+          Företag betalar skatt <em>i förskott</em>.
+        </div>
+        <p className="peda-prose">
+          Som privatperson dras skatten av arbetsgivaren <em>innan</em>{" "}
+          lönen kommer. Som företagare måste du själv beräkna och betala
+          in <strong>F-skatt</strong> månadsvis baserat på din egen
+          prognos. Är prognosen för låg → kvarskatt + kostnadsränta. För
+          hög → överbetald, får tillbaka. Lärar-frågan: <em>hur räknar du
+          på något som inte hänt än?</em>
+        </p>
+        <ul className="peda-bullets">
+          <li>
+            <strong>F-skatt</strong>Förenklad förskotts-skatt på prognos.
+            Justeras vid årsbokslut.
+          </li>
+          <li>
+            <strong>Moms-redovisning</strong>Månads / kvartal / år beroende
+            på omsättning.
+          </li>
+          <li>
+            <strong>Egenavgifter</strong>Sociala avgifter du själv betalar
+            (~28,97 % på överskott).
+          </li>
+          <li>
+            <strong>Bokslut</strong>Sista april följande år. Resultat
+            överförs till privat-deklaration.
+          </li>
+        </ul>
+        <div className="peda-concepts">
+          <span className="peda-concept">F-skatt</span>
+          <span className="peda-concept">A-skatt</span>
+          <span className="peda-concept">Moms-period</span>
+          <span className="peda-concept">Egenavgifter</span>
+          <span className="peda-concept">Bokslut</span>
+          <span className="peda-concept">Periodisering</span>
+        </div>
+        <div className="peda-tip">
+          När du klickar "Byt till privat" — kvar i ditt privata
+          Skatteverket finns rad: "Inkomst av näringsverksamhet". Företagets
+          resultat överförs hit varje år och beskattas som privat inkomst
+          (efter egenavgifter). Det är så enskild firma fungerar.
+        </div>
+      </div>
+    </BizActorShell>
   );
 }
 
@@ -934,12 +1672,3 @@ function btnSecondary(): React.CSSProperties {
   };
 }
 
-function btnSm(): React.CSSProperties {
-  return {
-    background: "transparent",
-    border: "none",
-    padding: "6px 10px",
-    cursor: "pointer",
-    fontSize: "0.85rem",
-  };
-}

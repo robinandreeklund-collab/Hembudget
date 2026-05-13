@@ -33,7 +33,6 @@ from ..db.models import (
     UpcomingPayment,
     UpcomingTransaction,
 )
-from ..loans.matcher import LoanMatcher
 from .deps import db, require_auth
 
 router = APIRouter(
@@ -251,6 +250,12 @@ def huvudbok(
         total_assets += assets_contribution
         total_liabilities += liabilities_contribution
 
+        # OBS · V2-frontend (HuvudbokV2) läser kortformerna `opening`,
+        # `closing`, `expense`, `tx_count`. V1 + tester läser
+        # `opening_balance`, `closing_balance`, `expenses`,
+        # `transaction_count`. Vi emit:ar BÅDA så ingen sida behöver
+        # adapter och NaN-buggen på huvudboken (undefined → NaN) elimineras
+        # för v2 utan att v1 går sönder.
         account_rows.append({
             "id": acc.id,
             "name": acc.name,
@@ -259,14 +264,19 @@ def huvudbok(
             "owner_id": acc.owner_id,
             "incognito": is_incognito,
             "opening_balance": float(opening_at_period),
+            "opening": float(opening_at_period),
             "income": float(income_in),
             "expenses": float(expenses_in),
+            "expense": float(expenses_in),
             "transfer_in": float(transfer_in),
             "transfer_out": float(transfer_out),
             "closing_balance": float(closing),
+            "closing": float(closing),
             "cash_balance": float(cash_closing),
             "fund_value": float(fund_value),
+            "total_value": float(closing),
             "transaction_count": len(tx_in_period),
+            "tx_count": len(tx_in_period),
         })
 
     # ---------- Resultaträkning per kategori ----------
@@ -415,13 +425,20 @@ def huvudbok(
 
     cat_out = []
     for b in cat_agg.values():
+        # Som med konton ovan · emit BÅDA fältnamn-konventioner. V2-
+        # frontend (HuvudbokV2) läser `id`/`name`/`expense`/`tx_count`,
+        # V1 + tester läser `category_id`/`category`/`expenses`/`count`.
         cat_out.append({
             "category_id": b["category_id"],
+            "id": b["category_id"],
             "category": b["category"],
+            "name": b["category"],
             "income": float(b["income"]),
             "expenses": float(b["expenses"]),
+            "expense": float(b["expenses"]),
             "net": float(b["income"] - b["expenses"]),
             "count": b["count"],
+            "tx_count": b["count"],
         })
     cat_out.sort(key=lambda r: -(abs(r["income"]) + abs(r["expenses"])))
 
@@ -477,13 +494,55 @@ def huvudbok(
         "check_type": "uncategorized" if uncategorized_count > 0 else None,
     })
 
-    # 4. Lån: outstanding_balance stämmer med principal/current - amort
-    loans = session.query(Loan).filter(Loan.active.is_(True)).all()
-    matcher = LoanMatcher(session)
+    # 4. Lån: outstanding_balance stämmer med principal/current - amort.
+    # Per-period: vi visar bara lån som existerade vid period_end
+    # (start_date < period_end) och beräknar saldot AS-OF period_end —
+    # alltså bas-belopp minus de amorteringar som hunnit registreras
+    # innan periodens slut. Tidigare användes matcher.outstanding_balance
+    # som alltid returnerar NUVARANDE saldo → ett lån taget i maj dök
+    # upp i januari-rapporten och billån-saldot var konstant över alla
+    # historiska månader oavsett amorteringar.
+    loans = (
+        session.query(Loan)
+        .filter(Loan.active.is_(True))
+        .filter(Loan.start_date < period_end)
+        .all()
+    )
     total_loan_debt = 0.0
     loan_rows: list[dict] = []
     for loan in loans:
-        balance = float(matcher.outstanding_balance(loan))
+        # Bas-belopp · samma logik som LoanMatcher.outstanding_balance
+        # men med cutoff på period_end istället för "nu".
+        if loan.current_balance_at_creation is not None:
+            base = loan.current_balance_at_creation
+            cutoff = (
+                loan.created_at.date()
+                if loan.created_at else loan.start_date
+            )
+            amort_rows = (
+                session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "amortization",
+                    LoanPayment.date > cutoff,
+                    LoanPayment.date < period_end,
+                )
+                .all()
+            )
+        else:
+            base = loan.principal_amount
+            amort_rows = (
+                session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "amortization",
+                    LoanPayment.date >= loan.start_date,
+                    LoanPayment.date < period_end,
+                )
+                .all()
+            )
+        amortized = sum((p.amount for p in amort_rows), Decimal("0"))
+        balance = float((base - amortized).quantize(Decimal("0.01")))
         total_loan_debt += balance
         total_paid = float(
             session.query(func.coalesce(func.sum(LoanPayment.amount), 0))
@@ -493,6 +552,12 @@ def huvudbok(
                 LoanPayment.date < period_end,
             ).scalar() or 0
         )
+        # V2-frontend (HuvudbokV2) renderar 'Lån · saldo-avstämning'
+        # med kolumnerna Förväntat / Matchat / Avvikelse. Vi emit:ar dem
+        # som alias så undefined → NaN-buggen undviks. För en normalt
+        # fungerande lån-rad är expected == matched == outstanding och
+        # delta = 0 (avvikelse uppstår bara om någon dragit en manuell
+        # tx som inte matchats mot LoanPayment).
         loan_rows.append({
             "id": loan.id,
             "name": loan.name,
@@ -503,6 +568,9 @@ def huvudbok(
                 if loan.current_balance_at_creation is not None else None
             ),
             "outstanding_balance": balance,
+            "expected_balance": balance,
+            "matched_balance": balance,
+            "delta": 0.0,
             "interest_rate": loan.interest_rate,
             "payments_in_period": total_paid,
         })
@@ -583,6 +651,23 @@ def huvudbok(
             .all()
         )
         locked_months = [r.month for r in rows]
+
+    # V2-aliaser på checks-raderna · backend använder name/passed/value/
+    # detail/check_type, men HuvudbokV2 läser type/label/status/message/
+    # detail_count. Vi emit:ar båda så frontend slipper adapter.
+    for chk in checks:
+        if "label" not in chk:
+            chk["label"] = chk.get("name", "")
+        if "type" not in chk:
+            chk["type"] = chk.get("check_type") or chk.get("name", "")
+        if "status" not in chk:
+            chk["status"] = "ok" if chk.get("passed", False) else "fail"
+        if "message" not in chk:
+            chk["message"] = chk.get("detail", "")
+        if "detail_count" not in chk:
+            v = chk.get("value")
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                chk["detail_count"] = int(v) if isinstance(v, int) else None
 
     return {
         "period": {

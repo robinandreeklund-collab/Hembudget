@@ -112,6 +112,16 @@
   color: #fff;
   border-color: var(--accent, #dc4c2b);
 }
+/* AI-skiss-knapp · lila för att skilja från CRUD-knappar */
+.larare-tb-btn.ai {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: #a78bfa;
+  color: #c4b5fd;
+}
+.larare-tb-btn.ai:hover {
+  background: rgba(139, 92, 246, 0.25);
+  color: #ddd6fe;
+}
 
 /* STATS */
 .larare-stats {

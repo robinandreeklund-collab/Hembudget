@@ -109,6 +109,29 @@ DEFAULT_INSURANCE_POLICIES = [
             "1 Mkr · diagnoskapital vid allvarlig sjukdom"
         ),
     },
+    {
+        # Frisktandvård · baseline grupp 4 normalpris (24-66 år).
+        # Faktiskt pris justeras via GET /v2/forsakringar/frisktandvard
+        # -offert som slår upp elevens individuella tier från
+        # StudentProfile. Visas här som "considered" så eleven medvetet
+        # väljer att teckna (matchar verkligheten · Folktandvården
+        # erbjuder, du som patient bestämmer om du tackar ja).
+        "provider": "Folktandvården",
+        "name": "Frisktandvård · 3-årsavtal",
+        "kind": "frisktandvard",
+        "premium_monthly": Decimal("185"),  # grupp 4 normal · default
+        "coverage_amount": None,  # täcker tjänster, inte belopp
+        "deductible": None,
+        "autogiro": True,
+        "status": "considered",
+        "notes": (
+            "Fast månadspris för all tandvård (kontroll, lagning, "
+            "rotfyllning, tandstensborttagning). Premien beror på "
+            "din tandhälsa (grupp 1-10) och ålder. ATB-rabatt för "
+            "20-23 år och 67+. Begär offert via banken för exakt "
+            "pris baserat på din senaste kontroll."
+        ),
+    },
 ]
 
 
@@ -124,6 +147,9 @@ def seed_default_insurance_policies(
     - hyresratt → hem + olycksfall = active
     - bostadsratt → hem + olycksfall + bostadsrättsforsakring = active
     - villa/radhus → hem + olycksfall + villa-försäkring = active
+    - None / okänt → ALLA "considered" (lärare seedar manuellt utan
+      bostads-kontext, eller test → vi vågar inte gissa vilka som
+      passar utan att veta hur eleven bor)
 
     Övriga (livförsäkring, sjukvård) lämnas "considered" så eleven
     medvetet kan välja att aktivera.
@@ -132,8 +158,10 @@ def seed_default_insurance_policies(
     provider + kind + name) men UPPDATERAR status om policy redan finns
     men borde vara aktiv. Returnerar antal nya rader skapade.
     """
-    # Vilka policies ska sättas till "active" beroende på boende
-    active_kinds = {"hem", "olycksfall"}
+    # Utan känd bostadstyp aktiverar vi inget — eleven bestämmer.
+    active_kinds: set[str] = set()
+    if housing_type in ("hyresratt", "bostadsratt", "villa", "radhus"):
+        active_kinds.update({"hem", "olycksfall"})
     if housing_type == "bostadsratt":
         active_kinds.add("bostadsrattsforsakring")
     elif housing_type in ("villa", "radhus"):

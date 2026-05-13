@@ -368,13 +368,20 @@ def test_complete_with_accept_offer_sets_pending_salary(fx) -> None:
     assert data["final_salary"] is not None
     assert data["summary_md"]
     assert "Lönesamtal avslutat" in data["summary_md"]
-    # Profilen får pending_salary + effective-from-datum
+    # Profilen får pending_salary + effective-from-datum.
+    # Lönen realiseras DIREKT i gross_salary_monthly (kommentar i
+    # employer.complete_negotiation: "KRITISKT · realisera lönen
+    # direkt så monthly_engine nästa tick använder den nya nivån").
+    # pending_salary_monthly speglar samma värde + behålls för
+    # lärar-info via pending_effective_from.
     with master_session() as s:
         p = s.query(StudentProfile).filter(
             StudentProfile.student_id == sid
         ).first()
         assert p.pending_salary_monthly is not None
-        assert p.pending_salary_monthly > p.gross_salary_monthly
+        # 30000 → 31050 (3,5 % höjning)
+        assert p.gross_salary_monthly == 31050
+        assert p.pending_salary_monthly == p.gross_salary_monthly
         assert p.pending_effective_from is not None
         # Negotiation har nu status='completed'
         neg = s.get(SalaryNegotiation, nid)

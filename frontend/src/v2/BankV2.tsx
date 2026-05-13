@@ -30,12 +30,10 @@ const SHORT_DATE = (iso: string) => {
   return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
 };
 
-const DAYS_UNTIL = (iso: string) => {
-  const d = new Date(iso);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-};
+// DAYS_UNTIL är borta · backend skickar nu BankUpcoming.days_until_expected
+// räknat mot SPEL-tid (current_game_date()). Jämförelse mot new Date()
+// (= real-tid maj 2026) gjorde att osignerade fakturor med spel-januari-
+// förfallodag visades som "−120 dagar".
 
 // Mappar account.type → svensk eyebrow-text för acct-card
 const TYPE_EYE: Record<string, string> = {
@@ -159,13 +157,15 @@ export function BankV2() {
   const scheduledBills = openBills.filter((b) => b.is_signed);
   const billsToSign = unsignedBills.length;
 
-  // Hitta första akuta open-faktura för aside · "Tandläkaren idag"-kortet
-  const urgentBill = openBills.find((b) => DAYS_UNTIL(b.expected_date) <= 7);
+  // Använd backend:s SPEL-tid-räknade days_until_expected · annars
+  // jämförs mot real-tid (new Date()) och fakturor med spel-januari-
+  // förfallodag visas som "−120 dagar" trots att eleven är på Jan 2.
+  const urgentBill = openBills.find((b) => b.days_until_expected <= 7);
   const nextScheduled = openBills[0];
 
   // Helper · renderar EN rad i Osignerade/Schemalagda-tabellen.
   function renderBillRow(u: BankUpcoming) {
-    const days = DAYS_UNTIL(u.expected_date);
+    const days = u.days_until_expected;
     const overdue = !u.is_paid && days < 0;
     const urgent = !u.is_paid && days >= 0 && days <= 3;
     const dotColor = overdue
@@ -281,9 +281,19 @@ export function BankV2() {
         <input
           type="date"
           value={u.expected_date}
-          disabled={savingDate === u.id || u.is_paid}
+          // Signerade fakturor (autogiro/BankID) eller redan betalda
+          // dragningar låses — bindande bankavtal kan inte flyttas
+          // utan ny signering.
+          disabled={savingDate === u.id || u.is_paid || u.is_signed}
           onChange={(e) =>
             changeUpcomingDate(u.id, e.target.value)
+          }
+          title={
+            u.is_paid
+              ? "Fakturan är redan betald — datum kan inte ändras."
+              : u.is_signed
+              ? "Signerad via BankID — avsigna i postlådan först om du behöver flytta datumet."
+              : "Tryck för att flytta förfallodatumet."
           }
           style={{
             background: "rgba(255,255,255,0.04)",
@@ -297,7 +307,11 @@ export function BankV2() {
             fontFamily: "var(--mono)",
             fontSize: 10.5,
             width: "100%",
-            cursor: u.is_paid ? "not-allowed" : "pointer",
+            cursor:
+              u.is_paid || u.is_signed
+                ? "not-allowed"
+                : "pointer",
+            opacity: u.is_paid || u.is_signed ? 0.55 : 1,
           }}
         />
         <Link
@@ -404,11 +418,15 @@ export function BankV2() {
                       kr
                     </div>
                     <div className="acct-bal-meta">
-                      {a.fund_value > 0
-                        ? `cash ${SEK(a.current_balance)} · fond ${SEK(
-                            a.fund_value,
-                          )}`
-                        : a.bank}
+                      {(() => {
+                        const fv = a.fund_value || 0;
+                        const sv = a.stock_value || 0;
+                        if (fv === 0 && sv === 0) return a.bank;
+                        const parts = [`cash ${SEK(a.current_balance)}`];
+                        if (fv > 0) parts.push(`fond ${SEK(fv)}`);
+                        if (sv > 0) parts.push(`aktier ${SEK(sv)}`);
+                        return parts.join(" · ");
+                      })()}
                     </div>
                   </div>
                 </Link>
@@ -945,7 +963,10 @@ export function BankV2() {
               </div>
               <div className="side-card-meta">
                 in · ut {SEK(summary.expenses_this_month)} ·{" "}
-                {summary.transactions_count} transaktioner
+                {summary.transactions_count}{" "}
+                {summary.transactions_count === 1
+                  ? "transaktion"
+                  : "transaktioner"}
               </div>
             </div>
           </aside>

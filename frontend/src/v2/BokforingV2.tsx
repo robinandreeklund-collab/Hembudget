@@ -31,15 +31,24 @@ const DATE_LABEL = (iso: string): string => {
 };
 
 function currentMonthIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  // Default-fallback om game-time inte hunnit laddas. Sätts till
+  // spel-anchor (2026-01) så Transaktioner inte visar tom 'maj 2026'
+  // när eleven precis skapats. Riktiga värdet kommer från /v2/game-time.
+  return "2026-01";
 }
 
-function buildPeriodOptions(): { value: string; label: string }[] {
-  const now = new Date();
+function buildPeriodOptions(
+  gameYearMonth: string,
+): { value: string; label: string }[] {
+  // Bygg 6 månader BAKÅT från elevens nuvarande spel-månad i stället
+  // för från real-månad. Annars listar Maj 2026 utan att eleven har
+  // någon data där (eleven är i Jan 2026 i spel-tid).
+  const [yStr, mStr] = gameYearMonth.split("-");
+  const baseY = parseInt(yStr, 10) || 2026;
+  const baseM = (parseInt(mStr, 10) || 1) - 1;  // 0-indexerat
   const opts: { value: string; label: string }[] = [];
   for (let i = 0; i < 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(baseY, baseM - i, 1);
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const label = d.toLocaleDateString("sv-SE", {
       month: "long",
@@ -55,7 +64,22 @@ export function BokforingV2() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<V2BookkeepingData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gameYm, setGameYm] = useState<string>(currentMonthIso());
   const [period, setPeriod] = useState(currentMonthIso());
+
+  // Hämta elevens spel-månad så Transaktioner-vyn defaultar dit
+  // i stället för till real-tidens månad. Annars listar 'Maj 2026'
+  // när eleven precis skapats och spel-tiden är 'Jan 2026'.
+  useEffect(() => {
+    v2Api.gameTime()
+      .then((gt) => {
+        setGameYm(gt.year_month);
+        // Om perioden fortfarande är fallback-default (anchor),
+        // byt till elevens faktiska spel-månad.
+        setPeriod((p) => (p === currentMonthIso() ? gt.year_month : p));
+      })
+      .catch(() => undefined);
+  }, []);
   // Initiera account-filter från ?account=X · låter klick på ett
   // bank-konto i /v2/banken filtrera bokföringen direkt.
   const initialAccount = searchParams.get("account") || "all";
@@ -433,7 +457,7 @@ export function BokforingV2() {
             onChange={(e) => setPeriod(e.target.value)}
             style={selStyle()}
           >
-            {buildPeriodOptions().map((o) => (
+            {buildPeriodOptions(gameYm).map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>

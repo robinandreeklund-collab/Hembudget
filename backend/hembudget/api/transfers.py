@@ -633,7 +633,14 @@ def create_transfer(payload: CreateTransferIn, session: Session = Depends(db)) -
                 f"Du kan inte ta ut mer än vad som finns där.",
             )
 
-    tx_date = payload.date or date.today()
+    # Spel-tid · synkat med privat-tid via business.game_clock. Annars
+    # stämplas överföringar med real-tid (= maj 2026) trots att eleven
+    # är på spel-januari → konstigt i bank-kontoutdrag.
+    if payload.date is not None:
+        tx_date = payload.date
+    else:
+        from ..business.game_clock import current_game_date as _cgd_tr
+        tx_date = _cgd_tr()
     description = (payload.description or "").strip()
     if not description:
         description = f"Överföring till {dst.name}"

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { api } from "@/api/client";
 import { Card } from "@/components/Card";
 
@@ -59,12 +59,12 @@ export default function Bank() {
   // Sign-vy renderas FÖRST — innan vi rör några auth-skyddade endpoints.
   // Telefonen som scannar QR är typiskt INTE inloggad, så vi måste
   // hoppa hela /bank/me-fetchen och bara visa PIN-formuläret.
+  //
+  // V2-redirect · all bank-PIN-signering går nu via mörk V2-design
+  // på /v2/bank-sign/:token (oavsett om syftet är login, lån, faktura).
+  // V1-designen (ljus, lila knapp) renderas inte längre.
   if (isSignView && signToken) {
-    return (
-      <BankShell mobile>
-        <SignConfirmView token={signToken} />
-      </BankShell>
-    );
+    return <Navigate to={`/v2/bank-sign/${signToken}`} replace />;
   }
 
   return <BankAuthenticatedShell />;
@@ -374,75 +374,6 @@ function QRPlaceholder({ url }: { url: string }) {
   );
 }
 
-
-function SignConfirmView({ token }: { token: string }) {
-  const qc = useQueryClient();
-  const [pin, setPin] = useState("");
-  const [done, setDone] = useState(false);
-
-  const confirmMut = useMutation({
-    mutationFn: (p: string) =>
-      api(`/bank/session/${token}/confirm`, {
-        method: "POST",
-        body: JSON.stringify({ pin: p }),
-      }),
-    onSuccess: () => {
-      setDone(true);
-      qc.invalidateQueries({ queryKey: ["bank-session-status", token] });
-    },
-  });
-
-  if (done) {
-    return (
-      <Card>
-        <div className="flex flex-col items-center text-center py-4">
-          <CheckCircle2 className="w-12 h-12 text-emerald-600" />
-          <div className="text-base font-semibold mt-2">
-            Bekräftat
-          </div>
-          <div className="text-sm text-slate-600 mt-1">
-            Du kan nu stänga den här fliken — din dator har loggat
-            in dig automatiskt.
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <Card title="Bekräfta inloggning">
-      <div className="text-sm text-slate-700 leading-relaxed mb-3">
-        Mata in din 4-siffriga bank-PIN för att bekräfta att du
-        verkligen är du. Detta logger in dig på datorn.
-      </div>
-      <div className="space-y-3">
-        <input
-          type="password"
-          inputMode="numeric"
-          pattern="\d{4}"
-          maxLength={4}
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-          className="border rounded px-3 py-3 w-full text-center tracking-widest text-2xl"
-          placeholder="••••"
-          autoFocus
-        />
-        <button
-          onClick={() => confirmMut.mutate(pin)}
-          disabled={pin.length !== 4 || confirmMut.isPending}
-          className="bg-brand-600 text-white rounded px-4 py-3 w-full disabled:opacity-50"
-        >
-          {confirmMut.isPending ? "Bekräftar…" : "Bekräfta"}
-        </button>
-        {confirmMut.error && (
-          <div className="text-sm text-rose-700">
-            {String(confirmMut.error)}
-          </div>
-        )}
-      </div>
-    </Card>
-  );
-}
 
 
 type BankTab =

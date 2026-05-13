@@ -117,21 +117,50 @@ EVENT_TEMPLATES: list[EventTemplate] = [
         key="tandlakar_kontroll",
         display="Folktandvården · karieskontroll",
         description=(
-            "Folktandvården ringde och kallade dig till en akut "
-            "karieskontroll. Två lagningar behövs."
+            "Folktandvården kallade till halvårskontroll. Snabb "
+            "undersökning med röntgen vid behov."
         ),
         kind="unexpected",
         frequency_per_year=0.5,
-        cost_range=(3000, 6500),
-        pentagon_unmitigated=PentagonImpact(economy=-8, health=-4),
-        pentagon_mitigated=PentagonImpact(economy=-2, health=+1),
+        # Realistisk prislista 2026 · enbart kontroll (inte lagning).
+        # Tidigare 3000-6500 var orealistiskt högt — det var närmare
+        # 'kontroll + 2 lagningar' men eventet säger bara 'kontroll'.
+        # Hänvisar nu till lagning som SEPARAT event (tandlakar_karies
+        # nedan).
+        cost_range=(700, 1100),
+        pentagon_unmitigated=PentagonImpact(economy=-2, health=-1),
+        pentagon_mitigated=PentagonImpact(economy=0, health=+1),
         mitigations=(
-            Mitigation("tandvard", 0.10, "Tandvårdsförsäkring · egenavgift 500 kr"),
+            # Frisktandvård täcker 100 % (egenavgift 0 kr)
+            Mitigation("frisktandvard", 0.0, "Frisktandvård · ingen kostnad"),
+            # Äldre 'tandvard'-kind kvar för bakåtkompat
+            Mitigation("tandvard", 0.10, "Tandvårdsförsäkring · egenavgift"),
         ),
         sender="Folktandvården",
         sender_short="FTV",
         sender_kind="other",
-        echo_trigger="Hade en tandvårdsförsäkring kostat mindre i längden?",
+        echo_trigger="Hade frisktandvård gjort detta gratis?",
+    ),
+    EventTemplate(
+        key="tandlakar_karies",
+        display="Folktandvården · karies-lagning",
+        description=(
+            "Vid kontrollen hittades ett hål som behöver lagas. "
+            "Lagning med komposit · 1 besök."
+        ),
+        kind="unexpected",
+        frequency_per_year=0.20,
+        cost_range=(1800, 3200),
+        pentagon_unmitigated=PentagonImpact(economy=-4, health=-1),
+        pentagon_mitigated=PentagonImpact(economy=0, health=+1),
+        mitigations=(
+            Mitigation("frisktandvard", 0.0, "Frisktandvård · ingen kostnad"),
+            Mitigation("tandvard", 0.20, "Tandvårdsförsäkring · egenavgift"),
+        ),
+        sender="Folktandvården",
+        sender_short="FTV",
+        sender_kind="other",
+        echo_trigger="Hade frisktandvård gjort detta gratis?",
     ),
     EventTemplate(
         key="vardcentral_besok",
@@ -216,7 +245,11 @@ EVENT_TEMPLATES: list[EventTemplate] = [
     EventTemplate(
         key="cykel_stulen",
         display="Cykeln stulen utanför arbetet",
-        description="Cykeln stals trots att du låste den. Polisanmälan inlämnad.",
+        description=(
+            "Cykeln stals trots att du låste den. Polisanmälan inlämnad. "
+            "Du behöver köpa en ny cykel — fakturan kommer från "
+            "cykelaffären, inte från Polisen."
+        ),
         kind="unexpected",
         frequency_per_year=0.15,
         cost_range=(4000, 12000),
@@ -225,8 +258,11 @@ EVENT_TEMPLATES: list[EventTemplate] = [
         mitigations=(
             Mitigation("hem", 0.15, "Hemförsäkring drulle · självrisk 1 500"),
         ),
-        sender="Polisen",
-        sender_short="POL",
+        # Faktura-avsändare är cykelaffären där eleven köper ny cykel,
+        # INTE Polisen. Polisen registrerar bara anmälan (informationsbrev
+        # som event_engine.roller kan skicka separat — TODO).
+        sender="Cykelpartner Norden",
+        sender_short="CYK",
         sender_kind="other",
     ),
     EventTemplate(
@@ -362,6 +398,9 @@ EVENT_TEMPLATES: list[EventTemplate] = [
         description="Diskussion om sommarsemester — Norge eller Spanien?",
         kind="lifecycle",
         frequency_per_year=1.0,
+        # Förutsätter "familjen"/"vi" — solo-elever ska inte få
+        # mail om familjesemester när de bor ensamma.
+        family_status_filter=("sambo", "familj_med_barn"),
         cost_range=(8000, 35000),
         pentagon_unmitigated=PentagonImpact(economy=-10, social=+5, leisure=+5),
         sender="Resekonsulten",

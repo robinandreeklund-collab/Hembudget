@@ -504,7 +504,11 @@ def quiz_explain_stream(
     def gen():
         for chunk in ai_core.stream_claude(
             model=ai_core.MODEL_SONNET,
-            system=ai_core.QUIZ_EXPLAIN_SYSTEM_PROMPT,
+            system=ai_core.resolve_prompt(
+                "quiz_explain",
+                teacher_id=teacher_id,
+                default=ai_core.QUIZ_EXPLAIN_SYSTEM_PROMPT,
+            ),
             user_prompt=user_prompt,
             max_tokens=350,
             use_thinking=False,
@@ -662,7 +666,11 @@ def category_explain_stream(
     def gen():
         for chunk in ai_core.stream_claude(
             model=ai_core.MODEL_HAIKU,
-            system=ai_core.CATEGORY_EXPLAIN_SYSTEM_PROMPT,
+            system=ai_core.resolve_prompt(
+                "category_explain",
+                teacher_id=teacher_id,
+                default=ai_core.CATEGORY_EXPLAIN_SYSTEM_PROMPT,
+            ),
             user_prompt=prompt,
             max_tokens=350,
             use_thinking=False,

@@ -8,15 +8,19 @@ manuell tick). Mountas på samma `/v2/foretag` prefix som foretag.py.
 """
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
+log = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from ..business.engine import run_business_week
+from ..business.engine import auto_tick_if_due, run_business_week
 from ..business.engine.tick_engine import deliver_job
+from ..business.game_clock import current_game_date
 from ..business.models import (
     BusinessDecision,
     BusinessTickJob,
@@ -77,6 +81,7 @@ class OpportunityOut(BaseModel):
     customer_name: str
     customer_segment: str
     industry_tag: Optional[str]
+    requires_car: bool = False
     market_price: int
     expected_delivery_days: int
     deadline_on: str
@@ -84,6 +89,17 @@ class OpportunityOut(BaseModel):
     status: str
     week_no: int
     has_quote: bool
+    # Pedagogiska detaljer som visas vid "förlorad/vunnen". Eleven ska
+    # ALLTID kunna förstå varför kunden tackade ja/nej — inte bara se
+    # ett rött FÖRLORAD-pill utan förklaring. quote_* är None tills
+    # eleven lämnat offert; decision_* är None tills kunden bestämt.
+    quote_offered_price: Optional[int] = None
+    quote_offered_delivery_days: Optional[int] = None
+    quote_pitch_text: Optional[str] = None
+    quote_pitch_quality: Optional[float] = None
+    quote_accept_probability: Optional[float] = None
+    quote_accepted: Optional[bool] = None
+    quote_decision_explanation: Optional[str] = None
 
 
 class QuoteIn(BaseModel):
@@ -107,6 +123,7 @@ class QuoteOut(BaseModel):
 
 
 def _to_opportunity_out(opp: JobOpportunity) -> OpportunityOut:
+    q = opp.quote
     return OpportunityOut(
         id=opp.id,
         title=opp.title,
@@ -114,13 +131,26 @@ def _to_opportunity_out(opp: JobOpportunity) -> OpportunityOut:
         customer_name=opp.customer_name,
         customer_segment=opp.customer_segment,
         industry_tag=opp.industry_tag,
+        requires_car=bool(opp.requires_car),
         market_price=opp.market_price,
         expected_delivery_days=opp.expected_delivery_days,
         deadline_on=opp.deadline_on.isoformat(),
         received_on=opp.received_on.isoformat(),
         status=opp.status,
         week_no=opp.week_no,
-        has_quote=opp.quote is not None,
+        has_quote=q is not None,
+        quote_offered_price=q.offered_price if q else None,
+        quote_offered_delivery_days=q.offered_delivery_days if q else None,
+        quote_pitch_text=q.pitch_text if q else None,
+        quote_pitch_quality=(
+            float(q.pitch_quality) if q and q.pitch_quality is not None else None
+        ),
+        quote_accept_probability=(
+            float(q.accept_probability)
+            if q and q.accept_probability is not None else None
+        ),
+        quote_accepted=q.accepted if q else None,
+        quote_decision_explanation=q.decision_explanation if q else None,
     )
 
 
@@ -143,6 +173,85 @@ def _to_quote_out(q: Quote) -> QuoteOut:
     )
 
 
+# === Endpoints: Tick-status (för UI-countdown) ===
+
+
+class TickStatusOut(BaseModel):
+    """Realtid-status för spelarens biz-tick. Frontend pollar för
+    att visa 'nästa tick om HH:MM' och 'svar förväntas' på offerter."""
+    last_auto_tick_at: Optional[str]  # ISO · när senaste tick kördes
+    next_tick_at: str  # ISO · när nästa tick körs (+ AUTO_TICK_INTERVAL_HOURS)
+    interval_hours: float  # AUTO_TICK_INTERVAL_HOURS
+    seconds_until_next_tick: int
+    week_no: int
+    open_quotes_count: int
+    last_tick_status: Optional[str] = None  # "done" | "failed" | None
+    last_tick_error: Optional[str] = None
+
+
+@router.get("/tick-status", response_model=TickStatusOut)
+def get_tick_status(info: TokenInfo = Depends(require_token)):
+    """Realtid-status för biz-tick. Används av UI:t för countdown.
+
+    1 real-timme = 1 biz-vecka. När eleven öppnar offerter-sidan
+    triggas auto_tick_if_due som kör en tick om 1+ h passerat. Det
+    här endpointet säger BARA när nästa tick kommer — kör inte ticken.
+    """
+    from ..business.engine.tick_engine import (
+        AUTO_TICK_INTERVAL_HOURS,
+    )
+    _require_student(info)
+    with session_scope() as s:
+        co = _get_active_company(s)
+        last_at = co.last_auto_tick_at
+        if last_at is None:
+            # Aldrig tickat (precis skapad) → nästa tick är NU
+            next_at = datetime.utcnow()
+        else:
+            next_at = last_at + timedelta(hours=AUTO_TICK_INTERVAL_HOURS)
+        seconds_until = max(
+            0, int((next_at - datetime.utcnow()).total_seconds()),
+        )
+        open_quotes = (
+            s.query(Quote)
+            .join(JobOpportunity, JobOpportunity.id == Quote.opportunity_id)
+            .filter(
+                Quote.company_id == co.id,
+                Quote.accepted.is_(None),
+                JobOpportunity.status == "quoted",
+            )
+            .count()
+        )
+        # Senaste BusinessTickJob för debug — om den senaste failade
+        # vet vi att alla auto-tick-försök kraschar och quotes inte
+        # avgörs trots att timmar passerat.
+        last_status = None
+        last_error = None
+        try:
+            last_job = (
+                s.query(BusinessTickJob)
+                .filter(BusinessTickJob.company_id == co.id)
+                .order_by(BusinessTickJob.id.desc())
+                .first()
+            )
+            if last_job is not None:
+                last_status = last_job.status
+                last_error = last_job.error
+        except Exception:
+            pass
+
+        return TickStatusOut(
+            last_auto_tick_at=last_at.isoformat() if last_at else None,
+            next_tick_at=next_at.isoformat(),
+            interval_hours=AUTO_TICK_INTERVAL_HOURS,
+            seconds_until_next_tick=seconds_until,
+            week_no=int(co.week_no or 0),
+            open_quotes_count=open_quotes,
+            last_tick_status=last_status,
+            last_tick_error=last_error,
+        )
+
+
 # === Endpoints: Opportunity ===
 
 
@@ -156,6 +265,36 @@ def list_opportunities(
     _require_student(info)
     with session_scope() as s:
         co = _get_active_company(s)
+        if co is None:
+            return []
+        # Auto-tick · drar fram så många biz-veckor som passerat sedan
+        # senaste lasning så att eleven ser nya offertförfrågningar +
+        # accept-besked från tidigare offerter dyka upp över tid utan
+        # att klicka "Stega vecka". 1 biz-vecka per real-timme.
+        auto_tick_if_due(s, company=co)
+
+        # Pipeline-kickstart · om bolaget har bas-utrustning och inga
+        # opps någonsin genererats kör vi pipeline-only så eleven
+        # inte fastnar i tomt-state. VIKTIGT: kickstart_pipeline_only
+        # bokar INGA kostnader (veckoränta, amortering, avskrivning)
+        # — bara phase_c (offert-generering). Annars dubbel-debiteras
+        # samma vecka när auto-tick sen kör igen.
+        if co.has_base_equipment:
+            existing_count = (
+                s.query(JobOpportunity)
+                .filter(JobOpportunity.company_id == co.id)
+                .count()
+            )
+            if existing_count == 0:
+                from ..business.engine.tick_engine import (
+                    kickstart_pipeline_only,
+                )
+                try:
+                    kickstart_pipeline_only(s, company=co, weeks=2)
+                except Exception:
+                    log.exception(
+                        "list_opportunities: pipeline-kickstart misslyckades"
+                    )
         q = (
             s.query(JobOpportunity)
             .filter(JobOpportunity.company_id == co.id)
@@ -191,6 +330,18 @@ def submit_quote(
             raise HTTPException(
                 400, f"Förfrågan har status '{opp.status}', kan ej offerera",
             )
+        # Spärr · bil + bas-utrustning krävs
+        if not co.has_base_equipment:
+            raise HTTPException(
+                403,
+                "Du måste köpa bas-utrustning innan du kan svara på "
+                "kundförfrågningar (Tillväxt-vyn).",
+            )
+        if opp.requires_car and not co.has_car:
+            raise HTTPException(
+                403,
+                "Detta uppdrag kräver bil. Köp en i Tillväxt-vyn först.",
+            )
         if opp.quote is not None:
             raise HTTPException(400, "Offert redan lämnad")
 
@@ -219,7 +370,7 @@ def submit_quote(
             offered_delivery_days=body.offered_delivery_days,
             pitch_text=body.pitch_text,
             pitch_quality=pitch_quality,
-            submitted_on=date.today(),
+            submitted_on=current_game_date(),
         )
         s.add(q)
         opp.status = "quoted"
@@ -263,11 +414,62 @@ class JobOut(BaseModel):
     status: str
     quality_score: Optional[int]
     invoice_id: Optional[int]
+    # Tids-tracking · för live-countdown i UI
+    estimated_hours: int = 0
+    hours_per_week: int = 0
+    days_remaining: int = 0  # antal dagar tills expected_complete_on
+    days_total: int = 0      # totalt antal dagar från start till deadline
+    progress_pct: int = 0    # 0-100 baserat på elapsed/total tid
+    is_overdue: bool = False
+    is_klass_pool: bool = False  # ⭐ klass-pool-jobb · högre belöning
 
 
 class DeliverIn(BaseModel):
+    """Bakåtkompat · gamla klienter kunde slidra quality_score 0-100.
+
+    Nya klienter ska istället göra POST /jobs/{id}/submit-delivery-quiz
+    med svar på 3 quiz-frågor. Den endpointen räknar quality_score
+    automatiskt från svaren och kan inte fuskas.
+    """
     quality_score: int = Field(ge=0, le=100)
     create_invoice: bool = True
+
+
+class QuizQuestionOut(BaseModel):
+    id: int
+    category: str
+    text: str
+    # Alternativ visas i randomiserad ordning (a/b/c) så eleven inte
+    # kan gissa "a är alltid bra".
+    options: list[dict]  # [{"key": "a", "text": "...", "level": "good"}]
+
+
+class QuizOut(BaseModel):
+    job_id: int
+    questions: list[QuizQuestionOut]
+
+
+class QuizSubmitIn(BaseModel):
+    # Lista med 3 svar · varje svar är "good"/"mid"/"bad"
+    answers: list[str] = Field(min_length=3, max_length=3)
+    create_invoice: bool = True
+
+
+class QuizFeedbackItem(BaseModel):
+    question_id: int
+    question_text: str
+    your_answer_level: str  # "good"/"mid"/"bad"
+    your_answer_text: str
+    best_answer_text: str
+    explanation: str
+
+
+class QuizSubmitOut(BaseModel):
+    job: JobOut
+    invoice_id: Optional[int]
+    invoice_number: Optional[str]
+    quality_score: int
+    feedback: list[QuizFeedbackItem]
 
 
 class DeliverOut(BaseModel):
@@ -277,6 +479,11 @@ class DeliverOut(BaseModel):
 
 
 def _to_job_out(j: Job) -> JobOut:
+    today = current_game_date()
+    days_total = max(1, (j.expected_complete_on - j.started_on).days)
+    elapsed = max(0, (today - j.started_on).days)
+    days_remaining = (j.expected_complete_on - today).days
+    progress = min(100, int(round(elapsed / days_total * 100)))
     return JobOut(
         id=j.id, title=j.title, customer_name=j.customer_name,
         agreed_price=j.agreed_price,
@@ -286,6 +493,15 @@ def _to_job_out(j: Job) -> JobOut:
         status=j.status,
         quality_score=j.quality_score,
         invoice_id=j.invoice_id,
+        estimated_hours=int(j.estimated_hours or 0),
+        hours_per_week=int(j.hours_per_week or 0),
+        days_remaining=days_remaining,
+        days_total=days_total,
+        progress_pct=progress,
+        is_overdue=(
+            j.status == "in_progress" and days_remaining < 0
+        ),
+        is_klass_pool=(j.title or "").startswith("⭐ Klass-pool"),
     )
 
 
@@ -323,6 +539,57 @@ def deliver(
         if job.status != "in_progress":
             raise HTTPException(
                 400, f"Jobbet har status '{job.status}'",
+            )
+
+        # Blockera leverans innan jobbet hunnit klart i spel-tid.
+        # Eleven måste vänta tills planerad tid (deadline) passerats —
+        # annars kan hen klicka leverera direkt efter start och sedan
+        # ta nästa jobb · TIDS-KAPACITET blir meningslöst och eleven
+        # kan fuska sig till oändlig inkomst.
+        #
+        # Beräkning matchar _to_job_out:s progress_pct (spel-tid mellan
+        # started_on och expected_complete_on). 95 % tolerans så
+        # eleven inte fastnar exakt på 99,8 % pga UTC-rundningar.
+        try:
+            from ..business.game_clock import (
+                current_game_date as _cgd_deliver,
+            )
+            today_g = _cgd_deliver()
+            if (
+                job.started_on is not None
+                and job.expected_complete_on is not None
+            ):
+                total_days = max(
+                    1,
+                    (job.expected_complete_on - job.started_on).days,
+                )
+                elapsed_days = (today_g - job.started_on).days
+                progress_pct = max(
+                    0.0, min(100.0, (elapsed_days / total_days) * 100.0),
+                )
+                if progress_pct < 95.0:
+                    days_left = max(
+                        0,
+                        (job.expected_complete_on - today_g).days,
+                    )
+                    raise HTTPException(
+                        400,
+                        (
+                            f"Jobbet är inte färdigt än "
+                            f"({int(progress_pct)} % klart). "
+                            f"Deadline {job.expected_complete_on} · "
+                            f"~{days_left} spel-dgr kvar. "
+                            f"Du kan inte leverera tidigare än planerat — "
+                            f"TIDS-KAPACITET måste konsumeras."
+                        ),
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "/jobs/deliver: kunde inte verifiera progress_pct · "
+                "släpper igenom som defensiv fallback",
             )
 
         delivered_job, invoice = deliver_job(
@@ -373,6 +640,254 @@ def deliver(
             invoice_number=(
                 invoice.invoice_number if invoice else None
             ),
+        )
+
+
+# === Endpoints: Leverans-quiz =====================================
+#
+# Ersätter den fuskvänliga slidern (eleven valde själv 0-100). Nu
+# svarar eleven på 3 situationsfrågor (kvalitet/kommunikation/tid/
+# etik/teknik) med 3 alternativ vardera. Backend räknar quality_score
+# från svaren · kan inte fuskas.
+
+
+def _shuffle_options(
+    q,  # business.delivery_quiz.QuizQuestion
+    seed_int: int,
+) -> list[dict]:
+    """Randomisera ordningen så eleven inte kan gissa 'alternativ a är
+    alltid bästa'. Seedat på (job_id + question_id) så samma elev
+    får samma ordning vid omladdning av sidan = stabilt."""
+    import random as _r
+    rng = _r.Random(seed_int)
+    items = [
+        {"key": "good", "text": q.option_good, "level": "good"},
+        {"key": "mid",  "text": q.option_mid,  "level": "mid"},
+        {"key": "bad",  "text": q.option_bad,  "level": "bad"},
+    ]
+    rng.shuffle(items)
+    # Ge dem stabila a/b/c-keys efter shuffle (frontend visar
+    # 'a' / 'b' / 'c' så eleven inte ser level i UI).
+    for i, item in enumerate(items):
+        item["key"] = ["a", "b", "c"][i]
+    return items
+
+
+@router.get(
+    "/jobs/{job_id}/quality-quiz",
+    response_model=QuizOut,
+)
+def get_quality_quiz(
+    job_id: int, info: TokenInfo = Depends(require_token),
+):
+    """Hämta 3 quiz-frågor för leveransen. Anti-repetition via
+    Company.recent_quiz_question_ids så eleven inte ser samma fråga
+    två leveranser i rad. Stabilt seedat på job_id så omladdning
+    av sidan ger samma frågor."""
+    _require_student(info)
+    from ..business.delivery_quiz import pick_questions
+    import random as _rnd_q
+    with session_scope() as s:
+        co = _get_active_company(s)
+        job = (
+            s.query(Job)
+            .filter(Job.id == job_id, Job.company_id == co.id)
+            .first()
+        )
+        if job is None:
+            raise HTTPException(404, "Jobbet saknas")
+        if job.status != "in_progress":
+            raise HTTPException(
+                400, f"Jobbet har status '{job.status}'",
+            )
+        # Stabil RNG: samma job ger samma frågor om eleven laddar om
+        rng = _rnd_q.Random(f"quiz-{job.id}-{co.id}")
+        recent = list(co.recent_quiz_question_ids or [])
+        questions = pick_questions(
+            industry_key=co.industry_key,
+            recent_ids=recent,
+            rng=rng,
+        )
+        out_qs = []
+        for q in questions:
+            opts = _shuffle_options(q, seed_int=q.id * 1000 + job.id)
+            out_qs.append(QuizQuestionOut(
+                id=q.id,
+                category=q.category,
+                text=q.text,
+                options=opts,
+            ))
+        return QuizOut(job_id=job.id, questions=out_qs)
+
+
+@router.post(
+    "/jobs/{job_id}/submit-delivery-quiz",
+    response_model=QuizSubmitOut,
+)
+def submit_delivery_quiz(
+    job_id: int, body: QuizSubmitIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Eleven har svarat på 3 quiz-frågor · backend räknar quality_score
+    deterministiskt och levererar jobbet. Eleven kan INTE fuska."""
+    sid = _require_student(info)
+    from ..business.delivery_quiz import (
+        get_question, pick_questions, score_answers, update_recent_ids,
+    )
+    import random as _rnd_q2
+    with session_scope() as s:
+        co = _get_active_company(s)
+        job = (
+            s.query(Job)
+            .filter(Job.id == job_id, Job.company_id == co.id)
+            .first()
+        )
+        if job is None:
+            raise HTTPException(404, "Jobbet saknas")
+        if job.status != "in_progress":
+            raise HTTPException(
+                400, f"Jobbet har status '{job.status}'",
+            )
+
+        # Same gate som /jobs/{id}/deliver · blockera early-delivery
+        # via quiz-vägen så ingen kan fuska genom att skip:a vanliga
+        # deliver-endpointen.
+        try:
+            from ..business.game_clock import (
+                current_game_date as _cgd_quiz,
+            )
+            today_g = _cgd_quiz()
+            if (
+                job.started_on is not None
+                and job.expected_complete_on is not None
+            ):
+                total_days = max(
+                    1,
+                    (job.expected_complete_on - job.started_on).days,
+                )
+                elapsed_days = (today_g - job.started_on).days
+                progress_pct = max(
+                    0.0, min(100.0, (elapsed_days / total_days) * 100.0),
+                )
+                if progress_pct < 95.0:
+                    days_left = max(
+                        0,
+                        (job.expected_complete_on - today_g).days,
+                    )
+                    raise HTTPException(
+                        400,
+                        (
+                            f"Jobbet är inte färdigt än "
+                            f"({int(progress_pct)} % klart). "
+                            f"Deadline {job.expected_complete_on} · "
+                            f"~{days_left} spel-dgr kvar."
+                        ),
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+        # Återgenerera SAMMA frågor som vi gav i GET (samma seed)
+        rng = _rnd_q2.Random(f"quiz-{job.id}-{co.id}")
+        recent = list(co.recent_quiz_question_ids or [])
+        questions = pick_questions(
+            industry_key=co.industry_key,
+            recent_ids=recent,
+            rng=rng,
+        )
+        if len(questions) != 3:
+            # Konfigurations-/seed-fel · branschen har för få frågor.
+            # 503 = "service unavailable, sysadmin har glömt seed:a"
+            # är mer korrekt än 500 (server-error).
+            raise HTTPException(
+                503,
+                "Quiz-databasen är för liten · "
+                "kontakta admin (för få frågor i din bransch).",
+            )
+
+        # Validera svar
+        for ans in body.answers:
+            if ans not in ("good", "mid", "bad"):
+                raise HTTPException(
+                    422,
+                    f"Ogiltigt svar '{ans}' · måste vara good/mid/bad",
+                )
+
+        # Seedad score · samma input → samma score, alltid.
+        # Bryter tidigare bug där global random.randint gjorde
+        # quality_score icke-deterministisk vid retry/double-click.
+        quiz_seed = (job.id * 1_000_003) ^ (co.id * 9_973)
+        quality_score = score_answers(body.answers, seed=quiz_seed)
+
+        # Leverera jobbet med beräknad score
+        delivered_job, invoice = deliver_job(
+            s,
+            company=co,
+            job=job,
+            quality_score=quality_score,
+            create_invoice=body.create_invoice,
+        )
+
+        # Uppdatera anti-repetition · senaste 10 frågor
+        new_ids = [q.id for q in questions]
+        co.recent_quiz_question_ids = update_recent_ids(
+            recent, new_ids, keep_n=10,
+        )
+
+        s.flush()
+
+        # Pedagogisk feedback · vad var bäst-svaret + förklaring
+        feedback: list[QuizFeedbackItem] = []
+        for q, your_level in zip(questions, body.answers):
+            your_text = {
+                "good": q.option_good,
+                "mid":  q.option_mid,
+                "bad":  q.option_bad,
+            }[your_level]
+            feedback.append(QuizFeedbackItem(
+                question_id=q.id,
+                question_text=q.text,
+                your_answer_level=your_level,
+                your_answer_text=your_text,
+                best_answer_text=q.option_good,
+                explanation=q.explanation,
+            ))
+
+        # Pentagon-koppling (samma logik som gamla deliver-endpointen)
+        try:
+            from ..game_engine.pentagon import apply_pentagon_delta
+            if quality_score >= 80:
+                apply_pentagon_delta(
+                    sid, axis="economy", requested_delta=2,
+                    reason_kind="decision",
+                    reason_id=job.id, reason_table="biz_jobs",
+                    explanation=(
+                        f"företag · levererat {job.title} med kvalitet "
+                        f"{quality_score} (quiz)"
+                    ),
+                )
+            elif quality_score < 50:
+                apply_pentagon_delta(
+                    sid, axis="social", requested_delta=-2,
+                    reason_kind="decision",
+                    reason_id=job.id, reason_table="biz_jobs",
+                    explanation=(
+                        f"företag · låg kvalitet {quality_score} på "
+                        f"leverans (quiz)"
+                    ),
+                )
+        except Exception:
+            pass
+
+        return QuizSubmitOut(
+            job=_to_job_out(delivered_job),
+            invoice_id=invoice.id if invoice else None,
+            invoice_number=(
+                invoice.invoice_number if invoice else None
+            ),
+            quality_score=quality_score,
+            feedback=feedback,
         )
 
 
@@ -439,9 +954,21 @@ def create_marketing(
 ):
     """Skapa kampanj. Bokför kostnaden direkt + AI-bedöm copy om text finns."""
     _require_student(info)
-    today = date.today()
+    today = current_game_date()
     with session_scope() as s:
         co = _get_active_company(s)
+
+        # Kassa-spärr · marknadsförings-kampanjer får inte ta saldo
+        # minus. Returnera 402 så frontend kan föreslå tillväxtlån.
+        from ..business.cash import compute_company_cash as _ccc
+        bal = _ccc(s, co)
+        if bal < body.cost:
+            raise HTTPException(
+                402,
+                f"Otillräcklig kassa · {body.cost - bal} kr saknas. "
+                f"Kassan är {bal} kr · kampanjen kostar {body.cost} kr. "
+                "Ta ett tillväxtlån (Tillväxt → Lån) först.",
+            )
 
         ai_factor = None
         ai_feedback = None
@@ -503,18 +1030,367 @@ def create_marketing(
         return _to_marketing_out(m)
 
 
+# === Marknadsförings-paket (10 nivåer · lokaltidning → TV) ===
+#
+# Pedagogisk koppling: eleven ser DIREKT hur högre rykte ökar chansen
+# i kundförfrågningar (acceptance_model.py · reputation_term + marketing
+# _term). Realistiska svenska annonspriser så jämförelsen mot omsättning
+# ger en konkret känsla för marknadsförings-ROI.
+
+MARKETING_PACKAGES: list[dict] = [
+    {
+        "key": "lokaltidning",
+        "level": 1,
+        "title": "Lokaltidning · annons",
+        "channel": "Print · lokal",
+        "cost": 3500,
+        "duration_weeks": 2,
+        "pipeline_boost": 1.05,
+        "reputation_bump": 1,
+        "description": (
+            "Helsida i lokaltidningen (t.ex. Mariestads-Tidningen). "
+            "Bas-paketet · liten räckvidd, men målgruppen läser noggrant."
+        ),
+    },
+    {
+        "key": "stads_facebook",
+        "level": 2,
+        "title": "Stadens Facebook-grupp",
+        "channel": "Social · lokal",
+        "cost": 1500,
+        "duration_weeks": 2,
+        "pipeline_boost": 1.04,
+        "reputation_bump": 1,
+        "description": (
+            "Sponsrat inlägg i ortens Facebook-grupp. Billigt + virtuellt "
+            "när folk taggar grannar."
+        ),
+    },
+    {
+        "key": "flygblad",
+        "level": 3,
+        "title": "Flygblad · 1 000 hushåll",
+        "channel": "Print · direktreklam",
+        "cost": 6500,
+        "duration_weeks": 1,
+        "pipeline_boost": 1.08,
+        "reputation_bump": 1,
+        "description": (
+            "Distribution till 1 000 hushåll i ditt postnummer. "
+            "Hög träffsäkerhet på lokal kundbas."
+        ),
+    },
+    {
+        "key": "google_lokal",
+        "level": 4,
+        "title": "Google Ads · lokala sökningar",
+        "channel": "Sök · lokal",
+        "cost": 12000,
+        "duration_weeks": 4,
+        "pipeline_boost": 1.15,
+        "reputation_bump": 2,
+        "description": (
+            "Sökord som \"snickare Mariestad\" + Google Maps-pin. "
+            "Folk som söker har KÖPINTRESSE — bästa ROI för småföretag."
+        ),
+    },
+    {
+        "key": "veckotidning",
+        "level": 5,
+        "title": "Veckotidning · regional helsida",
+        "channel": "Print · regional",
+        "cost": 18000,
+        "duration_weeks": 3,
+        "pipeline_boost": 1.18,
+        "reputation_bump": 2,
+        "description": (
+            "Helsida i regional veckotidning (t.ex. Land, Hemmets Journal). "
+            "Bredare målgrupp, mer status."
+        ),
+    },
+    {
+        "key": "radio_regional",
+        "level": 6,
+        "title": "Radio · regional reklam",
+        "channel": "Radio · regional",
+        "cost": 35000,
+        "duration_weeks": 4,
+        "pipeline_boost": 1.25,
+        "reputation_bump": 4,
+        "description": (
+            "30-sekundersspots på regional radiostation. Hörs i bilen "
+            "morgon + kväll · höjer top-of-mind."
+        ),
+    },
+    {
+        "key": "sponsring_idrott",
+        "level": 7,
+        "title": "Sponsring · idrottsförening",
+        "channel": "Brand · sponsring",
+        "cost": 50000,
+        "duration_weeks": 12,
+        "pipeline_boost": 1.20,
+        "reputation_bump": 6,
+        "description": (
+            "Logo på matchtröjor + skylt på arena. Lägre direkt-ROI men "
+            "STARK rykteseffekt — bygger varumärke och lokal goodwill."
+        ),
+    },
+    {
+        "key": "storstadstidning",
+        "level": 8,
+        "title": "Storstadstidning · halvsida",
+        "channel": "Print · riks",
+        "cost": 120000,
+        "duration_weeks": 4,
+        "pipeline_boost": 1.40,
+        "reputation_bump": 5,
+        "description": (
+            "Halvsida i Aftonbladet eller Dagens Nyheter. Räckvidd över "
+            "hela Sverige · seriöst varumärke."
+        ),
+    },
+    {
+        "key": "radio_riks",
+        "level": 9,
+        "title": "Radio · riksspelning",
+        "channel": "Radio · riks",
+        "cost": 250000,
+        "duration_weeks": 6,
+        "pipeline_boost": 1.55,
+        "reputation_bump": 8,
+        "description": (
+            "Kampanj i P3 + P4 nationellt. Massiv räckvidd · folk känner "
+            "igen ditt företag i hela landet."
+        ),
+    },
+    {
+        "key": "tv_reklam",
+        "level": 10,
+        "title": "TV-reklam · TV4 / Kanal 5 primetime",
+        "channel": "TV · riks",
+        "cost": 750000,
+        "duration_weeks": 4,
+        "pipeline_boost": 1.80,
+        "reputation_bump": 12,
+        "description": (
+            "30-sekundersspots primetime. Det dyraste men starkaste "
+            "marknadsverktyget. Förvandlar lokalt företag till nationellt."
+        ),
+    },
+]
+
+
+class MarketingPackageOut(BaseModel):
+    key: str
+    level: int
+    title: str
+    channel: str
+    cost: int
+    duration_weeks: int
+    pipeline_boost: float
+    reputation_bump: int
+    description: str
+
+
+class BuyPackageIn(BaseModel):
+    key: str = Field(..., min_length=1, max_length=40)
+
+
+@router.get(
+    "/marketing/packages", response_model=list[MarketingPackageOut],
+)
+def list_marketing_packages(info: TokenInfo = Depends(require_token)):
+    """10-nivåers paketkatalog · lokaltidning → TV."""
+    _require_student(info)
+    return [MarketingPackageOut(**p) for p in MARKETING_PACKAGES]
+
+
+@router.post("/marketing/packages/buy", response_model=MarketingOut)
+def buy_marketing_package(
+    body: BuyPackageIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Köp ett marknadsförings-paket. Bokför kostnaden, skapar
+    MarketingCampaign med tier-baserad pipeline_boost, och bumpar rykte
+    omedelbart med paketets reputation_bump."""
+    _require_student(info)
+    pkg = next((p for p in MARKETING_PACKAGES if p["key"] == body.key), None)
+    if pkg is None:
+        raise HTTPException(404, "Paketet finns inte")
+
+    today = current_game_date()
+    with session_scope() as s:
+        co = _get_active_company(s)
+
+        # Hård spärr · paketet får inte ta kassan minus. Pedagogiskt:
+        # 750 000 kr TV-reklam när kassan är 50k är inte feedback-i-
+        # bokföringen, det är en katastrof. Returnera 402 så frontend
+        # kan föreslå att ta tillväxtlån eller välja billigare paket.
+        from .foretag_growth import _kassa
+        bal = _kassa(s, co)
+        if bal < pkg["cost"]:
+            raise HTTPException(
+                402,
+                f"Otillräcklig kassa · {pkg['cost'] - bal} kr saknas. "
+                f"Kassan är {bal} kr · paketet kostar {pkg['cost']} kr. "
+                "Ta ett tillväxtlån (Tillväxt → Lån) eller välj ett "
+                "billigare paket.",
+            )
+
+        m = MarketingCampaign(
+            company_id=co.id,
+            kind="paket",  # nytt kind-värde · tier-paket
+            title=pkg["title"],
+            copy_text=None,
+            cost=pkg["cost"],
+            duration_weeks=pkg["duration_weeks"],
+            ai_quality_factor=None,
+            ai_feedback=(
+                f"Paketköp · {pkg['channel']}. "
+                f"Pipeline-boost {pkg['pipeline_boost']:.2f}x · "
+                f"rykte +{pkg['reputation_bump']}."
+            ),
+            base_pipeline_boost=Decimal(str(pkg["pipeline_boost"])),
+            started_on=today,
+            ends_on=today + timedelta(weeks=pkg["duration_weeks"]),
+            active=True,
+        )
+        s.add(m)
+
+        # Bokför hela paket-kostnaden direkt (engångsutlägg)
+        from ..business.models import CompanyTransaction as _Tx
+        s.add(_Tx(
+            company_id=co.id,
+            occurred_on=today,
+            kind="expense",
+            category="marknadsforing",
+            description=f"Marknadsföringspaket · {pkg['title']}",
+            amount_excl_vat=Decimal(str(pkg["cost"])),
+            vat_rate=Decimal("0.25"),
+            vat_amount=Decimal(str(int(round(pkg["cost"] * 0.25)))),
+        ))
+
+        # Bumpa rykte omedelbart · klamras till 0..100
+        new_rep = min(100, max(0, int(co.reputation or 50) + int(pkg["reputation_bump"])))
+        co.reputation = new_rep
+
+        s.flush()
+        return _to_marketing_out(m)
+
+
 # === Schemas: Decision ===
 
 
+# Server-side decision-katalog · enda källan av sanning för
+# capacity_delta + reputation_delta + monthly_cost + one_time_cost.
+# Tidigare läste create_decision dessa fält direkt från klienten →
+# eleven kunde POST:a {capacity_delta: 999, reputation_delta: 50}
+# och få ohämmad kapacitet + max-rep utan motsvarande kostnad.
+# Spelet helt trasigt.
+#
+# Nu: klienten skickar bara `kind` + ev. justerings-context (notes,
+# insurance_kind). Servern slår upp resten i katalogen så pris,
+# kapacitet och rykte alltid matchar pedagogiken. Aliases stöds
+# (UI-naturliga namn vs tekniska).
+DECISION_CATALOG: dict[str, dict] = {
+    # Anställning · 1 fiktiv anställd = +40 h/v kapacitet.
+    # capacity_delta=1 motsvarar EMPLOYEE_HOURS_PER_WEEK i
+    # foretag_capacity.compute_time_capacity. AGI ingår i monthly_cost.
+    "hire_full_time": {
+        "title": "Anställd · heltid",
+        "monthly_cost": 35000,
+        "one_time_cost": 0,
+        "capacity_delta": 1,
+        "reputation_delta": 0,
+    },
+    "employee": {  # alias från BizTillvaxt
+        "title": "Anställd · heltid",
+        "monthly_cost": 35000,
+        "one_time_cost": 0,
+        "capacity_delta": 1,
+        "reputation_delta": 0,
+    },
+    "hire_part_time": {
+        "title": "Anställd · deltid",
+        "monthly_cost": 18000,
+        "one_time_cost": 0,
+        "capacity_delta": 1,  # mindre kapacitet · representeras
+                              # via halverad lön
+        "reputation_delta": 0,
+    },
+    # Friskvård · höjer rykte (medarbetar-trivsel) men ger
+    # ingen kapacitetsförändring. 5 000 kr/anställd/år men
+    # eleven aktiverar bara en gång → fast pedagogisk siffra.
+    "wellness": {
+        "title": "Friskvårdsbidrag",
+        "monthly_cost": 500,
+        "one_time_cost": 0,
+        "capacity_delta": 0,
+        "reputation_delta": 3,
+    },
+    # Leasing av servicebil · matchar has_car-flaggan men
+    # är ren OPEX (ingen kapital-spärr). Pedagogisk skillnad
+    # mot köp via foretag_growth.assets-flödet.
+    "car_lease": {
+        "title": "Leasing · servicebil",
+        "monthly_cost": 4500,
+        "one_time_cost": 5000,
+        "capacity_delta": 0,
+        "reputation_delta": 0,
+    },
+    "leasing": {  # alias från BizTillvaxt
+        "title": "Leasing · servicebil",
+        "monthly_cost": 4500,
+        "one_time_cost": 5000,
+        "capacity_delta": 0,
+        "reputation_delta": 0,
+    },
+    # Försäkring · skyddar mot slumpevent-förluster (-90 %
+    # skada). Pedagogisk parallell till privat-försäkringar.
+    "insurance": {
+        "title": "Företagsförsäkring",
+        "monthly_cost": 1200,
+        "one_time_cost": 0,
+        "capacity_delta": 0,
+        "reputation_delta": 0,
+    },
+    # Större lokal · gammal preset (innan CompanyLocation-
+    # flödet). +1 kapacitet + 5 rykte. Pedagogiskt inkonsekvent
+    # med Tillväxt-fliken som har CompanyLocation, men kvar
+    # för bakåtkompat.
+    "new_office": {
+        "title": "Större lokal",
+        "monthly_cost": 8000,
+        "one_time_cost": 12000,
+        "capacity_delta": 1,
+        "reputation_delta": 5,
+    },
+}
+
+
 class DecisionIn(BaseModel):
+    # Alias-vänligt mönster · både UI-naturliga ('employee', 'leasing')
+    # och tekniska ('hire_part_time', 'car_lease') accepteras. Frontend-
+    # presetet skickar 'employee'/'leasing' men gamla tester kan
+    # fortfarande använda de tekniska namnen.
     kind: str = Field(
-        pattern="^(hire_part_time|wellness|car_lease|insurance|new_office)$"
+        pattern=(
+            "^(employee|hire_full_time|hire_part_time|wellness|"
+            "leasing|car_lease|insurance|new_office)$"
+        )
     )
-    title: str = Field(min_length=2, max_length=200)
-    monthly_cost: int = Field(ge=0, default=0)
-    one_time_cost: int = Field(ge=0, default=0)
-    capacity_delta: int = Field(default=0)
-    reputation_delta: int = Field(default=0)
+    # Title kan optionellt skickas av klienten för UI-flexibilitet
+    # men servern överskriver med katalogvärdet.
+    title: Optional[str] = Field(default=None, max_length=200)
+    # OBS: monthly_cost / one_time_cost / capacity_delta / reputation_delta
+    # IGNORERAS från klienten · servern läser från DECISION_CATALOG.
+    # Fälten finns kvar för bakåtkompat med befintliga klienter som
+    # skickar dem; vi accepterar och kastar dem.
+    monthly_cost: Optional[int] = Field(default=None, ge=0)
+    one_time_cost: Optional[int] = Field(default=None, ge=0)
+    capacity_delta: Optional[int] = Field(default=None)
+    reputation_delta: Optional[int] = Field(default=None)
     insurance_kind: Optional[str] = None
     notes: Optional[str] = None
 
@@ -569,19 +1445,54 @@ def create_decision(
     info: TokenInfo = Depends(require_token),
 ):
     """Skapa beslut. Tillämpar capacity/reputation-delta direkt + bokför
-    eventuell engångskostnad."""
+    eventuell engångskostnad.
+
+    SÄKERHET: capacity_delta + reputation_delta + monthly_cost +
+    one_time_cost läses ALLTID från DECISION_CATALOG. Klient-supplerade
+    värden ignoreras. Annars kunde eleven POST:a godtyckliga deltas
+    och bryta spelet.
+    """
     _require_student(info)
-    today = date.today()
+    today = current_game_date()
+
+    # Slå upp katalog-värden · klient-fält ignoreras.
+    catalog_entry = DECISION_CATALOG.get(body.kind)
+    if catalog_entry is None:
+        # Skulle inte hända pga regex-pattern, men defensiv.
+        raise HTTPException(
+            400, f"Okänt beslut: {body.kind}. Se DECISION_CATALOG.",
+        )
+    title = body.title or catalog_entry["title"]
+    monthly_cost = int(catalog_entry["monthly_cost"])
+    one_time_cost = int(catalog_entry["one_time_cost"])
+    capacity_delta = int(catalog_entry["capacity_delta"])
+    reputation_delta = int(catalog_entry["reputation_delta"])
+
     with session_scope() as s:
         co = _get_active_company(s)
+        # Kassa-spärr · engångskostnad + första veckans löpande kost
+        # ska få plats. Pedagogiskt: aktivera inte ett 35 000 kr/mån-
+        # beslut om kassan är 5 000 kr.
+        from .foretag_growth import _kassa
+        bal = _kassa(s, co)
+        weekly = int(round(monthly_cost / 4))
+        first_hit = one_time_cost + weekly
+        if bal < first_hit:
+            raise HTTPException(
+                402,
+                f"Otillräcklig kassa · {first_hit - bal} kr saknas. "
+                f"Kassan är {bal} kr men beslutet kostar "
+                f"{one_time_cost} kr nu + {weekly} kr första veckan. "
+                "Ta ett tillväxtlån (Tillväxt → Lån) först.",
+            )
         d = BusinessDecision(
             company_id=co.id,
             kind=body.kind,
-            title=body.title,
-            monthly_cost=body.monthly_cost,
-            one_time_cost=body.one_time_cost,
-            capacity_delta=body.capacity_delta,
-            reputation_delta=body.reputation_delta,
+            title=title,
+            monthly_cost=monthly_cost,
+            one_time_cost=one_time_cost,
+            capacity_delta=capacity_delta,
+            reputation_delta=reputation_delta,
             insurance_kind=body.insurance_kind,
             started_on=today,
             active=True,
@@ -590,29 +1501,31 @@ def create_decision(
         s.add(d)
 
         # Tillämpa effekter på Company direkt
-        if body.capacity_delta:
+        if capacity_delta:
             co.delivery_capacity = max(
-                1, co.delivery_capacity + body.capacity_delta,
+                1, co.delivery_capacity + capacity_delta,
             )
-        if body.reputation_delta:
+        if reputation_delta:
             co.reputation = max(
-                0, min(100, co.reputation + body.reputation_delta),
+                0, min(100, co.reputation + reputation_delta),
             )
 
-        # Bokför engångskostnad
-        if body.one_time_cost > 0:
+        # Bokför engångskostnad · Decimal*Decimal istället för
+        # int(round(*0.25))-mönster för att undvika ackumulerande
+        # avrundningsfel (Bug 16 i foretag.md).
+        if one_time_cost > 0:
             from ..business.models import CompanyTransaction as _Tx
+            net = Decimal(str(one_time_cost))
+            vat = (net * Decimal("0.25")).quantize(Decimal("0.01"))
             s.add(_Tx(
                 company_id=co.id,
                 occurred_on=today,
                 kind="expense",
                 category=f"decision:{body.kind}",
-                description=f"Engångs · {body.title}",
-                amount_excl_vat=Decimal(str(body.one_time_cost)),
+                description=f"Engångs · {title}",
+                amount_excl_vat=net,
                 vat_rate=Decimal("0.25"),
-                vat_amount=Decimal(
-                    str(int(round(body.one_time_cost * 0.25))),
-                ),
+                vat_amount=vat,
             ))
 
         s.flush()
@@ -641,7 +1554,7 @@ def end_decision(
         if not d.active:
             return
         d.active = False
-        d.ends_on = date.today()
+        d.ends_on = current_game_date()
         # Reverse capacity-delta
         if d.capacity_delta:
             co.delivery_capacity = max(
@@ -666,9 +1579,23 @@ class SupplierInvoiceOut(BaseModel):
     status: str
     paid_on: Optional[str]
     notes: Optional[str]
+    # Spel-tid-jämförelse · True om förfallodag passerat enligt
+    # spel-tid (synkat med privat). Frontend ska INTE räkna detta
+    # själv mot real-tid (= maj 2026 medan eleven är på spel-januari).
+    is_overdue: bool = False
+    days_overdue: int = 0
+    days_until_due: int = 0
 
 
 def _to_supplier_out(si: SupplierInvoice) -> SupplierInvoiceOut:
+    today_g = current_game_date()
+    is_overdue = bool(
+        si.status == "open"
+        and si.due_on is not None
+        and si.due_on < today_g
+    )
+    days_overdue = max(0, (today_g - si.due_on).days) if si.due_on else 0
+    days_until_due = max(0, (si.due_on - today_g).days) if si.due_on else 0
     return SupplierInvoiceOut(
         id=si.id,
         sender_name=si.sender_name,
@@ -682,6 +1609,9 @@ def _to_supplier_out(si: SupplierInvoice) -> SupplierInvoiceOut:
         status=si.status,
         paid_on=si.paid_on.isoformat() if si.paid_on else None,
         notes=si.notes,
+        is_overdue=is_overdue,
+        days_overdue=days_overdue,
+        days_until_due=days_until_due,
     )
 
 
@@ -711,7 +1641,7 @@ def pay_supplier_invoice(
 ):
     """Betala leverantörsfaktura · skapar CompanyTransaction expense."""
     _require_student(info)
-    today = date.today()
+    today = current_game_date()
     with session_scope() as s:
         co = _get_active_company(s)
         si = (
@@ -726,6 +1656,20 @@ def pay_supplier_invoice(
             raise HTTPException(404, "Faktura saknas")
         if si.status == "paid":
             raise HTTPException(400, "Redan betald")
+
+        # Kassa-spärr · att betala leverantörsfaktura får inte sänka
+        # bolaget under noll. Frivilliga betalningar ska antingen ha
+        # täckning eller skjutas upp / hanteras med tillväxtlån.
+        from ..business.cash import compute_company_cash as _ccc
+        total_due = int(si.amount_excl_vat) + int(si.vat_amount or 0)
+        bal = _ccc(s, co)
+        if bal < total_due:
+            raise HTTPException(
+                402,
+                f"Otillräcklig kassa · {total_due - bal} kr saknas. "
+                f"Kassan är {bal} kr · fakturan är {total_due} kr. "
+                "Ta ett tillväxtlån (Tillväxt → Lån) först.",
+            )
 
         si.status = "paid"
         si.paid_on = today
@@ -877,7 +1821,10 @@ def class_overview(
                             n_with_company += 1
                             rep_total += co.reputation
                             rep_count += 1
-                            today = date.today()
+                            from ..business.game_clock import (
+                                current_game_date_for_student,
+                            )
+                            today = current_game_date_for_student(stu.id)
                             cutoff = today - timedelta(weeks=4)
 
                             # Omsättning + vinst senaste 4 v
@@ -993,8 +1940,8 @@ def teacher_send_supplier_invoice(
         master_session, scope_context, scope_for_student,
     )
     from ..school.models import Student
+    from ..business.game_clock import current_game_date_for_student
 
-    today = date.today()
     n_created = 0
     n_skipped_no_co = 0
     n_skipped_not_mine = 0
@@ -1019,6 +1966,7 @@ def teacher_send_supplier_invoice(
                             n_skipped_no_co += 1
                             continue
 
+                        today = current_game_date_for_student(sid)
                         si = SupplierInvoice(
                             company_id=co.id,
                             sender_name=body.sender_name,

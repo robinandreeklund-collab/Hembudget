@@ -66,6 +66,8 @@ def company(session):
         week_no=0,
         delivery_capacity=2,
         active=True,
+        has_base_equipment=True,
+        has_car=True,
     )
     session.add(co)
     session.flush()
@@ -298,7 +300,10 @@ def test_get_biz_difficulty_default_basics():
 
 
 def test_industry_pool_known():
-    custs, jobs = industry_pool("hantverk")
+    """industry_pool keyed på industry_KEY (från industries.py), inte
+    label. Tidigare använde vi labels men 7/10 industrier saknade
+    mappning → eleven fick generiska 'Standarduppdrag'."""
+    custs, jobs = industry_pool("snickare")
     assert len(custs) >= 3
     assert len(jobs) >= 4
 
@@ -309,11 +314,19 @@ def test_industry_pool_unknown_falls_back():
     assert len(jobs) >= 1
 
 
-def test_industry_pool_normalises_swedish_chars():
-    """'Kreativ tjänst' ska matcha 'kreativ'-poolen."""
-    custs1, _ = industry_pool("Kreativ tjänst")
-    custs2, _ = industry_pool("kreativ")
-    assert len(custs1) == len(custs2)
+def test_industry_pool_all_ten_keys_mapped():
+    """Alla 10 fasta industrier från industries.py måste ha en
+    dedikerad pool — annars faller eleven till 'Standarduppdrag'."""
+    keys = [
+        "it_konsult", "webbdesigner", "snickare", "rormokare",
+        "elektriker", "frisor", "coach", "personal_trainer",
+        "fotograf", "catering",
+    ]
+    for k in keys:
+        custs, jobs = industry_pool(k)
+        # Default-pool har 2 jobs · branspecifika ska ha minst 5
+        assert len(jobs) >= 5, f"Industry '{k}' saknar dedikerad pool"
+        assert len(custs) >= 3, f"Industry '{k}' har för få kunder"
 
 
 # === Tick-engine end-to-end ===
@@ -440,6 +453,7 @@ def test_tick_idempotent_on_seed(session, company):
         industry_label="hantverk",
         level="basics", reputation=50, week_no=0,
         delivery_capacity=2, active=True,
+        has_base_equipment=True, has_car=True,
     )
     co2.id = company.id  # Force samma id
     # Vi kan inte enkelt simulera "samma seed → samma utfall" här utan
@@ -454,3 +468,53 @@ def test_tick_basics_has_no_random_events(session, company):
     company.level = "basics"
     summary = run_business_week(session, company=company)
     assert summary.events_triggered == 0
+
+
+def test_auto_paid_invoice_books_income_transaction(session, company):
+    """Regression: tick:s auto-pay sätter status=paid men tappade tidigare
+    bort income-tx → Allabolags omsättning visade 0 trots betald faktura."""
+    from hembudget.business.models import CompanyCustomer, CompanyTransaction
+
+    cust = CompanyCustomer(company_id=company.id, name="Storkund AB")
+    session.add(cust); session.flush()
+
+    # Skapa flera förfallna fakturor — payment_morality default är 0.92
+    # så p(ingen betalas) = 0.08^5 ≈ 3 × 10⁻⁵. Negligibelt.
+    overdue_on = date.today() - timedelta(days=10)
+    for i in range(5):
+        session.add(CompanyInvoice(
+            company_id=company.id,
+            customer_id=cust.id,
+            invoice_number=f"F-{i+1:03d}",
+            issued_on=overdue_on - timedelta(days=20),
+            due_on=overdue_on,
+            description=f"Test-faktura {i+1}",
+            amount_excl_vat=Decimal("5000"),
+            vat_rate=Decimal("0.25"),
+            vat_amount=Decimal("1250"),
+            status="sent",
+        ))
+    session.flush()
+
+    income_before = session.query(CompanyTransaction).filter(
+        CompanyTransaction.company_id == company.id,
+        CompanyTransaction.kind == "income",
+    ).count()
+
+    run_business_week(session, company=company)
+
+    paid = session.query(CompanyInvoice).filter(
+        CompanyInvoice.company_id == company.id,
+        CompanyInvoice.status == "paid",
+    ).all()
+    assert len(paid) >= 1, "minst en av 5 fakturor borde auto-betalats"
+
+    income_after = session.query(CompanyTransaction).filter(
+        CompanyTransaction.company_id == company.id,
+        CompanyTransaction.kind == "income",
+        CompanyTransaction.category == "Försäljning",
+    ).count()
+    assert income_after - income_before >= len(paid), (
+        f"Varje auto-paid faktura ska bokas som income-tx. "
+        f"paid={len(paid)} men nya income-tx={income_after - income_before}"
+    )

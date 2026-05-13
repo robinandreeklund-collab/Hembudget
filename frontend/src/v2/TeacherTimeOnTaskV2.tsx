@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { V2Banner } from "./V2Banner";
 import { useAutoStartTeacherGuide } from "./guides/GuideContext";
+import { getToken } from "@/api/client";
 
 type Row = {
   step_id: number;
@@ -23,7 +24,7 @@ type Row = {
 
 async function api<T>(path: string): Promise<T> {
   const r = await fetch(path, {
-    headers: { Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}` },
+    headers: { Authorization: `Bearer ${getToken() || ""}` },
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
   return r.json();

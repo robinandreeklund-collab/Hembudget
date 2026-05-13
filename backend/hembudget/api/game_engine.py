@@ -599,6 +599,8 @@ class AdvanceClassOut(BaseModel):
 class WellbeingEventOut(BaseModel):
     id: int
     occurred_at: datetime
+    occurred_at_game: Optional[str] = None  # spel-tid ISO + label
+    occurred_at_label: Optional[str] = None  # "14 jan 09:30"
     axis: str
     requested_delta: int
     applied_delta: int
@@ -787,10 +789,55 @@ def list_pentagon_history(
         _load_student_or_404(s, info.teacher_id, student_id)
 
     rows = pentagon_history_for_student(student_id, days=days, axis=axis)
+    # Hämta student.created_at för spel-tid-konvertering · läraren ska
+    # se spel-tid (matchar elevens postlåda) inte real-tid.
+    stu_created_at = None
+    try:
+        from ..school.models import Student as _Stu_pe
+        with master_session() as _ms_pe:
+            _stu_pe = _ms_pe.get(_Stu_pe, student_id)
+            if _stu_pe is not None:
+                stu_created_at = _stu_pe.created_at
+    except Exception:
+        pass
+
+    def _label(real_dt):
+        """Konvertera real-tid → spel-tid-etikett ('14 jan 09:30')."""
+        if real_dt is None or stu_created_at is None:
+            return None
+        try:
+            from ..game_engine.release_schedule import (
+                real_to_game_datetime as _r2g_pe,
+            )
+            g_dt = _r2g_pe(stu_created_at, real_dt)
+            months = [
+                "jan", "feb", "mar", "apr", "maj", "jun",
+                "jul", "aug", "sep", "okt", "nov", "dec",
+            ]
+            return (
+                f"{g_dt.day} {months[g_dt.month - 1]} "
+                f"{g_dt.hour:02d}:{g_dt.minute:02d}"
+            )
+        except Exception:
+            return None
+
+    def _iso_game(real_dt):
+        if real_dt is None or stu_created_at is None:
+            return None
+        try:
+            from ..game_engine.release_schedule import (
+                real_to_game_datetime as _r2g_iso,
+            )
+            return _r2g_iso(stu_created_at, real_dt).isoformat()
+        except Exception:
+            return None
+
     return [
         WellbeingEventOut(
             id=r.id,
             occurred_at=r.occurred_at,
+            occurred_at_game=_iso_game(r.occurred_at),
+            occurred_at_label=_label(r.occurred_at),
             axis=r.axis,
             requested_delta=r.requested_delta,
             applied_delta=r.applied_delta,
