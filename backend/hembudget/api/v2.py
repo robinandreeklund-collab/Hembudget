@@ -13808,7 +13808,13 @@ def _build_salary_slip_data(
     # även när månaden hade sjukavdrag · spec + bank stämmer inte.
     expected_net = float(profile.net_salary_monthly or 0)
     actual_net = float(mail.amount or expected_net)
-    sick_deduction = expected_net - actual_net  # positivt om sjuk
+    # Bonus-tillägg (övertidsersättning, årsskifte-bonus) ligger redan
+    # bakad i mail.amount via event_engine._add_bonus_to_salary_slip.
+    # Sjukavdrag ligger också där via health_engine. Räkna ut deltat
+    # mot expected_net för att visa korrekta rader i specen.
+    delta = actual_net - expected_net
+    sick_deduction = max(0.0, -delta)  # positivt om sjuk
+    bonus_addition = max(0.0, delta)    # positivt om bonus
     net = actual_net
     tax = gross - expected_net  # förenklat — verklig spec inkluderar pension-justering
 
@@ -13851,8 +13857,15 @@ def _build_salary_slip_data(
             label="OB-tillägg · totalt",
             amount=ob_total, is_total=False,
         ))
+    # Bonus-tillägg (övertidsersättning, årsskifte-bonus, mm.) räknas
+    # in i BRUTTOlönen så top-grid + effective-rate-beräkningen stämmer
+    if bonus_addition > 1:
+        net_lines.append(V2SalarySlipBreakdownRow(
+            label="Tillägg · övertid/bonus",
+            amount=round(bonus_addition, 0), is_total=False,
+        ))
     net_lines.append(V2SalarySlipBreakdownRow(
-        label="Bruttolön", amount=gross, is_total=False,
+        label="Bruttolön", amount=gross + bonus_addition, is_total=False,
     ))
     # Sjukavdrag/VAB-avdrag · ligger mellan brutto och skatt i en
     # svensk lönespec (det är arbetsgivarens del · karensavdrag +
@@ -13864,6 +13877,8 @@ def _build_salary_slip_data(
             amount=-round(sick_deduction, 0),
             is_total=False,
         ))
+    # OBS: bonus-tillägg läggs OVANFÖR Bruttolön (inte här) så att
+    # Brutto + Skatt = Netto matematiken stämmer.
     net_lines.extend([
         V2SalarySlipBreakdownRow(
             label="Preliminärskatt (tabell)",
@@ -13900,7 +13915,9 @@ def _build_salary_slip_data(
 
     return V2SalarySlipData(
         period_label=mail.body_meta or "",
-        gross_salary=gross,
+        # Inkludera bonus i bruttolönen så top-grid + effective-rate
+        # stämmer · Brutto - Skatt = Netto matematiken matchar.
+        gross_salary=gross + bonus_addition,
         tax=tax,
         net_salary=net,
         ob_total=ob_total,
