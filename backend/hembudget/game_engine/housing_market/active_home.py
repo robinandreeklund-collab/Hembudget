@@ -88,6 +88,31 @@ def _add_months(d: date, n: int) -> date:
     return date(new_y, new_m, min(d.day, 28))
 
 
+def _termination_date_from(notice_date: date, months: int) -> date:
+    """Beräkna uppsägningens sista dag enligt svensk hyreslag.
+
+    Tillsvidareavtal: 3 månaders uppsägningstid räknat från
+    NÄRMAST FÖLJANDE MÅNADSSKIFTE.
+
+    Exempel: säg upp 7 jan 2026 → uppsägningen startar 1 feb 2026 →
+    3 hela månader → sista dagen är 30 april 2026.
+
+    Vi returnerar sista dagen i den 3:e månaden efter följande
+    månadsskifte (dvs notice_start + 3 mån − 1 dag).
+    """
+    # Närmast följande månadsskifte
+    if notice_date.month == 12:
+        notice_start = date(notice_date.year + 1, 1, 1)
+    else:
+        notice_start = date(notice_date.year, notice_date.month + 1, 1)
+    # Slutdatum = första dagen i (notice_start + months) − 1 dag
+    end_y = notice_start.year + (notice_start.month - 1 + months) // 12
+    end_m = (notice_start.month - 1 + months) % 12 + 1
+    next_first = date(end_y, end_m, 1)
+    from datetime import timedelta as _td_term
+    return next_first - _td_term(days=1)
+
+
 def ensure_active_home(
     s: Session,
     *,
@@ -169,7 +194,9 @@ def give_notice_on_rental(
     except Exception:
         notice_start = _ym_first_day(year_month)
     home.status = "notice_given"
-    home.termination_date = _add_months(notice_start, RENTAL_NOTICE_MONTHS)
+    home.termination_date = _termination_date_from(
+        notice_start, RENTAL_NOTICE_MONTHS,
+    )
     s.flush()
 
     try:
@@ -229,7 +256,9 @@ def move_to_rental(
     except Exception:
         notice_start = _ym_first_day(year_month)
     old.status = "notice_given"
-    old.termination_date = _add_months(notice_start, RENTAL_NOTICE_MONTHS)
+    old.termination_date = _termination_date_from(
+        notice_start, RENTAL_NOTICE_MONTHS,
+    )
 
     # Skapa ny rental ActiveHome från listing.
     # Listing är tekniskt "till salu" men vi behandlar hyresrätt-listings
@@ -319,7 +348,7 @@ def promote_listing_to_active_home(
     if old is not None:
         if old.home_type == "hyresratt":
             old.status = "notice_given"
-            old.termination_date = _add_months(
+            old.termination_date = _termination_date_from(
                 today_g, RENTAL_NOTICE_MONTHS,
             )
         else:

@@ -27,6 +27,7 @@ import {
   type V2RentalDurationType,
 } from "./api";
 import { V2Banner } from "./V2Banner";
+import { ConfirmModal } from "./ConfirmModal";
 import "./lan.css";
 
 const SEK = (n: number) =>
@@ -129,29 +130,40 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
     || housingType === "villa"
     || housingType === "radhus";
 
-  async function terminateContract(id: number) {
-    if (!confirm("Säg upp kontraktet?")) return;
+  const [terminateConfirm, setTerminateConfirm] = useState<number | null>(null);
+  const [terminateMsg, setTerminateMsg] = useState<string | null>(null);
+
+  function askTerminate(id: number) {
+    setTerminateConfirm(id);
+  }
+
+  async function doTerminate(id: number) {
+    setTerminateMsg(null);
     try {
       if (id === -1) {
-        // Virtuellt kontrakt från ActiveHome → använd
-        // boendemarknad-endpointen (samma som "Köpa eller sälja"-
-        // tabben kallar). 3 månaders uppsägning. Båda tabbarna
-        // synkas via ActiveHome som single-source.
-        //
-        // year_month MÅSTE vara spel-tid · annars beräknar backend
-        // termination_date från real-tid (idag) istället för spel-tid
-        // → uppsägningstid landar månader i framtiden av spel-tid.
+        // Virtuellt kontrakt från ActiveHome · använd boendemarknad-
+        // endpointen. Backend räknar termination_date i SPEL-tid
+        // (3 mån från närmast följande månadsskifte) oavsett vad vi
+        // skickar — year_month är bara advisory.
         const gt = await v2Api.gameTime().catch(() => null);
         const now = new Date();
         const fallbackYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
         const ym = gt?.year_month || fallbackYm;
-        await v2Api.boendemarknadTerminate({ year_month: ym });
+        const r = await v2Api.boendemarknadTerminate({ year_month: ym });
+        setTerminateMsg(
+          `✓ Uppsägning registrerad · sista anställningsdag ${r.termination_date} `
+          + `(${r.months_until_termination} mån kvar). Bekräftelsebrev `
+          + `i postlådan.`,
+        );
       } else {
         await v2Api.rentalPatchContract(id, { status: "terminated" });
+        setTerminateMsg("✓ Uppsägning registrerad.");
       }
       await refresh();
     } catch (e) {
-      setError(String((e as Error)?.message || e));
+      const msg = String((e as Error)?.message || e);
+      setTerminateMsg(`Fel: ${msg}`);
+      setError(msg);
     }
   }
 
@@ -229,6 +241,24 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
 
   const body = (
     <>
+      {/* Bekräftelsemodal · stylad istället för native confirm() */}
+      <ConfirmModal
+        open={terminateConfirm !== null}
+        title="Säg upp hyreskontraktet?"
+        body={
+          "3 månaders uppsägningstid räknat från närmast följande "
+          + "månadsskifte. Vanlig hyra fortsätter dras månadsvis under "
+          + "uppsägningsperioden. Du får ett bekräftelsebrev i postlådan."
+        }
+        confirmLabel="Ja, säg upp"
+        cancelLabel="Avbryt"
+        destructive
+        onConfirm={() => {
+          if (terminateConfirm !== null) doTerminate(terminateConfirm);
+          setTerminateConfirm(null);
+        }}
+        onCancel={() => setTerminateConfirm(null)}
+      />
       {!embedded && (
         <Link className="actor-back" to="/v2/hub">
           Tillbaka till pentagonen
@@ -627,15 +657,34 @@ export function HyresvardenV2({ embedded = false }: { embedded?: boolean } = {})
               </div>
             )}
 
-            {contract && (
+            {contract && contract.status !== "terminated" && (
               <div style={{ marginTop: 16 }}>
                 <button
                   type="button"
                   className="cta-btn ghost"
-                  onClick={() => terminateContract(contract.id)}
+                  onClick={() => askTerminate(contract.id)}
                 >
                   Säg upp kontraktet
                 </button>
+              </div>
+            )}
+            {terminateMsg && (
+              <div style={{
+                marginTop: 12,
+                padding: "10px 14px",
+                borderRadius: 6,
+                border: terminateMsg.startsWith("Fel")
+                  ? "1px solid rgba(252,165,165,0.4)"
+                  : "1px solid rgba(110,231,183,0.4)",
+                background: terminateMsg.startsWith("Fel")
+                  ? "rgba(252,165,165,0.06)"
+                  : "rgba(110,231,183,0.06)",
+                color: terminateMsg.startsWith("Fel")
+                  ? "#fca5a5" : "#6ee7b7",
+                fontFamily: "var(--mono)",
+                fontSize: 11,
+              }}>
+                {terminateMsg}
               </div>
             )}
           </div>
