@@ -15,6 +15,22 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 
+def _today_game() -> date:
+    """'Idag' i spel-tid · samma helper som _today_g() i v2.py.
+
+    Loan-deposit-transaktioner MÅSTE använda spel-tid för date-fältet,
+    annars filtreras de bort av _released_filter (som kräver
+    Transaction.date <= today_game). Använde tidigare date.today()
+    (real-tid) → eleven såg aldrig pengarna på kontot trots att DB-raden
+    fanns. Fallback till real-tid om game_clock fail:ar.
+    """
+    try:
+        from ..business.game_clock import current_game_date
+        return current_game_date()
+    except Exception:
+        return date.today()
+
+
 def _mark_loan_mail_handled(session: Session, application_id: int) -> None:
     """Markera godkännandebrevet för en accepterad CreditApplication
     som 'handled' så eleven inte ser dubbla "Acceptera lånet"-knappar
@@ -348,11 +364,12 @@ def private_accept(
         app_row.requested_months,
     )
 
+    today_g = _today_game()
     loan = Loan(
         name=f"Privatlån {app_row.simulated_lender}",
         lender=app_row.simulated_lender or "Bank",
         principal_amount=app_row.requested_amount,
-        start_date=date.today(),
+        start_date=today_g,
         interest_rate=float(app_row.offered_rate or 0.09),
         binding_type="rörlig",
         amortization_monthly=monthly,
@@ -372,7 +389,7 @@ def private_accept(
     ).hexdigest()
     deposit_tx = Transaction(
         account_id=payload.deposit_account_id,
-        date=date.today(),
+        date=today_g,
         amount=app_row.requested_amount,
         currency="SEK",
         raw_description=f"Privatlån utbetalning — {app_row.simulated_lender}",
@@ -792,11 +809,12 @@ def sms_accept(
     )
     monthly = (total / app_row.requested_months).quantize(Decimal("0.01"))
 
+    today_g = _today_game()
     loan = Loan(
         name=f"SMS-lån {app_row.simulated_lender}",
         lender=app_row.simulated_lender or "Snabblån",
         principal_amount=app_row.requested_amount,
-        start_date=date.today(),
+        start_date=today_g,
         interest_rate=float(app_row.offered_rate or SMS_NOMINAL_RATE),
         binding_type="rörlig",
         amortization_monthly=monthly,
@@ -814,7 +832,7 @@ def sms_accept(
     ).hexdigest()
     deposit_tx = Transaction(
         account_id=payload.deposit_account_id,
-        date=date.today(),
+        date=today_g,
         amount=app_row.requested_amount,
         currency="SEK",
         raw_description=f"SMS-lån utbetalning — {app_row.simulated_lender}",
