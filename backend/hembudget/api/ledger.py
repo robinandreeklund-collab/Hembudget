@@ -33,7 +33,6 @@ from ..db.models import (
     UpcomingPayment,
     UpcomingTransaction,
 )
-from ..loans.matcher import LoanMatcher
 from .deps import db, require_auth
 
 router = APIRouter(
@@ -495,13 +494,55 @@ def huvudbok(
         "check_type": "uncategorized" if uncategorized_count > 0 else None,
     })
 
-    # 4. Lån: outstanding_balance stämmer med principal/current - amort
-    loans = session.query(Loan).filter(Loan.active.is_(True)).all()
-    matcher = LoanMatcher(session)
+    # 4. Lån: outstanding_balance stämmer med principal/current - amort.
+    # Per-period: vi visar bara lån som existerade vid period_end
+    # (start_date < period_end) och beräknar saldot AS-OF period_end —
+    # alltså bas-belopp minus de amorteringar som hunnit registreras
+    # innan periodens slut. Tidigare användes matcher.outstanding_balance
+    # som alltid returnerar NUVARANDE saldo → ett lån taget i maj dök
+    # upp i januari-rapporten och billån-saldot var konstant över alla
+    # historiska månader oavsett amorteringar.
+    loans = (
+        session.query(Loan)
+        .filter(Loan.active.is_(True))
+        .filter(Loan.start_date < period_end)
+        .all()
+    )
     total_loan_debt = 0.0
     loan_rows: list[dict] = []
     for loan in loans:
-        balance = float(matcher.outstanding_balance(loan))
+        # Bas-belopp · samma logik som LoanMatcher.outstanding_balance
+        # men med cutoff på period_end istället för "nu".
+        if loan.current_balance_at_creation is not None:
+            base = loan.current_balance_at_creation
+            cutoff = (
+                loan.created_at.date()
+                if loan.created_at else loan.start_date
+            )
+            amort_rows = (
+                session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "amortization",
+                    LoanPayment.date > cutoff,
+                    LoanPayment.date < period_end,
+                )
+                .all()
+            )
+        else:
+            base = loan.principal_amount
+            amort_rows = (
+                session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "amortization",
+                    LoanPayment.date >= loan.start_date,
+                    LoanPayment.date < period_end,
+                )
+                .all()
+            )
+        amortized = sum((p.amount for p in amort_rows), Decimal("0"))
+        balance = float((base - amortized).quantize(Decimal("0.01")))
         total_loan_debt += balance
         total_paid = float(
             session.query(func.coalesce(func.sum(LoanPayment.amount), 0))
