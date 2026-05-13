@@ -217,6 +217,13 @@ def _get_car_facts(student_id: Optional[int]) -> dict:
                 "car_brand": getattr(prof, "car_brand", None),
                 "car_model": getattr(prof, "car_model", None),
                 "license_plate": getattr(prof, "car_license_plate", None),
+                "financing": getattr(prof, "car_financing", None),
+                "loan_principal": int(
+                    getattr(prof, "car_loan_principal", 0) or 0
+                ),
+                "loan_monthly": int(
+                    getattr(prof, "car_loan_monthly_payment", 0) or 0
+                ),
             }
     except Exception:
         return {}
@@ -735,6 +742,76 @@ def _build_bills(
     # går via elbolagets vanliga räkning. Detta hanteras i variable_
     # expenses / utility-flödet · vi flaggar inte här utan låter
     # utility_phase plocka upp electric_extra-fältet.
+
+    # === DAG 27 · BILLÅN (SKV-3) ===
+    # Om financing=loan · separat månadsavi från långivaren. Ränta +
+    # rak amortering (5 år = principal/60 per månad). Matchas mot Loan
+    # via LoanMatcher som splittar transaktionen i ränta + amortering,
+    # så outstanding_balance i huvudboken sjunker varje månad.
+    if (
+        car_facts.get("has_car")
+        and car_facts.get("financing") == "loan"
+        and (car_facts.get("loan_monthly") or 0) > 0
+        and (car_facts.get("loan_principal") or 0) > 0
+    ):
+        loan_monthly_total = int(car_facts["loan_monthly"])
+        loan_principal_orig = int(car_facts["loan_principal"])
+        # Rak amortering · 5 år = principal/60 per månad. Matchar
+        # car_seed.py där Loan.amortization_monthly sätts till samma
+        # värde. Räntan = total - amortering (varierar lite men håller
+        # totalbeloppet konstant så autogiro-matchningen funkar).
+        amort_part = max(1, loan_principal_orig // 60)
+        interest_part = max(0, loan_monthly_total - amort_part)
+        ocr_billan = _ocr(f"billan-{year_month}")
+        lender_name = "Spelbanken Bil"
+        car_label = (
+            f"{car_facts.get('car_brand') or ''} "
+            f"{car_facts.get('car_model') or ''}"
+        ).strip() or "billån"
+        bills.append(FixedBill(
+            day=27,
+            sender=lender_name,
+            sender_short="SB",
+            sender_kind="fin",
+            subject=f"Billån · ränta + amortering {year_month}",
+            body_meta=(
+                f"{car_label} · {loan_monthly_total} kr/mån (annuitet)"
+            ),
+            amount=loan_monthly_total,
+            bankgiro="5503-2197",
+            invoice_data={
+                "kind": "billan",
+                "invoice_number": (
+                    f"BILL-{year_month}-{profile.seed % 9999:04d}"
+                ),
+                "period_start": period_start.isoformat(),
+                "period_end": period_end.isoformat(),
+                "rows": [
+                    {
+                        "label": "Ränta (6,0 % p.a.)",
+                        "amount": interest_part,
+                    },
+                    {
+                        "label": "Amortering (rak, 5 år)",
+                        "amount": amort_part,
+                    },
+                ],
+                "subtotal": loan_monthly_total,
+                "moms": 0,
+                "moms_rate": 0,
+                "total": loan_monthly_total,
+                "ocr": ocr_billan,
+                "bankgiro": "5503-2197",
+                "extra": {
+                    "loan_amount": loan_principal_orig,
+                    "interest_rate_pct": 6.0,
+                    "moms_note": (
+                        "Billåneränta är momsfri och INTE avdragsgill "
+                        "(till skillnad från bolåneränta)."
+                    ),
+                },
+            },
+        ))
 
     # === DAG 28 · BILLEASING (SKV-3) ===
     # Om financing=leasing · separat månadsfaktura från leasingbolaget.

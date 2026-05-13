@@ -3205,6 +3205,15 @@ def retry_failed_payment(
             s.add(tx)
             s.flush()
             u.matched_transaction_id = tx.id
+            # Lånematchning · samma logik som auto-debit-flödet
+            try:
+                LoanMatcher(s).match_and_classify([tx])
+            except Exception:
+                import logging as _log_lm
+                _log_lm.getLogger(__name__).exception(
+                    "retry_payment: lånematchning misslyckades "
+                    "för tx=%s", tx.id,
+                )
 
         u.expected_date = today_game
         u.autogiro = True
@@ -18864,6 +18873,17 @@ def _auto_pay_historical_invoices(
                         user_verified=True,
                     )
                     s.add(tx)
+                    s.flush()
+                    # Lånematchning · billån/bolån-avier länkas till
+                    # LoanScheduleEntry → LoanPayment så saldot sjunker.
+                    try:
+                        LoanMatcher(s).match_and_classify([tx])
+                    except Exception:
+                        import logging as _log_lm
+                        _log_lm.getLogger(__name__).exception(
+                            "auto-paid mail: lånematchning misslyckades "
+                            "för tx=%s", tx.id,
+                        )
                 m_inv.status = "paid"
             s.commit()
 
@@ -19483,6 +19503,20 @@ def _auto_debit_signed_upcomings_if_due(student_id: int) -> int:
                     s.add(tx)
                     s.flush()
                     u.matched_transaction_id = tx.id
+
+                    # Lån-matchning · billån/bolån-fakturor matchas mot
+                    # LoanScheduleEntry → LoanPayment skapas så att
+                    # outstanding_balance sjunker varje månad i
+                    # huvudboken. Tysta exceptions så autopay aldrig
+                    # kraschar pga lånematchning.
+                    try:
+                        LoanMatcher(s).match_and_classify([tx])
+                    except Exception:
+                        import logging as _log_lm
+                        _log_lm.getLogger(__name__).exception(
+                            "auto_debit: lånematchning misslyckades "
+                            "för tx=%s", tx.id,
+                        )
 
                     # Om upcoming länkar till en MailItem → markera
                     # mailet som paid också (annars dyker faktura

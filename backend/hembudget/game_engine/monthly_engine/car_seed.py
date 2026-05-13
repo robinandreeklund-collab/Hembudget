@@ -124,7 +124,7 @@ def seed_car_for_scope(
             .first()
         )
         if existing_loan is None:
-            s.add(Loan(
+            loan = Loan(
                 name=f"Billån · {label}",
                 lender="Spelbanken Bil",
                 principal_amount=Decimal(str(car_data["loan_principal"])),
@@ -140,8 +140,47 @@ def seed_car_for_scope(
                     "(annuitet)"
                 ),
                 active=True,
-            ))
+                loan_kind="car",
+            )
+            s.add(loan)
+            s.flush()
+            # Skapa LoanScheduleEntry för hela löptiden (60 mån). Vid
+            # varje månadstick genereras en autogiro-Transaction för
+            # billån-avin (se fixed_expenses.py) som matchas mot dessa
+            # schema-rader → LoanPayment skapas → outstanding_balance
+            # sjunker. Utan schema skulle matcher bara matcha på text
+            # och billån-saldot stannade konstant i huvudboken.
+            from ...db.models import LoanScheduleEntry
+            principal = Decimal(str(car_data["loan_principal"]))
+            monthly_total = Decimal(str(car_data["loan_monthly"]))
+            amort_per_month = Decimal(str(int(car_data["loan_principal"] / 60)))
+            day_of_month = min(today_game.day, 28)
+            for i in range(1, 61):  # 60 månader = 5 år
+                total_months = today_game.month + i
+                year_n = today_game.year + (total_months - 1) // 12
+                month_n = (total_months - 1) % 12 + 1
+                try:
+                    due = date(year_n, month_n, day_of_month)
+                except ValueError:
+                    continue
+                interest_amt = (monthly_total - amort_per_month).quantize(
+                    Decimal("0.01"),
+                )
+                if interest_amt > 0:
+                    s.add(LoanScheduleEntry(
+                        loan_id=loan.id,
+                        due_date=due,
+                        amount=interest_amt,
+                        payment_type="interest",
+                    ))
+                s.add(LoanScheduleEntry(
+                    loan_id=loan.id,
+                    due_date=due,
+                    amount=amort_per_month,
+                    payment_type="amortization",
+                ))
             created["loan"] = True
+            created["schedule_entries"] = 60
 
     # === 3. Välkomstmail från försäkringsbolaget ===
     welcome_subj = f"Välkommen som kund · {car_data['insurance_provider']}"
