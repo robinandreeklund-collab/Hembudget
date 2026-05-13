@@ -1092,3 +1092,37 @@ def session_status(
                 sess.confirmed_at.isoformat() if sess.confirmed_at else None
             ),
         )
+
+
+@router.get(
+    "/session/{token}/public",
+    response_model=SessionStatusOut,
+)
+def session_status_public(token: str) -> SessionStatusOut:
+    """Publik (anonym) variant av session-status för mobil-vyn.
+
+    Mobilen scannar QR och hamnar på /v2/bank-sign/:token utan att
+    vara inloggad. Den behöver kunna läsa session-meta (purpose,
+    expired, confirmed_at) för att rendera rätt vy. Token är i sig
+    säkerhetsmekanismen — den är slumpad och kort-livad (15 min)
+    och PIN-bekräftelse kräver fortfarande student.bank_pin_hash.
+    """
+    _require_school()
+    with master_session() as s:
+        sess = (
+            s.query(BankSession)
+            .filter(BankSession.token == token)
+            .first()
+        )
+        if not sess:
+            raise HTTPException(404, "Sessionen finns inte")
+        expired = sess.expires_at < datetime.utcnow()
+        return SessionStatusOut(
+            token=token,
+            purpose=sess.purpose,
+            confirmed=sess.confirmed_at is not None,
+            expired=expired,
+            confirmed_at=(
+                sess.confirmed_at.isoformat() if sess.confirmed_at else None
+            ),
+        )

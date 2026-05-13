@@ -23,9 +23,9 @@ import { api } from "@/api/client";
 type SessionStatus = {
   token: string;
   purpose: string;
-  status: "pending" | "signed" | "expired";
+  confirmed: boolean;
+  expired: boolean;
   confirmed_at: string | null;
-  expires_at: string;
 };
 
 
@@ -39,7 +39,11 @@ export function BankSignV2() {
 
   useEffect(() => {
     if (!token) return;
-    api<SessionStatus>(`/bank/session/${encodeURIComponent(token)}`)
+    // Mobilen är anonym (ingen Bearer-token) · använd publik
+    // session-info-endpoint som validerar via session-token istället.
+    api<SessionStatus>(
+      `/bank/session/${encodeURIComponent(token)}/public`,
+    )
       .then(setStatus)
       .catch((e) => setError(String((e as Error)?.message || e)));
   }, [token]);
@@ -195,7 +199,7 @@ export function BankSignV2() {
     );
   }
 
-  if (status.status === "expired") {
+  if (status.expired) {
     return (
       <div style={wrapStyle}>
         <div style={cardStyle}>
