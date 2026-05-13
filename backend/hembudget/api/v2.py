@@ -5729,12 +5729,14 @@ def _post_loan_decision_mail(
             )
         body_lines.append("")
         body_lines.append(
-            "Klicka **Acceptera lånet** nedan för att starta "
-            "utbetalningen — eller öppna Lånegivaren-vyn för att se "
-            "alla pending erbjudanden."
+            "Gå till **Lånegivaren-vyn** för att acceptera och "
+            "signera din låneansökan med BankID. Lånet utbetalas "
+            "direkt på lönekontot efter signering."
         )
-        # Marker som MailDetailV2 parsa:r för att visa Accept/Decline-
-        # knappar direkt i brevet (samma mönster som _employment_id).
+        # _loan_application_id-markern lämnas i body som metadata
+        # (frontend renderar inga accept-knappar längre i brevet
+        # eftersom signering kräver BankID-modalen som öppnas via
+        # Lånegivaren-vyn).
         body_lines.append(f"_loan_application_id={application.id}")
         body_meta = (
             f"Godkänt · ränta {offered_rate * 100:.2f}%"

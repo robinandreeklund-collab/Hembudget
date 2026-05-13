@@ -98,6 +98,7 @@ import { TeacherFeedbackOverviewPage } from "./v2/TeacherFeedbackOverviewPage";
 import { MariaV2 } from "./v2/MariaV2";
 import { BankIDV2 } from "./v2/BankIDV2";
 import { BankIDConfirmV2 } from "./v2/BankIDConfirmV2";
+import { BankSignV2 } from "./v2/BankSignV2";
 import { TeacherMariaOverviewPage } from "./v2/TeacherMariaOverviewPage";
 import { TeacherBankIDOverviewPage } from "./v2/TeacherBankIDOverviewPage";
 import { TxV2 } from "./v2/TxV2";
@@ -261,6 +262,12 @@ export default function App() {
         <Route
           path="/v2/bankid/confirm/:token"
           element={<BankIDConfirmV2 />}
+        />
+        {/* V2 generic bank-session-sign mobil-vy · för lån-signering
+            mm. som inte är bunden till faktura-listing-flödet */}
+        <Route
+          path="/v2/bank-sign/:token"
+          element={<BankSignV2 />}
         />
         <Route path="/docs" element={<Docs />} />
         <Route path="/terms" element={<Terms />} />
@@ -473,6 +480,10 @@ export default function App() {
           <Route
             path="/v2/bankid/confirm/:token"
             element={<BankIDConfirmV2 />}
+          />
+          <Route
+            path="/v2/bank-sign/:token"
+            element={<BankSignV2 />}
           />
           <Route path="/v2/tx/:txId" element={<TxV2 />} />
           <Route path="/v2/meddelanden" element={<MeddelandenV2 />} />

@@ -327,8 +327,16 @@ def private_accept(
     app_row = session.get(CreditApplication, payload.application_id)
     if app_row is None:
         raise HTTPException(404, "Ansökan saknas")
-    if app_row.kind != "private":
-        raise HTTPException(400, "Fel ansökningstyp")
+    # v2.py-flödet sparar kind som body.loan_kind ('privatlan',
+    # 'billan', 'bolan', 'smslan'). Credit.py-flödet sparar 'private'.
+    # Acceptera båda naming-konventioner så fix:en inte bryter
+    # legacy-data eller v2-flödet.
+    if app_row.kind not in ("private", "privatlan"):
+        raise HTTPException(
+            400,
+            f"Fel ansökningstyp ({app_row.kind}) · denna endpoint "
+            f"hanterar bara privatlån",
+        )
     if app_row.result != "approved":
         raise HTTPException(400, "Ansökan är inte godkänd")
     if app_row.resulting_loan_id is not None:

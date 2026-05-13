@@ -37,7 +37,11 @@ export function BankIdSignModal({
   error: string | null;
   onClose: () => void;
 }) {
-  const fullUrl = `${window.location.origin}${session.qr_url}`;
+  // Använd V2-mobil-vyn istället för V1 /bank/sign?token=X. Backend
+  // returnerar fortfarande qr_url med V1-mönstret, men frontend
+  // routar om till V2-design som matchar resten av v2-temat.
+  const v2SignUrl = `/v2/bank-sign/${session.token}`;
+  const fullUrl = `${window.location.origin}${v2SignUrl}`;
   const expiresAt = new Date(session.expires_at);
 
   return (
@@ -147,7 +151,7 @@ export function BankIdSignModal({
                   flik (för att simulera mobilen):
                 </div>
                 <a
-                  href={session.qr_url}
+                  href={v2SignUrl}
                   target="_blank"
                   rel="noreferrer"
                   style={{

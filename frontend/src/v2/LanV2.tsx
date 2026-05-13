@@ -27,6 +27,7 @@ import {
 } from "./api";
 import { V2Banner } from "./V2Banner";
 import { BankIdSignModal } from "./BankIdSignModal";
+import { ConfirmModal } from "./ConfirmModal";
 import "./lan.css";
 
 // Realistiska intervall per lånetyp — speglar backend-_LOAN_KIND_SPECS
@@ -252,12 +253,10 @@ export function LanV2() {
   const [bankErr, setBankErr] = useState<string | null>(null);
 
   async function acceptPendingOffer(applicationId: number) {
-    if (!confirm(
-      "Acceptera lånet?\n\n"
-        + "· Du signerar med BankID på din mobil i nästa steg\n"
-        + "· Pengarna sätts in på lönekontot direkt efter signering\n"
-        + "· Månadsbetalning dras varje månad framöver",
-    )) return;
+    // BankID-modalen är i sig en bekräftelse — eleven måste signera
+    // med PIN på mobilen för att lånet ska genomföras. En extra
+    // confirm()-dialog innan känns redundant och introducerar en
+    // native browser-popup som inte matchar v2-temat.
     setPendingMsg(null);
     setBankErr(null);
     setBankConfirmed(false);
@@ -320,8 +319,13 @@ export function LanV2() {
     };
   }, [bankSessionForApp, bankConfirmed]);
 
+  const [declineConfirm, setDeclineConfirm] = useState<number | null>(null);
+
+  function askDeclinePendingOffer(applicationId: number) {
+    setDeclineConfirm(applicationId);
+  }
+
   async function declinePendingOffer(applicationId: number) {
-    if (!confirm("Tacka nej till lånet?")) return;
     try {
       await v2Api.creditDecline(applicationId);
       setPendingMsg("Du tackade nej till lånet.");
@@ -778,7 +782,7 @@ export function LanV2() {
                       <button
                         type="button"
                         className="cta-btn ghost"
-                        onClick={() => declinePendingOffer(o.application_id)}
+                        onClick={() => askDeclinePendingOffer(o.application_id)}
                         style={{ border: 0, cursor: "pointer" }}
                       >
                         ✗ Tacka nej
@@ -1451,6 +1455,21 @@ export function LanV2() {
           </aside>
         </div>
       </div>
+
+      {/* Decline-confirm modal · stylad istället för native confirm() */}
+      <ConfirmModal
+        open={declineConfirm !== null}
+        title="Tacka nej till lånet?"
+        body="Ansökan markeras som nekad och syns inte längre under pending erbjudanden."
+        confirmLabel="Ja, tacka nej"
+        cancelLabel="Avbryt"
+        destructive
+        onConfirm={() => {
+          if (declineConfirm !== null) declinePendingOffer(declineConfirm);
+          setDeclineConfirm(null);
+        }}
+        onCancel={() => setDeclineConfirm(null)}
+      />
 
       {/* BankID-signering modal · QR-flöde (matchar /v2/bank-id) */}
       {bankSessionForApp && (

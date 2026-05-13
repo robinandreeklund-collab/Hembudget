@@ -18,7 +18,6 @@ import {
   type V2MailDetailData,
 } from "./api";
 import { V2Banner } from "./V2Banner";
-import { BankIdSignModal } from "./BankIdSignModal";
 import "./lan.css";
 import "./faktura-shell.css";
 
@@ -198,17 +197,9 @@ export function MailDetailV2() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
-  // Fas 4 · BankID-signering state för lån. MÅSTE deklareras före
-  // alla conditional early-returns annars bryter vi Rules of Hooks
-  // (React kastar och hela vyn blir vitskärm).
-  const [bankIdSession, setBankIdSession] = useState<{
-    token: string;
-    qr_url: string;
-    expires_at: string;
-  } | null>(null);
-  const [, setBankIdBusy] = useState(false);
-  const [bankIdError, setBankIdError] = useState<string | null>(null);
-  const [bankIdConfirmed, setBankIdConfirmed] = useState(false);
+  // BankID-state har tagits bort eftersom lån-accept nu sker via
+  // /v2/lan-vyn (med separat BankID-modal där). MailDetailV2 visar
+  // bara en länk "Gå till Lånegivaren" för lån-brev.
   // IDs av lån-erbjudanden som FORTFARANDE är pending (godkända men
   // ej accepterade). Vi visar "Acceptera lånet"-knappen bara om
   // brevets _loan_application_id-marker finns i denna mängd. Om
@@ -236,55 +227,9 @@ export function MailDetailV2() {
     refreshPendingLoanIds();
   }, [id]);
 
-  // Polla BankID-session-status så fort vi har en aktiv session.
-  // MÅSTE deklareras före conditional early-returns annars bryter
-  // vi Rules of Hooks och hela MailDetailV2 kraschar till vit skärm.
-  // Behöver inte loanApplicationId här (kan vara null) — pollingen
-  // räknar bara på bankIdSession och bankIdConfirmed.
-  useEffect(() => {
-    if (!bankIdSession || bankIdConfirmed) return;
-    const token = bankIdSession.token;
-    let cancelled = false;
-    const interval = setInterval(async () => {
-      try {
-        const status = await v2Api.bankSessionStatus(token);
-        if (cancelled) return;
-        if (status.confirmed_at) {
-          setBankIdConfirmed(true);
-          clearInterval(interval);
-          // Hitta loanApplicationId från sessionens purpose
-          // (private_loan_sign_<id>). Vi har inte loanApplicationId
-          // som dependency här eftersom det härleds från data.mail
-          // senare i komponenten · plocka från purpose istället.
-          const purpose = (status as { purpose?: string }).purpose || "";
-          const m = purpose.match(/private_loan_sign_(\d+)/);
-          if (!m) return;
-          const appId = parseInt(m[1], 10);
-          try {
-            const res = await v2Api.creditAcceptFromMail(appId, token);
-            await v2Api.updateMailStatus(id, "handled");
-            const refreshed = await v2Api.mailDetail(id);
-            setData(refreshed);
-            refreshPendingLoanIds();
-            setBankIdSession(null);
-            setExportMsg(
-              `✓ Lån signerat & accepterat · ${Math.round(res.deposited_amount).toLocaleString("sv-SE")} kr insatt. ${res.pedagogical_note}`,
-            );
-          } catch (e) {
-            setBankIdError(
-              `Lånet kunde inte slutföras: ${String((e as Error)?.message || e)}`,
-            );
-          }
-        }
-      } catch {
-        // Tyst — session kan ha löpt ut, polla igen
-      }
-    }, 1500);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [bankIdSession, bankIdConfirmed, id]);
+  // BankID-polling-useEffect borttagen · lån-accept sker nu i
+  // /v2/lan-vyn istället för i brevet, så ingen modal eller polling
+  // behövs här längre.
 
   async function exportToBank() {
     if (!data) return;
@@ -374,52 +319,10 @@ export function MailDetailV2() {
         .trim()
     : "";
 
-  async function respondToLoanOffer(accept: boolean) {
-    if (loanApplicationId == null) return;
-    if (!accept) {
-      if (!confirm("Tacka nej till lånet?")) return;
-      setExporting(true);
-      setExportMsg(null);
-      try {
-        await v2Api.creditDecline(loanApplicationId);
-        await v2Api.updateMailStatus(id, "handled");
-        const refreshed = await v2Api.mailDetail(id);
-        setData(refreshed);
-        setExportMsg("Du tackade nej till lånet.");
-      } catch (e) {
-        setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
-      } finally {
-        setExporting(false);
-      }
-      return;
-    }
-    // Accept-flow · initiera BankID-session, visa QR-kod, polla
-    // tills mobilen bekräftar (matchar /v2/bank-id-flödet).
-    setBankIdBusy(true);
-    setBankIdError(null);
-    setBankIdConfirmed(false);
-    try {
-      const s = await v2Api.bankSessionInit(
-        `private_loan_sign_${loanApplicationId}`,
-      );
-      setBankIdSession({
-        token: s.token,
-        qr_url: s.qr_url,
-        expires_at: s.expires_at,
-      });
-    } catch (e) {
-      const msg = String((e as Error)?.message || e);
-      if (msg.includes("PIN saknas") || msg.includes("set-pin")) {
-        setExportMsg(
-          "BankID saknar PIN. Sätt först din bank-PIN under /v2/bank-id.",
-        );
-      } else {
-        setExportMsg(`Fel vid BankID-init: ${msg}`);
-      }
-    } finally {
-      setBankIdBusy(false);
-    }
-  }
+  // Lån-acceptans/decline sker nu i /v2/lan-vyn (med BankID-modal).
+  // MailDetailV2 visar bara en länk "Gå till Lånegivaren" eftersom
+  // signering kräver QR-kod-modal som måste återanvändas via samma
+  // entry point.
 
   async function respondToOffer(accept: boolean) {
     if (employmentOfferId == null) return;
@@ -700,29 +603,21 @@ export function MailDetailV2() {
                   OCH _loan_application_id finns i body OCH application
                   fortfarande är pending (har inte redan accepterats
                   via /v2/lan-vyn). */}
+              {/* Lånegodkännande · ersätter accept/decline-knapparna
+                  med en "Gå till Lånegivaren"-link. Acceptansen sker
+                  nu i /v2/lan med stylad BankID-modal, INTE direkt
+                  i brevet. Detta för att hålla en konsistent flow:
+                  alla lån signeras med BankID via Lånegivaren-vyn. */}
               {loanApplicationId != null
                 && m.status === "unhandled"
                 && pendingLoanIds.has(loanApplicationId) && (
-                <>
-                  <button
-                    type="button"
-                    className="cta-btn"
-                    disabled={exporting}
-                    onClick={() => respondToLoanOffer(true)}
-                    style={{ border: 0, cursor: "pointer" }}
-                  >
-                    ✓ Acceptera lånet
-                  </button>
-                  <button
-                    type="button"
-                    className="cta-btn ghost"
-                    disabled={exporting}
-                    onClick={() => respondToLoanOffer(false)}
-                    style={{ border: 0, cursor: "pointer" }}
-                  >
-                    ✗ Tacka nej till lånet
-                  </button>
-                </>
+                <Link
+                  to="/v2/lan"
+                  className="cta-btn"
+                  style={{ textDecoration: "none" }}
+                >
+                  Gå till Lånegivaren · signera & acceptera →
+                </Link>
               )}
               {/* Faktura kan exporteras till banken (skapar UpcomingTransaction) */}
               {(m.mail_type === "invoice" || m.mail_type === "reminder") &&
@@ -890,22 +785,8 @@ export function MailDetailV2() {
         {isCcInvoice && <CcPedaBlock />}
         {isSalarySlip && <SalaryPedaBlock />}
 
-        {/* BankID-modal · QR-kod-flöde (Fas 4 · v2) · matchar
-            /v2/bank-id-flödet. Eleven scannar QR med mobilen, går
-            till /bank/sign?token=…, anger PIN. Web pollar var 1.5s
-            och fortsätter accept automatiskt vid bekräftelse. */}
-        {bankIdSession && (
-          <BankIdSignModal
-            session={bankIdSession}
-            confirmed={bankIdConfirmed}
-            error={bankIdError}
-            onClose={() => {
-              setBankIdSession(null);
-              setBankIdError(null);
-              setBankIdConfirmed(false);
-            }}
-          />
-        )}
+        {/* BankID-modal har flyttats till /v2/lan-vyn · MailDetailV2
+            visar bara en länk "Gå till Lånegivaren" för lån-brev. */}
 
       </div>
     </div>
