@@ -103,6 +103,13 @@ def ensure_active_home(
     if existing is not None:
         return existing
 
+    # entered_on i spel-tid · year_month-hint kan vara real-tid
+    try:
+        from ...business.game_clock import current_game_date as _cgd_ea
+        entered = _cgd_ea()
+    except Exception:
+        entered = _ym_first_day(year_month)
+
     h = profile.housing
     home = ActiveHome(
         home_type=h.type,
@@ -120,7 +127,7 @@ def ensure_active_home(
         ),
         loan_id=None,
         listing_id=None,
-        entered_on=_ym_first_day(year_month),
+        entered_on=entered,
         household_size_when_chosen=household_size_for(profile),
     )
     s.add(home)
@@ -228,6 +235,8 @@ def move_to_rental(
     # Listing är tekniskt "till salu" men vi behandlar hyresrätt-listings
     # som "ledig hyresrätt att hyra" i Sprint 5b. asking_price ignoreras
     # (hyresrätter har ingen köpeskilling), monthly_avgift = månadshyra.
+    # entered_on i SPEL-tid · year_month-hint från frontend kan vara
+    # real-tid och då blir 'tillträtt'-datum fel i UI.
     new_home = ActiveHome(
         home_type="hyresratt",
         status="active",
@@ -240,7 +249,7 @@ def move_to_rental(
         purchase_price=None,
         loan_id=None,
         listing_id=new_listing.listing_id,
-        entered_on=_ym_first_day(year_month),
+        entered_on=notice_start,
         household_size_when_chosen=old.household_size_when_chosen,
     )
     s.add(new_home)
@@ -299,17 +308,24 @@ def promote_listing_to_active_home(
 
     Skapar ny ActiveHome från listing.
     """
+    # SPEL-tid · year_month-hint kan vara real-tid
+    try:
+        from ...business.game_clock import current_game_date as _cgd_pr
+        today_g = _cgd_pr()
+    except Exception:
+        today_g = _ym_first_day(year_month)
+
     old = get_active_home(s)
     if old is not None:
         if old.home_type == "hyresratt":
-            old.status = "terminated"
+            old.status = "notice_given"
             old.termination_date = _add_months(
-                _ym_first_day(year_month), RENTAL_NOTICE_MONTHS,
+                today_g, RENTAL_NOTICE_MONTHS,
             )
         else:
             old.status = "selling"
             old.estimated_sale_date = _add_months(
-                _ym_first_day(year_month), SALE_HORIZON_MONTHS,
+                today_g, SALE_HORIZON_MONTHS,
             )
 
     new_home = ActiveHome(
@@ -324,7 +340,7 @@ def promote_listing_to_active_home(
         purchase_price=Decimal(listing.asking_price),
         loan_id=loan_id,
         listing_id=listing.listing_id,
-        entered_on=_ym_first_day(year_month),
+        entered_on=today_g,
         household_size_when_chosen=household_size,
     )
     s.add(new_home)
